@@ -99,7 +99,11 @@ def web_search(query: str, max_results: int = 5) -> Optional[List[dict]]:
         encoded = urllib.parse.urlencode({"q": query})
         url = f"https://lite.duckduckgo.com/lite/?{encoded}"
         req = urllib.request.Request(url, headers={
-            "User-Agent": "AiChan/0.1",
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
         })
         with urllib.request.urlopen(req, timeout=10) as resp:
             html = resp.read().decode("utf-8", errors="replace")
@@ -107,30 +111,41 @@ def web_search(query: str, max_results: int = 5) -> Optional[List[dict]]:
         # DuckDuckGo Lite の結果を簡易パース
         results: List[dict] = []
 
-        # リンク抽出: <a rel="nofollow" href="URL" class="result-link">Title</a>
+        # リンク抽出: class='result-link' or class="result-link"
         link_pattern = _re.compile(
-            r'<a[^>]*rel="nofollow"[^>]*href="([^"]+)"[^>]*class="result-link"[^>]*>(.*?)</a>',
+            r"<a[^>]*class=['\"]result-link['\"][^>]*href=['\"]([^'\"]+)['\"][^>]*>(.*?)</a>"
+            r"|<a[^>]*href=['\"]([^'\"]+)['\"][^>]*class=['\"]result-link['\"][^>]*>(.*?)</a>",
             _re.DOTALL,
         )
-        # スニペット抽出: <td class="result-snippet">text</td>
+        # スニペット抽出: <td class='result-snippet'>text</td>
         snippet_pattern = _re.compile(
-            r'<td[^>]*class="result-snippet"[^>]*>(.*?)</td>',
+            r"<td[^>]*class=['\"]result-snippet['\"][^>]*>(.*?)</td>",
             _re.DOTALL,
         )
 
-        links = link_pattern.findall(html)
+        raw_links = link_pattern.findall(html)
         snippets = snippet_pattern.findall(html)
+
+        # 2つの alternation グループを統合
+        links: list = []
+        for groups in raw_links:
+            href = groups[0] or groups[2]
+            title_html = groups[1] or groups[3]
+            if href and title_html:
+                links.append((href, title_html))
 
         for i, (href, title_html) in enumerate(links[:max_results]):
             # HTMLタグ除去
             clean_title = _re.sub(r"<[^>]+>", "", title_html).strip()
+            # URL デコード（&amp; → &）
+            clean_href = href.replace("&amp;", "&")
             clean_snippet = ""
             if i < len(snippets):
                 clean_snippet = _re.sub(r"<[^>]+>", "", snippets[i]).strip()
-            if clean_title and href:
+            if clean_title and clean_href:
                 results.append({
                     "title": clean_title,
-                    "url": href,
+                    "url": clean_href,
                     "snippet": clean_snippet,
                 })
 

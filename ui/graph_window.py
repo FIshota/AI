@@ -2,6 +2,7 @@
 成長記録ウィンドウ
 感情グラフ・好み関心マップ・目標トラッキングを表示します
 """
+from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk, messagebox
 from pathlib import Path

@@ -12,6 +12,7 @@ from core.memory import MemoryManager
 from core.emotion import EmotionEngine, MoodAnalyzer
 from core.llm import LLMEngine
 from core.learning import LearningEngine
+from core.correction_learning import CorrectionLearning
 from core.memory_compressor import MemoryCompressor
 from core.topic_tracker import TopicTracker
 from core.scheduler import ScheduleManager
@@ -248,6 +249,13 @@ class AiChan:
         learning_dir.mkdir(exist_ok=True)
         self.learning = LearningEngine(learning_dir)
         print(f"[Learning] {self.learning.stats()['total_examples']} 件の会話例を読み込みました")
+
+        # ユーザー訂正学習
+        correction_dir = self.base_dir / "data" / "corrections"
+        self.correction_learning = CorrectionLearning(data_dir=correction_dir)
+        _cc = self.correction_learning.stats()["total_corrections"]
+        if _cc > 0:
+            print(f"[Correction] {_cc} 件の訂正データを読み込みました")
 
         # 記憶圧縮・話題追跡・スケジューラー・記念日・日記
         self.compressor      = MemoryCompressor(self.memory)
@@ -962,22 +970,28 @@ class AiChan:
         if cmd_response is not None:
             return cmd_response
 
+        # ── ユーザー訂正検出 ──
+        # 訂正が検出されたら反射をスキップし、必ずLLMで再応答する
+        _correction_entry = None
+        _correction_context = ""
+        if getattr(self, "correction_learning", None) and not is_system_call:
+            _correction_entry = self.correction_learning.detect_correction(user_input)
+            if _correction_entry:
+                _correction_context = self.correction_learning.build_correction_context(
+                    _correction_entry
+                )
+
         # 感情を更新
         self.emotion.update_from_message(user_input)
 
-        # ── 生物神経系: 反射 → 筋肉記憶 → 大脳(LLM) ──
-        # 下位層で処理できればLLM推論を完全スキップ（脊髄反射・体で覚えたもの）
-        if getattr(self, "bio_nervous", None) and not is_system_call:
-            # 成長段階に応じて筋肉記憶の使用を制限
-            # 乳児期は反射のみ（筋肉記憶はまだ発達していない）
-            growth = getattr(self, "growth", None)
-            if growth and not growth.can_use_muscle_memory():
-                bio_response = self.bio_nervous.reflex.try_respond(user_input)
-                layer = "reflex" if bio_response else "cerebral"
-            else:
-                bio_response, layer = self.bio_nervous.process_input(user_input)
+        # ── 生物神経系: 反射 → 大脳(LLM) ──
+        # 短い挨拶・相槌のみ反射で処理。それ以外は全てLLMへ。
+        # 筋肉記憶: 現行プリセットは精度不足で無効。会話統計から高精度パターンが
+        # 蓄積されたら筋肉記憶に昇格し、LLM負荷を軽減する設計。
+        if getattr(self, "bio_nervous", None) and not is_system_call and not _correction_entry:
+            bio_response, layer = self.bio_nervous.process_input(user_input)
             if bio_response is not None:
-                # 反射 or 筋肉記憶で応答完了 → LLMも記憶検索もスキップ
+                # 反射で応答完了 → LLMも記憶検索もスキップ
                 self.conversation_history.append({"role": "user", "content": user_input})
                 self.conversation_history.append({"role": "assistant", "content": bio_response})
                 # 自律神経ハートビート（呼吸のように軽く）
@@ -991,6 +1005,9 @@ class AiChan:
                 if not is_system_call:
                     self.topic_tracker.extract_topics(user_input, self.turn_count)
                     self.emotion.save_if_changed()
+                    # 訂正学習: 反射応答も記録（次の訂正検出用）
+                    if getattr(self, "correction_learning", None):
+                        self.correction_learning.record_turn(user_input, bio_response)
                 # 履歴トリミング
                 if len(self.conversation_history) > 12:
                     self.conversation_history = self.conversation_history[-12:]
@@ -1073,6 +1090,15 @@ class AiChan:
                     extra_parts.append(evo_hint[:60])
             except Exception:
                 pass
+
+        # ユーザー訂正コンテキストを注入（最優先）
+        if _correction_context:
+            extra_parts.insert(0, _correction_context)
+        # 最近の訂正履歴も追加（同じ間違いの繰り返し防止）
+        elif getattr(self, "correction_learning", None):
+            _corr_hint = self.correction_learning.get_recent_corrections_hint(max_entries=2)
+            if _corr_hint:
+                extra_parts.append(_corr_hint[:150])
 
         # 追加コンテキストを400文字以内で結合
         extra = "\n".join(extra_parts)
@@ -1157,6 +1183,10 @@ class AiChan:
 
         # 応答を履歴に追加
         self.conversation_history.append({"role": "assistant", "content": response})
+
+        # ユーザー訂正学習: 今回のターンを記録（次回の訂正検出用）
+        if getattr(self, "correction_learning", None) and not is_system_call:
+            self.correction_learning.record_turn(user_input, response)
 
         if not is_system_call:
             # 全会話をDBに永続保存（重要度を評価して分類）
@@ -1247,29 +1277,13 @@ class AiChan:
                     except Exception:
                         pass
 
-                # 生物神経系: 高品質応答を筋肉記憶として学習
-                # 「体で覚える」= 良い応答を反復で定着させる
+                # 品質スコア（会話統計・成長記録用）
                 _q_score = _evaluated_quality if _evaluated_quality is not None else 0.6
-
-                if getattr(self, "bio_nervous", None):
-                    try:
-                        # 筋肉記憶は幼児期以降のみ有効（成長段階連動）
-                        growth = getattr(self, "growth", None)
-                        if not growth or growth.can_use_muscle_memory():
-                            self.bio_nervous.learn_from_experience(_ui, _resp, _q_score)
-                            self.bio_nervous.save()
-                    except Exception:
-                        pass
 
                 # 成長段階: 会話経験を記録
                 if getattr(self, "growth", None):
                     try:
                         self.growth.on_conversation(quality_score=_q_score)
-                        # 筋肉記憶パターン数を同期
-                        if getattr(self, "bio_nervous", None):
-                            self.growth.on_muscle_memory_update(
-                                self.bio_nervous.muscle.pattern_count
-                            )
                         # 知識グラフエントリ数を同期
                         kg = getattr(self, "knowledge_graph", None)
                         if kg and hasattr(kg, "total_entities"):
@@ -2697,42 +2711,12 @@ class AiChan:
 
         sc.register_handler("adjust_max_tokens", _adjust_max_tokens)
 
-        # ③ 低品質な筋肉記憶をプルーニング
-        def _reset_muscle_low(params: dict) -> dict:
-            threshold = params.get("threshold", 0.7)
-            bio = getattr(self, "bio_nervous", None)
-            if not bio:
-                return {"pruned": 0}
-            before = bio.muscle.pattern_count
-            to_remove = [
-                h for h, p in bio.muscle._patterns.items()
-                if p.quality_score < threshold
-            ]
-            for h in to_remove:
-                del bio.muscle._patterns[h]
-            bio.muscle.save()
-            return {"pruned": len(to_remove), "before": before, "after": bio.muscle.pattern_count}
+        # ③ 筋肉記憶プルーニング（現行プリセットは精度不足のため無効。
+        #    会話統計から高精度パターンが形成された後に再有効化する）
+        sc.register_handler("reset_muscle_memory_low_quality", lambda p: {"pruned": 0})
 
-        sc.register_handler("reset_muscle_memory_low_quality", _reset_muscle_low)
-
-        # ④ 古い筋肉記憶の忘却
-        def _prune_stale(params: dict) -> dict:
-            import time as _t
-            max_age = params.get("max_age_days", 14) * 86400
-            bio = getattr(self, "bio_nervous", None)
-            if not bio:
-                return {"pruned": 0}
-            now = _t.time()
-            to_remove = [
-                h for h, p in bio.muscle._patterns.items()
-                if (now - p.last_used) > max_age
-            ]
-            for h in to_remove:
-                del bio.muscle._patterns[h]
-            bio.muscle.save()
-            return {"pruned": len(to_remove)}
-
-        sc.register_handler("prune_stale_patterns", _prune_stale)
+        # ④ 古い筋肉記憶の忘却（同上 — パターン蓄積後に再有効化）
+        sc.register_handler("prune_stale_patterns", lambda p: {"pruned": 0})
 
         # ⑤ 免疫系チェック
         def _run_immune(params: dict) -> dict:
@@ -2912,7 +2896,7 @@ class AiChan:
 
         sw.register("play", _play)
 
-        # 自己メンテナンス → 筋肉記憶の棚卸し + 免疫チェック
+        # 自己メンテナンス → 免疫チェック + 自己修正
         def _self_maintenance(desire):
             results = []
             bio = getattr(self, "bio_nervous", None)

@@ -823,20 +823,20 @@ class BioNervousSystem:
         Returns:
             (response, layer_name)
             response が None なら LLM（大脳）が必要。
+
+        設計: 現行プリセット筋肉記憶は精度不足のため無効。
+        会話統計から高精度パターンが蓄積された後に
+        筋肉記憶へ昇格し、LLM負荷を軽減する。
         """
-        # ① 反射層
+        # ① 反射層（短い挨拶・相槌のみ）
         reflex_response = self.reflex.try_respond(user_input)
         if reflex_response is not None:
             with self._lock:
                 self._stats["reflex_responses"] += 1
             return reflex_response, "reflex"
 
-        # ② 筋肉記憶層
-        muscle_response = self.muscle.try_recall(user_input)
-        if muscle_response is not None:
-            with self._lock:
-                self._stats["muscle_responses"] += 1
-            return muscle_response, "muscle"
+        # ② 筋肉記憶層 → 現在は無効（会話統計から自然に形成されるまでスキップ）
+        # muscle_response = self.muscle.try_recall(user_input)
 
         # ③ 大脳（LLM）が必要
         with self._lock:
@@ -847,14 +847,18 @@ class BioNervousSystem:
         self, user_input: str, response: str, quality_score: float
     ):
         """
-        経験から学習する。高品質な応答を筋肉記憶に定着させる。
-        人間が繰り返し練習して「体で覚える」のと同じ。
+        経験から学習する。
+
+        現行プリセット筋肉記憶は精度不足のため直接学習は無効。
+        会話統計（100回以上同じパターン）から高精度パターンが形成されたら
+        筋肉記憶に蓄積し、LLM呼び出しを減らしてデータを軽くする。
         """
-        self.muscle.learn(user_input, response, quality_score)
+        pass
 
     def save(self):
-        """筋肉記憶を永続化"""
-        self.muscle.save()
+        """永続化"""
+        # 筋肉記憶: 高精度パターン蓄積後に再有効化
+        pass
 
     def stats(self) -> dict[str, Any]:
         with self._lock:

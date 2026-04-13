@@ -1,0 +1,21 @@
+# コアAIエンジン
+llama-cpp-python==0.3.4
+# 記憶・データ管理
+cryptography==42.0.5
+faiss-cpu==1.8.0
+numpy==1.26.4
+sentence-transformers==3.0.1
+# 音声 (フェーズ2用 - オプション)
+# openai-whisper
+# piper-tts
+# ユーティリティ
+rich==13.7.1
+click==8.1.7
+pydantic==2.7.1
+python-dateutil==2.9.0
+# サーバー接続 (Sprint J)
+paramiko>=3.4.0
+# ドキュメント出力 (Office形式)
+python-docx>=1.1.0
+python-pptx>=1.0.0
+openpyxl>=3.1.0

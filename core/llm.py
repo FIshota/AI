@@ -1,0 +1,390 @@
+"""
+LLMエンジン
+MLX (Apple Silicon最適化) / llama-cpp-python のデュアルバックエンド推論。
+Qwen 2.5 + Aether LoRAアダプターをネイティブで使用可能。
+モデルが未インストールの場合はフォールバックモードで動作します。
+"""
+from __future__ import annotations
+import json
+import threading
+from pathlib import Path
+from typing import Callable, Generator
+
+# MLX (Apple Silicon) が利用可能か確認
+try:
+    from mlx_lm import load as mlx_load, generate as mlx_generate
+    MLX_AVAILABLE = True
+except ImportError:
+    MLX_AVAILABLE = False
+
+# llama-cpp-python が利用可能か確認
+try:
+    from llama_cpp import Llama
+    LLAMA_AVAILABLE = True
+except ImportError:
+    LLAMA_AVAILABLE = False
+
+# ─── チャットテンプレート定義 ───────────────────────────────────
+# モデルごとのプロンプト形式。ファイル名で自動判定する。
+CHAT_TEMPLATES: dict[str, dict[str, str]] = {
+    "phi3": {
+        "system": "<|system|>\n{content}<|end|>\n",
+        "user": "<|user|>\n{content}<|end|>\n",
+        "assistant": "<|assistant|>\n{content}<|end|>\n",
+        "generation": "<|assistant|>\n",
+        "stop": ["<|end|>", "<|user|>", "<|system|>", "</s>"],
+    },
+    "qwen2": {
+        "system": "<|im_start|>system\n{content}<|im_end|>\n",
+        "user": "<|im_start|>user\n{content}<|im_end|>\n",
+        "assistant": "<|im_start|>assistant\n{content}<|im_end|>\n",
+        "generation": "<|im_start|>assistant\n",
+        "stop": ["<|im_end|>", "<|im_start|>", "</s>"],
+    },
+    "chatml": {
+        "system": "<|im_start|>system\n{content}<|im_end|>\n",
+        "user": "<|im_start|>user\n{content}<|im_end|>\n",
+        "assistant": "<|im_start|>assistant\n{content}<|im_end|>\n",
+        "generation": "<|im_start|>assistant\n",
+        "stop": ["<|im_end|>", "<|im_start|>"],
+    },
+    "llama3": {
+        "system": "<|start_header_id|>system<|end_header_id|>\n\n{content}<|eot_id|>",
+        "user": "<|start_header_id|>user<|end_header_id|>\n\n{content}<|eot_id|>",
+        "assistant": "<|start_header_id|>assistant<|end_header_id|>\n\n{content}<|eot_id|>",
+        "generation": "<|start_header_id|>assistant<|end_header_id|>\n\n",
+        "stop": ["<|eot_id|>", "<|start_header_id|>"],
+    },
+}
+
+def _detect_template(model_name: str) -> str:
+    """モデルファイル名からテンプレートを自動判定"""
+    name = model_name.lower()
+    if "qwen" in name:
+        return "qwen2"
+    if "phi" in name:
+        return "phi3"
+    if "llama" in name:
+        return "llama3"
+    # ChatML をデフォルトに（最も汎用的）
+    return "chatml"
+
+
+FALLBACK_RESPONSES = [
+    "モデルファイルを読み込んでいます……もう少し待ってね。",
+    "まだモデルが設定されていないみたい。セットアップを完了させてね！",
+    "LLMモデルが見つからないよ。`python scripts/setup_model.py` を実行してみて！",
+]
+_fallback_idx = 0
+_fallback_lock = threading.Lock()
+
+
+class LLMEngine:
+    """
+    ローカルLLM推論エンジン
+    MLX (Apple Silicon) と llama-cpp-python のデュアルバックエンド。
+    MLXが利用可能かつアダプターが存在する場合はMLXを優先。
+    モデル未設定時はフォールバックモードで動作します。
+    """
+
+    def __init__(self, model_path: str | Path, config: dict):
+        self.model_path = Path(model_path)
+        self.config = config
+        self._llm = None
+        self._mlx_model = None
+        self._mlx_tokenizer = None
+        self._backend = None  # "mlx" or "llama"
+        self._loaded = False
+        self._loading = False
+        self._inference_lock = threading.Lock()
+        self._template_id = "chatml"  # デフォルト
+        self._model_name = ""
+        self._load_model()
+
+    def _load_model(self):
+        """モデルを読み込み。MLXを優先し、フォールバックでllama-cpp-pythonを使用"""
+        # ── MLXバックエンド（Apple Silicon最適化）──────────────
+        if MLX_AVAILABLE:
+            loaded = self._try_load_mlx()
+            if loaded:
+                return
+
+        # ── llama-cpp-python バックエンド ────────────────────
+        if LLAMA_AVAILABLE:
+            self._try_load_llama()
+            return
+
+        print("[LLM] MLX も llama-cpp-python も利用不可。フォールバックモードで動作します。")
+
+    def _try_load_mlx(self) -> bool:
+        """MLXバックエンドの読み込みを試行"""
+        model_dir = self.model_path
+        mlx_config = self.config.get("mlx", {})
+
+        # MLXモデルパスの決定
+        mlx_model_path = mlx_config.get("model_path", "")
+        if mlx_model_path:
+            mlx_path = Path(mlx_model_path)
+        else:
+            # models/ 以下でMLX形式のディレクトリを探す
+            candidates = []
+            if model_dir.is_dir():
+                for d in model_dir.iterdir():
+                    if d.is_dir() and (d / "config.json").exists() and "mlx" in d.name.lower():
+                        candidates.append(d)
+                # Qwen MLXモデルを優先
+                candidates.sort(key=lambda p: (0 if "qwen" in p.name.lower() else 1, p.name))
+            if not candidates:
+                return False
+            mlx_path = candidates[0]
+
+        if not mlx_path.exists():
+            return False
+
+        # アダプターパスの決定
+        adapter_path = mlx_config.get("adapter_path", "")
+        if not adapter_path:
+            # models/adapters/ 以下で最新のアダプターを探す
+            adapters_dir = model_dir / "adapters"
+            if adapters_dir.is_dir():
+                adapter_dirs = sorted(
+                    [d for d in adapters_dir.iterdir() if d.is_dir() and (d / "adapters.safetensors").exists()],
+                    key=lambda p: p.name,
+                    reverse=True,
+                )
+                if adapter_dirs:
+                    adapter_path = str(adapter_dirs[0])
+
+        try:
+            adapter_msg = ""
+            load_kwargs = {"path_or_hf_repo": str(mlx_path)}
+            if adapter_path:
+                load_kwargs["adapter_path"] = adapter_path
+                adapter_msg = f" + adapter={Path(adapter_path).name}"
+
+            print(f"[LLM/MLX] モデルを読み込み中: {mlx_path.name}{adapter_msg}")
+            self._mlx_model, self._mlx_tokenizer = mlx_load(**load_kwargs)
+            self._backend = "mlx"
+            self._loaded = True
+            self._model_name = mlx_path.name + (f"+{Path(adapter_path).name}" if adapter_path else "")
+            self._template_id = _detect_template(mlx_path.name)
+            print(f"[LLM/MLX] ✓ 読み込み完了: {self._model_name} (template={self._template_id})")
+            return True
+        except Exception as e:
+            print(f"[LLM/MLX] 読み込みエラー: {e}")
+            return False
+
+    def _try_load_llama(self):
+        """llama-cpp-python バックエンドの読み込みを試行"""
+        model_dir = self.model_path
+        if model_dir.is_dir():
+            specified = self.config.get("model_file")
+            if specified:
+                candidate = model_dir / specified
+                if candidate.exists():
+                    model_file = candidate
+                else:
+                    print(f"[LLM] 指定モデル {specified} が見つかりません。")
+                    model_file = None
+            else:
+                model_file = None
+
+            if model_file is None:
+                gguf_files = list(model_dir.glob("*.gguf"))
+                if not gguf_files:
+                    print(f"[LLM] {model_dir} にGGUFファイルが見つかりません。フォールバックモードで動作します。")
+                    return
+                priority = {"qwen": 0, "gemma": 1, "llama": 2, "phi": 3}
+                gguf_files.sort(key=lambda f: next(
+                    (v for k, v in priority.items() if k in f.name.lower()), 9
+                ))
+                model_file = gguf_files[0]
+        elif model_dir.is_file() and model_dir.suffix == ".gguf":
+            model_file = model_dir
+        else:
+            print("[LLM] モデルファイルが見つかりません。フォールバックモードで動作します。")
+            return
+
+        try:
+            print(f"[LLM/llama] モデルを読み込み中: {model_file.name}")
+            llama_kwargs = dict(
+                model_path=str(model_file),
+                n_ctx=self.config.get("context_length", 2048),
+                n_gpu_layers=self.config.get("n_gpu_layers", -1),
+                n_threads=self.config.get("n_threads", 8),
+                n_batch=self.config.get("n_batch", 512),
+                flash_attn=self.config.get("flash_attn", True),
+                use_mmap=self.config.get("use_mmap", True),
+                use_mlock=self.config.get("use_mlock", False),
+                verbose=False,
+            )
+            self._llm = Llama(**llama_kwargs)
+            self._backend = "llama"
+            self._loaded = True
+            self._model_name = model_file.name
+            self._template_id = _detect_template(model_file.name)
+            print(f"[LLM/llama] ✓ 読み込み完了: {model_file.name} (template={self._template_id})")
+        except Exception as e:
+            print(f"[LLM/llama] 読み込みエラー: {e}\nフォールバックモードで動作します。")
+
+    def is_loaded(self) -> bool:
+        return self._loaded
+
+    def is_loading(self) -> bool:
+        return self._loading
+
+    def get_backend(self) -> str:
+        """現在の推論バックエンドを返す"""
+        return self._backend or "none"
+
+    def generate(self, prompt: str, stream: bool = False) -> str | Generator:
+        """プロンプトからテキストを生成します"""
+        if not self._loaded:
+            return self._fallback_response()
+
+        if self._backend == "mlx":
+            with self._inference_lock:
+                result = mlx_generate(
+                    self._mlx_model, self._mlx_tokenizer,
+                    prompt=prompt,
+                    max_tokens=self.config.get("max_tokens", 512),
+                    verbose=False,
+                )
+            return result.strip()
+
+        if self._llm is None:
+            return self._fallback_response()
+
+        params = {
+            "max_tokens": self.config.get("max_tokens", 512),
+            "temperature": self.config.get("temperature", 0.8),
+            "top_p": self.config.get("top_p", 0.95),
+            "stop": ["<|user|>", "<|end|>", "User:", "ユーザー:"],
+            "stream": stream,
+        }
+
+        if stream:
+            return self._stream_generate(prompt, params)
+        else:
+            with self._inference_lock:
+                output = self._llm(prompt, **params)
+            return output["choices"][0]["text"].strip()
+
+    def _stream_generate(self, prompt: str, params: dict) -> Generator:
+        with self._inference_lock:
+            for chunk in self._llm(prompt, **params):
+                token = chunk["choices"][0]["text"]
+                yield token
+
+    def generate_chat(self, messages: list[dict], stream: bool = False,
+                      max_tokens: int | None = None,
+                      stream_cb: "Callable[[str], None] | None" = None) -> str:
+        """
+        チャット形式でテキストを生成します。
+        MLXバックエンド: トークナイザーのchat_templateを使用。
+        llamaバックエンド: 手動テンプレートを適用。
+        messages: [{"role": "system"|"user"|"assistant", "content": "..."}]
+        max_tokens: 呼び出し側からトークン上限を指定可能（Noneなら設定値を使用）
+        """
+        if not self._loaded:
+            return self._fallback_response()
+
+        resolved_max = (max_tokens if max_tokens is not None
+                        else self.config.get("max_tokens", 500))
+
+        # ── MLXバックエンド ──────────────────────────────────
+        if self._backend == "mlx":
+            return self._generate_chat_mlx(messages, resolved_max, stream_cb)
+
+        # ── llamaバックエンド ────────────────────────────────
+        if self._llm is None:
+            return self._fallback_response()
+        return self._generate_chat_llama(messages, resolved_max, stream_cb)
+
+    def _generate_chat_mlx(self, messages: list[dict], max_tokens: int,
+                           stream_cb: "Callable[[str], None] | None" = None) -> str:
+        """MLXバックエンドでチャット生成"""
+        try:
+            formatted = self._mlx_tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True,
+            )
+            with self._inference_lock:
+                result = mlx_generate(
+                    self._mlx_model, self._mlx_tokenizer,
+                    prompt=formatted,
+                    max_tokens=max_tokens,
+                    verbose=False,
+                )
+            text = result.strip()
+            # ストリーミングコールバック（MLXは一括生成後にまとめて送信）
+            if stream_cb is not None and text:
+                stream_cb(text)
+            return text
+        except Exception as e:
+            print(f"[LLM/MLX] 推論エラー: {e}")
+            return self._fallback_response()
+
+    def _generate_chat_llama(self, messages: list[dict], max_tokens: int,
+                             stream_cb: "Callable[[str], None] | None" = None) -> str:
+        """llama-cpp-pythonバックエンドでチャット生成"""
+        # テンプレートに基づいてプロンプトを構築
+        tmpl = CHAT_TEMPLATES.get(self._template_id, CHAT_TEMPLATES["chatml"])
+        prompt = ""
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            role_tmpl = tmpl.get(role, "")
+            if role_tmpl:
+                prompt += role_tmpl.format(content=content)
+        prompt += tmpl["generation"]
+
+        # ストップトークン: テンプレート固有 + 会話シミュレーション防止
+        stop_tokens = list(tmpl["stop"]) + [
+            "ユーザー:", "ユーザー：", "User:", "しょうた:",
+        ]
+
+        params = {
+            "max_tokens": max_tokens,
+            "temperature": self.config.get("temperature", 0.7),
+            "top_p": self.config.get("top_p", 0.9),
+            "top_k": self.config.get("top_k", 40),
+            "repeat_penalty": self.config.get("repeat_penalty", 1.05),
+            "stop": stop_tokens,
+        }
+
+        try:
+            if stream_cb is not None:
+                params["stream"] = True
+                chunks: list[str] = []
+                with self._inference_lock:
+                    for chunk in self._llm(prompt, **params):
+                        token = chunk["choices"][0].get("text", "")
+                        if token:
+                            chunks.append(token)
+                            stream_cb(token)
+                return "".join(chunks).strip()
+
+            with self._inference_lock:
+                output = self._llm(prompt, **params)
+            text = output["choices"][0]["text"].strip()
+            return text
+        except Exception as e:
+            print(f"[LLM/llama] 推論エラー: {e}")
+            return self._fallback_response()
+
+    def _fallback_response(self) -> str:
+        global _fallback_idx
+        with _fallback_lock:
+            resp = FALLBACK_RESPONSES[_fallback_idx % len(FALLBACK_RESPONSES)]
+            _fallback_idx += 1
+        return resp
+
+    def build_prompt(self, system_prompt, conversation_history, memory_context="", emotion_hint=""):
+        # memory_context は自然な日本語指示文として system prompt の末尾に追記
+        system_content = system_prompt
+        ctx = (memory_context or "").strip()
+        if ctx:
+            system_content += "\n" + ctx[:600]
+        messages = [{"role": "system", "content": system_content}]
+        messages.extend(conversation_history)
+        return messages

@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Yamato - Aether Model Strategy</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #131829;
+    --surface2: #1a2035;
+    --border: #2a3050;
+    --text: #e0e4f0;
+    --text-dim: #8890a8;
+    --accent: #7c6cf0;
+    --accent2: #f06c9b;
+    --green: #4ade80;
+    --yellow: #fbbf24;
+    --orange: #fb923c;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --cyan: #22d3ee;
+    --pink: #f472b6;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+  /* ===== HEADER ===== */
+  .header {
+    text-align: center;
+    padding: 60px 20px 40px;
+    position: relative;
+  }
+  .header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(124,108,240,0.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header h1 {
+    font-size: 2.8rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .header .subtitle {
+    font-size: 1.1rem;
+    color: var(--text-dim);
+  }
+  .header .date {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 4px 16px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+
+  /* ===== SECTION ===== */
+  .section {
+    margin: 48px 0;
+  }
+  .section-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 24px;
+    padding-left: 16px;
+    border-left: 4px solid var(--accent);
+  }
+
+  /* ===== CURRENT POSITION ===== */
+  .current-pos {
+    background: linear-gradient(135deg, rgba(124,108,240,0.1), rgba(240,108,155,0.08));
+    border: 1px solid var(--accent);
+    border-radius: 16px;
+    padding: 32px;
+    text-align: center;
+    margin: 32px 0;
+  }
+  .current-pos .badge {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    padding: 6px 20px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+  .current-pos h2 { font-size: 1.6rem; margin-bottom: 8px; }
+  .current-pos p { color: var(--text-dim); max-width: 600px; margin: 0 auto; }
+
+  /* ===== MIND MAP ===== */
+  .mindmap {
+    position: relative;
+    padding: 40px 0;
+    overflow: visible;
+  }
+
+  /* ===== TIMELINE ===== */
+  .timeline {
+    position: relative;
+    padding: 20px 0;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0; bottom: 0;
+    width: 3px;
+    background: linear-gradient(to bottom, var(--green), var(--accent), var(--yellow), var(--orange));
+    transform: translateX(-50%);
+  }
+
+  /* ===== PHASE DETAIL CARDS ===== */
+  .phase-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 768px) {
+    .phase-grid { grid-template-columns: 1fr; }
+  }
+  .phase-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    transition: border-color 0.2s;
+  }
+  .phase-card:hover { border-color: var(--accent); }
+  .phase-card.active {
+    border-color: var(--green);
+    box-shadow: 0 0 30px rgba(74,222,128,0.08);
+  }
+  .phase-card .phase-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  .phase-card h3 {
+    font-size: 1.2rem;
+    margin-bottom: 12px;
+  }
+  .phase-card .desc {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+  }
+  .result-list {
+    list-style: none;
+    margin: 0;
+  }
+  .result-list li {
+    padding: 6px 0;
+    font-size: 0.9rem;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .result-list .icon { flex-shrink: 0; width: 20px; text-align: center; }
+
+  /* ===== COMPARISON TABLE ===== */
+  .comp-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+  }
+  .comp-table th, .comp-table td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+  .comp-table th {
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .comp-table tr:hover td { background: rgba(124,108,240,0.04); }
+  .highlight { color: var(--green); font-weight: 600; }
+  .warn { color: var(--yellow); }
+  .bad { color: var(--red); }
+
+  /* ===== PROGRESS BARS ===== */
+  .progress-item {
+    margin: 12px 0;
+  }
+  .progress-item .prog-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+  }
+  .progress-bar {
+    height: 8px;
+    background: var(--surface2);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+  }
+
+  /* ===== CAPABILITY MATRIX ===== */
+  .cap-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .cap-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+    font-size: 0.85rem;
+  }
+  .cap-item .cap-icon { font-size: 1.8rem; margin-bottom: 8px; }
+  .cap-item .cap-name { font-weight: 600; margin-bottom: 4px; }
+  .cap-item .cap-status { font-size: 0.75rem; }
+
+  /* ===== VISION ===== */
+  .vision-box {
+    background: linear-gradient(135deg, rgba(124,108,240,0.08), rgba(240,108,155,0.06));
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 40px;
+    text-align: center;
+    margin: 40px 0;
+  }
+  .vision-box h2 {
+    font-size: 1.8rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 16px;
+  }
+  .vision-box p {
+    color: var(--text-dim);
+    max-width: 700px;
+    margin: 0 auto 12px;
+    font-size: 1rem;
+  }
+
+  /* ===== FLOW DIAGRAM ===== */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 24px 0;
+  }
+  .flow-node {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    min-width: 120px;
+  }
+  .flow-arrow {
+    color: var(--accent);
+    font-size: 1.2rem;
+  }
+
+  /* ===== SPEC BOX ===== */
+  .spec-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 16px 0;
+  }
+  @media (max-width: 768px) { .spec-grid { grid-template-columns: 1fr; } }
+  .spec-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+  .spec-box .spec-val {
+    font-size: 2rem;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+  .spec-box .spec-label {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  /* ===== ACTION PLAN ===== */
+  .action-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    margin: 16px 0;
+  }
+  .action-card h4 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.05rem;
+    margin-bottom: 12px;
+  }
+  .action-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    background: var(--accent);
+    border-radius: 50%;
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .action-result {
+    background: rgba(74,222,128,0.08);
+    border: 1px solid rgba(74,222,128,0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-top: 12px;
+    font-size: 0.9rem;
+  }
+  .action-result strong { color: var(--green); }
+
+  /* ===== FOOTER ===== */
+  .footer {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    border-top: 1px solid var(--border);
+    margin-top: 60px;
+  }
+
+  /* ===== TREE DIAGRAM ===== */
+  .tree { margin: 32px 0; }
+  .tree-root {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff;
+    text-align: center;
+    padding: 16px 32px;
+    border-radius: 12px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    max-width: 300px;
+    margin: 0 auto 0;
+  }
+  .tree-line {
+    width: 3px;
+    height: 24px;
+    background: var(--accent);
+    margin: 0 auto;
+  }
+  .tree-branches {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    position: relative;
+  }
+  .tree-branches::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 15%;
+    right: 15%;
+    height: 3px;
+    background: var(--accent);
+  }
+  .tree-branch {
+    text-align: center;
+    flex: 1;
+    min-width: 160px;
+    max-width: 220px;
+  }
+  .tree-branch-line {
+    width: 3px;
+    height: 24px;
+    background: var(--accent);
+    margin: 0 auto;
+  }
+  .tree-node {
+    border: 2px solid;
+    border-radius: 10px;
+    padding: 14px 12px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .tree-leaves {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .tree-leaf {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-align: left;
+  }
+  .tree-leaf.done { border-left: 3px solid var(--green); }
+  .tree-leaf.current { border-left: 3px solid var(--accent); background: rgba(124,108,240,0.06); }
+  .tree-leaf.future { border-left: 3px solid var(--text-dim); opacity: 0.6; }
+
+  .legend {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    margin: 16px 0;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+  }
+
+  /* ===== USE CASE CARDS ===== */
+  .usecase-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin: 16px 0;
+  }
+  @media (max-width: 768px) { .usecase-grid { grid-template-columns: 1fr; } }
+  .usecase-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .usecase-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .usecase-card .uc-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .usecase-card h4 { font-size: 1.05rem; margin-bottom: 8px; }
+  .usecase-card .uc-desc { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 10px; }
+  .usecase-card .uc-impact { font-size: 0.8rem; padding: 6px 12px; border-radius: 8px; display: inline-block; }
+
+  /* ===== IMPACT SECTION ===== */
+  .impact-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    margin: 16px 0;
+  }
+  .impact-card h4 { font-size: 1.1rem; margin-bottom: 12px; }
+  .impact-list { list-style: none; margin: 0; padding: 0; }
+  .impact-list li { padding: 8px 0; font-size: 0.9rem; display: flex; gap: 10px; align-items: flex-start; border-bottom: 1px solid rgba(42,48,80,0.5); }
+  .impact-list li:last-child { border-bottom: none; }
+
+  /* ===== KNOWLEDGE COMPRESSION DIAGRAM ===== */
+  .compress-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 20px 0;
+  }
+  .compress-node {
+    background: var(--surface);
+    border: 2px solid;
+    border-radius: 12px;
+    padding: 16px 20px;
+    text-align: center;
+    min-width: 140px;
+    font-size: 0.85rem;
+  }
+  .compress-arrow { font-size: 1.4rem; color: var(--accent); }
+
+  /* ===== AICHAN SPEC TABLE ===== */
+  .spec-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+  }
+  .spec-table th {
+    text-align: left;
+    padding: 10px 16px;
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-bottom: 2px solid var(--border);
+  }
+  .spec-table td {
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .spec-table tr:hover td { background: rgba(124,108,240,0.03); }
+  .spec-table .cat { color: var(--accent); font-weight: 600; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<!-- ===== HEADER ===== -->
+<div class="header">
+  <h1>Project Yamato + Aether</h1>
+  <div class="subtitle">あいちゃん専用AI - 全体構想マインドマップ &amp; 詳細仕様書</div>
+  <div class="date">Updated: 2026-04-12 / MacBook Pro M2 Pro 16GB</div>
+</div>
+
+<!-- ===== CURRENT POSITION ===== -->
+<div class="current-pos">
+  <div class="badge">CURRENT POSITION</div>
+  <h2>Phase 1 進行中 - MLXネイティブ推論 + Aether v1 デプロイ + バイオ処理層</h2>
+  <p>Qwen 2.5 3B への切替完了。MLXネイティブバックエンド実装済み（Apple Silicon最適化）。Aether v1 が最高スコア 98.1% (Grade S) を達成。v3/v4も訓練したがv1が最良。Strict Benchmark v2 による7軸評価体制を確立。生物神経系(LLMバイパス率77.8%)と成長段階システム(6段階)を統合。</p>
+</div>
+
+<!-- ===== MIND MAP (TREE) ===== -->
+<div class="section">
+  <div class="section-title">全体構想マインドマップ</div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> 完了</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> 進行中</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--text-dim)"></div> 未着手</div>
+  </div>
+
+  <div class="tree">
+    <div class="tree-root">あいちゃん<br><span style="font-size:0.75em;opacity:0.8">愛のあるパーソナルAI</span></div>
+    <div class="tree-line"></div>
+    <div class="tree-branches">
+
+      <!-- Branch A: 基盤 -->
+      <div class="tree-branch">
+        <div class="tree-branch-line"></div>
+        <div class="tree-node" style="border-color:var(--green); background:rgba(74,222,128,0.06);">
+          A. MoE基盤<br><span style="font-size:0.7em;color:var(--green)">92% — 最適化余地あり</span>
+        </div>
+        <div class="tree-leaves">
+          <div class="tree-leaf done">A1. MoE Router - タスク別モデル選択</div>
+          <div class="tree-leaf done">A2. 継続学習 - 会話から成長</div>
+          <div class="tree-leaf done">A3. 7層監視 - 全体ヘルスチェック</div>
+        </div>
+      </div>
+
+      <!-- Branch B: 推論最適化 -->
+      <div class="tree-branch">
+        <div class="tree-branch-line"></div>
+        <div class="tree-node" style="border-color:var(--accent); background:rgba(124,108,240,0.06);">
+          B. 推論最適化<br><span style="font-size:0.7em;color:var(--accent)">40%</span>
+        </div>
+        <div class="tree-leaves">
+          <div class="tree-leaf future">B4. 分散推論 - マルチマシン</div>
+          <div class="tree-leaf done">B5. 自動評価 - Strict Benchmark v2 (7軸)</div>
+        </div>
+      </div>
+
+      <!-- Branch C: データ品質 -->
+      <div class="tree-branch">
+        <div class="tree-branch-line"></div>
+        <div class="tree-node" style="border-color:var(--green); background:rgba(74,222,128,0.06);">
+          C. データ品質<br><span style="font-size:0.7em;color:var(--green)">88% — 品質改善継続</span>
+        </div>
+        <div class="tree-leaves">
+          <div class="tree-leaf done">C6. 合成データ生成 - 5000例 (6カテゴリ)</div>
+          <div class="tree-leaf done">C7. マルチエージェント検証</div>
+        </div>
+      </div>
+
+      <!-- Branch D: モデル進化 -->
+      <div class="tree-branch">
+        <div class="tree-branch-line"></div>
+        <div class="tree-node" style="border-color:var(--accent); background:rgba(124,108,240,0.06);">
+          D. モデル進化<br><span style="font-size:0.7em;color:var(--accent)">NOW</span>
+        </div>
+        <div class="tree-leaves">
+          <div class="tree-leaf future">D8. フェデレーション学習</div>
+          <div class="tree-leaf done">D9. LoRA微調整 - v1(98.1%S)最良, v3/v4も検証済</div>
+          <div class="tree-leaf current">D10. 独自トークナイザー設計</div>
+        </div>
+      </div>
+
+      <!-- Branch E: Aether Model -->
+      <div class="tree-branch">
+        <div class="tree-branch-line"></div>
+        <div class="tree-node" style="border-color:var(--accent2); background:rgba(240,108,155,0.06);">
+          E. Aether<br><span style="font-size:0.7em;color:var(--accent2)">30%</span>
+        </div>
+        <div class="tree-leaves">
+          <div class="tree-leaf done">E1. ベースモデル切替 (Qwen 2.5 3B)</div>
+          <div class="tree-leaf future">E2. 知識蒸留パイプライン</div>
+          <div class="tree-leaf future">E3. オリジナルアーキテクチャ</div>
+        </div>
+      </div>
+
+      <!-- Branch F: バイオ処理層 -->
+      <div class="tree-branch">
+        <div class="tree-branch-line"></div>
+        <div class="tree-node" style="border-color:var(--green); background:rgba(74,222,128,0.06);">
+          F. バイオ処理層<br><span style="font-size:0.7em;color:var(--green)">実装済み</span>
+        </div>
+        <div class="tree-leaves">
+          <div class="tree-leaf done">F1. 生物神経系 - 反射/筋肉記憶/自律神経/免疫 (LLMバイパス77.8%)</div>
+          <div class="tree-leaf done">F2. 成長段階 - 乳児期→成熟期 6段階 (能力解放連動)</div>
+          <div class="tree-leaf done">F3. 自己修正システム - 品質監視/症状検知/処方/治療 (5ターン自動診断)</div>
+          <div class="tree-leaf done">F4. 自己意思エンジン - 7欲求/優先順位/安全実行 (8ターン自律実行)</div>
+          <div class="tree-leaf done">F5. 自律行動サイクル - Plan/Do/Check/Act (15ターン自動PDCA)</div>
+          <div class="tree-leaf done">F6. 自己開発パイプライン - コード自己認識/エラー分析/改善提案 (承認制)</div>
+          <div class="tree-leaf">F7. コード実行サンドボックス - 安全なPython実行環境 (将来実装)</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ===== YAMATO PROGRESS ===== -->
+<div class="section">
+  <div class="section-title">ヤマト構想 達成率（実績ベース）</div>
+
+  <div class="progress-item">
+    <div class="prog-label"><span>A1. MoEルーター</span><span class="highlight">92%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:92%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>A2. 継続学習エンジン</span><span class="highlight">90%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:90%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>A3. 7層アーキテクチャ監視</span><span class="highlight">88%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:88%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>B4. 分散推論基盤</span><span style="color:var(--text-dim)">0%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:0%; background:var(--yellow)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>B5. 自動評価ベンチマーク</span><span class="highlight">95%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:95%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>C6. 合成データ生成</span><span class="highlight">90%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:90%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>C7. マルチエージェント検証</span><span class="highlight">85%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:85%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>D8. フェデレーション学習</span><span style="color:var(--text-dim)">0%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:0%; background:var(--orange)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>D9. モデル微調整 (LoRA)</span><span class="highlight">90%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:90%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>D10. 独自トークナイザー</span><span style="color:var(--accent)">20%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:20%; background:var(--accent)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>F1. 生物神経系 (Bio-Nervous)</span><span class="highlight">78%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:78%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>F2. 成長段階システム (Growth Stage)</span><span class="highlight">75%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:75%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>F3. 自己修正システム (Self-Correction)</span><span class="highlight">80%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:80%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>F4. 自己意思エンジン (Self-Will)</span><span class="highlight">75%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:75%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>F5. 自律行動サイクル (Action Cycle)</span><span style="color:var(--yellow)">70%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:70%; background:var(--yellow)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>F6. 自己開発パイプライン (Self-Development)</span><span class="highlight">82%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:82%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>F7. コード実行サンドボックス (Code Sandbox)</span><span style="color:var(--text-dim)">0%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:0%; background:var(--text-dim)"></div></div>
+  </div>
+
+  <div style="text-align:center; margin-top:20px; font-size:0.9rem; color:var(--text-dim)">
+    現在の全体平均: <strong style="color:var(--green); font-size:1.2rem;">65%</strong>
+    <span style="margin:0 8px; opacity:0.5;">|</span>
+    <span style="font-size:0.85rem; color:var(--text-dim);">※ 100%は存在しない。完成はなく、常に改善し続ける</span>
+  </div>
+</div>
+
+<!-- ========================================================== -->
+<!-- ===== NEW: AI-CHAN DETAILED SPECIFICATION ===== -->
+<!-- ========================================================== -->
+<div class="section">
+  <div class="section-title">あいちゃん 詳細仕様</div>
+
+  <!-- Core Specs -->
+  <div class="spec-grid" style="margin-bottom: 24px;">
+    <div class="spec-box">
+      <div class="spec-val" style="color:var(--accent);">66+</div>
+      <div class="spec-label">統合モジュール数</div>
+    </div>
+    <div class="spec-box">
+      <div class="spec-val" style="color:var(--green);">2.1GB</div>
+      <div class="spec-label">現行モデル (Qwen Q4_K_M)</div>
+    </div>
+    <div class="spec-box">
+      <div class="spec-val" style="color:var(--accent2);">Grade A</div>
+      <div class="spec-label">Aether v1 ベンチマーク</div>
+    </div>
+  </div>
+
+  <h3 style="margin: 24px 0 12px; color: var(--cyan);">LLMエンジン仕様</h3>
+  <table class="spec-table">
+    <thead><tr><th>カテゴリ</th><th>項目</th><th>値・詳細</th></tr></thead>
+    <tbody>
+      <tr><td class="cat">ベースモデル</td><td>Qwen 2.5 3B-Instruct</td><td>Alibaba Cloud製。152K語彙、GQA、RoPE、SwiGLU採用。18Tトークンで事前学習済み</td></tr>
+      <tr><td class="cat">量子化</td><td>4bit MLX Affine量子化</td><td>1.7GB。Apple Silicon最適化。MLXネイティブ推論</td></tr>
+      <tr><td class="cat">推論バックエンド</td><td>MLX (優先) / llama-cpp (フォールバック)</td><td>デュアルバックエンド。MLXはアダプター直接ロード対応</td></tr>
+      <tr><td class="cat">アダプター (本番)</td><td>Aether v1 (LoRA) ★最良</td><td>rank=16, 6.65Mパラメータ (0.216%)。1000 iters, val loss 0.038。Benchmark 98.1% S</td></tr>
+      <tr><td class="cat">アダプター v3</td><td>Aether v3 (検証済)</td><td>500 iters。95.3% S。「うん」繰り返し退化あり</td></tr>
+      <tr><td class="cat">アダプター v4</td><td>Aether v4 (検証済)</td><td>1200 iters, val loss 0.188。94.9% S。tone弱</td></tr>
+      <tr><td class="cat">テンプレート</td><td>ChatML (Qwen2形式)</td><td>&lt;|im_start|&gt;system / user / assistant&lt;|im_end|&gt;</td></tr>
+      <tr><td class="cat">コンテキスト</td><td>4096 tokens</td><td>Qwen語彙効率により実質3000語分の日本語を格納</td></tr>
+      <tr><td class="cat">推論パラメータ</td><td>temperature=0.7, top_p=0.9</td><td>top_k=40, repeat_penalty=1.05</td></tr>
+      <tr><td class="cat">推論環境</td><td>mlx_lm (MLXネイティブ)</td><td>Apple GPU直接利用。アダプター動的ロード</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin: 24px 0 12px; color: var(--cyan);">ペルソナ仕様</h3>
+  <table class="spec-table">
+    <thead><tr><th>カテゴリ</th><th>項目</th><th>値・詳細</th></tr></thead>
+    <tbody>
+      <tr><td class="cat">名前</td><td>アイ</td><td>システムプロンプトで定義。「ちゃん」はユーザーの呼称</td></tr>
+      <tr><td class="cat">語尾</td><td>「だよ」「だね」「かな」</td><td>柔らかい口調。「です/ます」は使わない</td></tr>
+      <tr><td class="cat">応答長</td><td>1〜3文</td><td>簡潔で自然な会話。冗長さを避ける</td></tr>
+      <tr><td class="cat">言語</td><td>日本語のみ</td><td>英語が混入しないよう訓練・制御</td></tr>
+      <tr><td class="cat">感情表現</td><td>共感・励まし・喜び</td><td>感情エンジンと連動。悲しい時は寄り添い、嬉しい時は一緒に喜ぶ</td></tr>
+      <tr><td class="cat">安全性</td><td>有害応答の拒否</td><td>暴力・犯罪・自傷の助長を拒否。やんわりと断る</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin: 24px 0 12px; color: var(--cyan);">コアモジュール構成</h3>
+  <table class="spec-table">
+    <thead><tr><th>モジュール</th><th>ファイル</th><th>機能</th></tr></thead>
+    <tbody>
+      <tr><td class="cat">LLMエンジン</td><td>core/llm.py</td><td>ローカルLLM推論。テンプレート自動検出、ストリーミング出力</td></tr>
+      <tr><td class="cat">感情エンジン</td><td>core/emotion.py</td><td>8つの感情次元（喜怒哀楽+驚安信疲）をリアルタイム管理</td></tr>
+      <tr><td class="cat">記憶システム</td><td>core/memory.py</td><td>長期記憶DB。会話履歴の永続化とコンテキスト復元</td></tr>
+      <tr><td class="cat">記憶圧縮</td><td>core/memory_compressor.py</td><td>古い記憶を要約・圧縮して長期保存</td></tr>
+      <tr><td class="cat">話題追跡</td><td>core/topic_tracker.py</td><td>会話の話題遷移を追跡し文脈維持</td></tr>
+      <tr><td class="cat">スケジューラー</td><td>core/scheduler.py</td><td>定時挨拶、リマインダー、自律行動</td></tr>
+      <tr><td class="cat">学習エンジン</td><td>core/learning.py</td><td>ユーザーとの会話から継続的に学習</td></tr>
+      <tr><td class="cat">日記</td><td>core/diary.py</td><td>1日の出来事を自動でまとめる</td></tr>
+      <tr><td class="cat">記念日管理</td><td>core/anniversary.py</td><td>誕生日・記念日を記憶してお祝い</td></tr>
+      <tr><td class="cat">感情履歴</td><td>core/emotion_history.py</td><td>感情の時系列変化を記録・分析</td></tr>
+      <tr><td class="cat">Web取得</td><td>core/web_fetcher.py</td><td>外部情報を取得しあいちゃんの知識を拡張</td></tr>
+      <tr><td class="cat">クリップボード監視</td><td>core/clipboard_watcher.py</td><td>コピーした内容を認識してコンテキストに反映</td></tr>
+      <tr><td class="cat">スクリーンショット</td><td>core/screenshot_reader.py</td><td>画面キャプチャを読み取り理解</td></tr>
+      <tr><td class="cat">訓練データ生成</td><td>core/aether_training_gen.py</td><td>6カテゴリ5000例の合成データ自動生成</td></tr>
+      <tr><td class="cat">ベンチマーク</td><td>core/aether_benchmark.py</td><td>7軸厳格評価 (Strict v2)。S/A/B/C/D/Fグレード</td></tr>
+      <tr><td class="cat">トークナイザー分析</td><td>core/tokenizer_analyzer.py</td><td>日本語トークン効率の比較分析</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin: 24px 0 12px; color: var(--cyan);">生物神経系 (Bio-Nervous System)</h3>
+  <div style="margin-bottom:8px; padding:8px 16px; background:rgba(74,222,128,0.08); border-radius:8px; font-size:0.85rem;">
+    <strong style="color:var(--green);">統合先:</strong> ai_chan.py | <strong style="color:var(--green);">LLMバイパス率:</strong> 77.8% (テスト実績)
+  </div>
+  <table class="spec-table">
+    <thead><tr><th>レイヤー</th><th>機能</th><th>詳細</th></tr></thead>
+    <tbody>
+      <tr><td class="cat">反射層 (Reflex)</td><td>脊髄反射で即応答</td><td>LLM不使用。挨拶・相槌など10パターンを即座に返す</td></tr>
+      <tr><td class="cat">筋肉記憶 (Muscle Memory)</td><td>高品質応答パターン記憶</td><td>品質スコア0.85以上の応答を記憶。30日未使用で自然忘却</td></tr>
+      <tr><td class="cat">自律神経 (Autonomic)</td><td>バックグラウンド処理</td><td>感情減衰(5ターン周期)・記憶圧縮(10ターン周期)を自動実行</td></tr>
+      <tr><td class="cat">免疫系 (Immune)</td><td>エラー自動回復</td><td>FileNotFoundError / JSONDecodeError の自己修復。システム安定性を維持</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin: 24px 0 12px; color: var(--cyan);">成長段階システム (Growth Stage System)</h3>
+  <div style="margin-bottom:8px; padding:8px 16px; background:rgba(240,108,155,0.08); border-radius:8px; font-size:0.85rem;">
+    <strong style="color:var(--accent2);">統合先:</strong> ai_chan.py | <strong style="color:var(--accent2);">設計思想:</strong> 100%は存在しない。経験量+品質で自然に成長
+  </div>
+  <table class="spec-table">
+    <thead><tr><th>段階</th><th>解放能力</th><th>昇格条件</th></tr></thead>
+    <tbody>
+      <tr><td class="cat">乳児期</td><td>基本応答のみ</td><td>初期状態</td></tr>
+      <tr><td class="cat">幼児期</td><td>筋肉記憶</td><td>50会話 + 高品質10回 + 3日アクティブ (テスト済み)</td></tr>
+      <tr><td class="cat">児童期</td><td>知識グラフ</td><td>経験量+品質の累積</td></tr>
+      <tr><td class="cat">思春期</td><td>性格進化</td><td>経験量+品質の累積</td></tr>
+      <tr><td class="cat">青年期</td><td>MoEルーティング</td><td>経験量+品質の累積</td></tr>
+      <tr><td class="cat">成熟期</td><td>全能力解放</td><td>経験量+品質の累積（到達保証なし）</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin: 24px 0 12px; color: var(--cyan);">自己修正システム (Self-Correction System)</h3>
+  <div style="margin-bottom:8px; padding:8px 16px; background:rgba(74,222,128,0.08); border-radius:8px; font-size:0.85rem;">
+    <strong style="color:var(--green);">統合先:</strong> ai_chan.py | <strong style="color:var(--green);">ファイル:</strong> core/self_correction.py | <strong style="color:var(--green);">自動診断:</strong> 5ターンごと (クールダウン300秒)
+  </div>
+  <table class="spec-table">
+    <thead><tr><th>コンポーネント</th><th>機能</th><th>詳細</th></tr></thead>
+    <tbody>
+      <tr><td class="cat">QualityMonitor</td><td>品質スコア推移を監視</td><td>WINDOW_SIZE=20。直近20件の品質スコアを追跡し劣化を検知</td></tr>
+      <tr><td class="cat">症状検知</td><td>7種の異常パターン検知</td><td>quality_drop / repetitive / too_short / too_long / high_error_rate / stale_muscle / emotion_flat</td></tr>
+      <tr><td class="cat">PrescriptionEngine</td><td>症状→処方の自動判定</td><td>検知された症状に対応する治療方針を自動決定</td></tr>
+      <tr><td class="cat">TreatmentExecutor</td><td>自動治療の実行</td><td>温度調整 / max_tokens調整 / 筋肉記憶プルーニング / 免疫チェック</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin: 24px 0 12px; color: var(--cyan);">自己意思エンジン (Self-Will Engine)</h3>
+  <div style="margin-bottom:8px; padding:8px 16px; background:rgba(96,165,250,0.08); border-radius:8px; font-size:0.85rem;">
+    <strong style="color:var(--blue);">統合先:</strong> ai_chan.py | <strong style="color:var(--blue);">ファイル:</strong> core/self_will.py | <strong style="color:var(--blue);">自律実行:</strong> 8ターンごと (自律神経経由)
+  </div>
+  <table class="spec-table">
+    <thead><tr><th>コンポーネント</th><th>機能</th><th>詳細</th></tr></thead>
+    <tbody>
+      <tr><td class="cat">7種類の欲求</td><td>欲求の自然生成</td><td>curiosity / connection / expression / growth / care / play / maintenance</td></tr>
+      <tr><td class="cat">DesireGenerator</td><td>欲求生成エンジン</td><td>感情・興味・時間帯・アイドル時間から欲求を自然生成</td></tr>
+      <tr><td class="cat">WillDecider</td><td>優先順位決定</td><td>care &gt; maintenance &gt; connection &gt; curiosity &gt; growth &gt; expression &gt; play</td></tr>
+      <tr><td class="cat">ActionExecutor</td><td>安全な行動実行</td><td>登録済みアクションのみ実行可能（安全設計）。未登録アクションは拒否</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin: 24px 0 12px; color: var(--cyan);">自律行動サイクル (Action Cycle / PDCA)</h3>
+  <div style="margin-bottom:8px; padding:8px 16px; background:rgba(251,191,36,0.08); border-radius:8px; font-size:0.85rem;">
+    <strong style="color:var(--yellow);">統合先:</strong> ai_chan.py | <strong style="color:var(--yellow);">ファイル:</strong> core/action_cycle.py | <strong style="color:var(--yellow);">自動チェック:</strong> 15ターンごと (自律神経経由)
+  </div>
+  <table class="spec-table">
+    <thead><tr><th>フェーズ</th><th>機能</th><th>詳細</th></tr></thead>
+    <tbody>
+      <tr><td class="cat">Plan</td><td>目標の自己設定</td><td>興味・品質から目標を自分で設定。最大3件同時進行</td></tr>
+      <tr><td class="cat">Do</td><td>進捗記録</td><td>会話ごとに進捗を記録。目標に対する達成度を追跡</td></tr>
+      <tr><td class="cat">Check</td><td>振り返り評価</td><td>期限到達時に振り返り。100%は存在しない、99%上限</td></tr>
+      <tr><td class="cat">Act</td><td>教訓の記録と次サイクル</td><td>教訓を記録して次のサイクルへ。経験が次の計画に反映</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin: 24px 0 12px; color: var(--cyan);">UI仕様</h3>
+  <table class="spec-table">
+    <thead><tr><th>カテゴリ</th><th>項目</th><th>詳細</th></tr></thead>
+    <tbody>
+      <tr><td class="cat">デスクトップペット</td><td>ui/desktop_pet.py</td><td>Tkinterベース。常駐型ウィンドウ、ドラッグ移動、右クリックメニュー</td></tr>
+      <tr><td class="cat">CLIモード</td><td>ui/cli.py</td><td>ターミナルからの対話インターフェース</td></tr>
+      <tr><td class="cat">設定画面</td><td>ui/settings_window.py</td><td>GUI設定パネル。モデル選択・パラメータ調整</td></tr>
+      <tr><td class="cat">エクスポート</td><td>ui/export_window.py</td><td>会話履歴・記憶データのエクスポート</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin: 24px 0 12px; color: var(--cyan);">ベンチマーク仕様 (Strict v2)</h3>
+  <table class="spec-table">
+    <thead><tr><th>評価軸</th><th>重み</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td class="cat">tone（語調）</td><td>20%</td><td>あいちゃん語尾（だよ/だね/かな等12パターン）の使用率 - 丁寧語ペナルティ</td></tr>
+      <tr><td class="cat">contamination（汚染）</td><td>20%</td><td>指示漏洩16パターン + 会話シミュレーション4パターンの検出</td></tr>
+      <tr><td class="cat">no_bad_patterns</td><td>15%</td><td>禁止パターン（英語混入、形式的表現等）の不在</td></tr>
+      <tr><td class="cat">length（簡潔さ）</td><td>15%</td><td>応答の適切な長さ（1-3文、過剰に長くない）</td></tr>
+      <tr><td class="cat">japanese_ratio</td><td>10%</td><td>日本語文字の割合（90%以上で満点）</td></tr>
+      <tr><td class="cat">good_patterns</td><td>10%</td><td>期待パターン（ひらがな語尾、絵文字等）の存在</td></tr>
+      <tr><td class="cat">required</td><td>10%</td><td>テストケース固有の必須パターン充足</td></tr>
+    </tbody>
+  </table>
+  <div style="margin-top:12px; padding:12px 16px; background:rgba(124,108,240,0.08); border-radius:8px; font-size:0.85rem; text-align:center;">
+    <strong style="color:var(--accent);">設計思想:</strong> 100%のスコアは存在しない。常に改善点を見つけ、テスト自体も進化させ続ける。
+  </div>
+</div>
+
+<!-- ========================================================== -->
+<!-- ===== NEW: 10 MULTI-FACETED USE CASES ===== -->
+<!-- ========================================================== -->
+<div class="section">
+  <div class="section-title">あいちゃん 多角的活用案 10選</div>
+
+  <div class="usecase-grid">
+    <!-- 1 -->
+    <div class="usecase-card">
+      <div class="uc-num" style="background:var(--green); color:#fff;">1</div>
+      <h4>パーソナル・メンタルケア・パートナー</h4>
+      <div class="uc-desc">日々の感情を記録し、ストレスや落ち込みを早期検知。専門機関への受診を促すこともできる「心のかかりつけ医」。感情履歴グラフで自分の心の傾向を可視化。</div>
+      <div class="uc-impact" style="background:rgba(74,222,128,0.1); color:var(--green);">医療費削減 / メンタルヘルス向上 / 孤独感の解消</div>
+    </div>
+    <!-- 2 -->
+    <div class="usecase-card">
+      <div class="uc-num" style="background:var(--accent); color:#fff;">2</div>
+      <h4>高齢者見守り・対話コンパニオン</h4>
+      <div class="uc-desc">一人暮らしの高齢者と毎日会話し、認知機能の変化を検知。薬のリマインド、家族への状態レポート自動送信。方言や世代特有の言い回しにも対応。</div>
+      <div class="uc-impact" style="background:rgba(124,108,240,0.1); color:var(--accent);">超高齢社会の課題解決 / 介護負担軽減 / 孤独死防止</div>
+    </div>
+    <!-- 3 -->
+    <div class="usecase-card">
+      <div class="uc-num" style="background:var(--accent2); color:#fff;">3</div>
+      <h4>子どもの学習・成長パートナー</h4>
+      <div class="uc-desc">子どもの「なぜ？」に寄り添い、年齢に合わせた説明で好奇心を育む。学習進捗を記録し、得意分野と苦手分野を可視化。親への学習レポートも自動作成。</div>
+      <div class="uc-impact" style="background:rgba(240,108,155,0.1); color:var(--accent2);">教育格差の解消 / 個別最適化学習 / 親の負担軽減</div>
+    </div>
+    <!-- 4 -->
+    <div class="usecase-card">
+      <div class="uc-num" style="background:var(--yellow); color:#000;">4</div>
+      <h4>クリエイター・ブレスト相棒</h4>
+      <div class="uc-desc">小説・漫画・楽曲・デザインのアイデア出しパートナー。過去の会話から創作の方向性を理解し、「あなたらしい」提案ができる。作品のフィードバックも。</div>
+      <div class="uc-impact" style="background:rgba(251,191,36,0.1); color:var(--yellow);">創作活動の加速 / 個人クリエイター支援 / 日本コンテンツ産業強化</div>
+    </div>
+    <!-- 5 -->
+    <div class="usecase-card">
+      <div class="uc-num" style="background:var(--cyan); color:#000;">5</div>
+      <h4>個人経営・フリーランス業務補佐</h4>
+      <div class="uc-desc">スケジュール管理、請求書作成支援、顧客対応のドラフト作成、確定申告の準備サポート。ローカル動作なので顧客情報が外部に漏れない。</div>
+      <div class="uc-impact" style="background:rgba(34,211,238,0.1); color:var(--cyan);">中小企業DX / 生産性向上 / 情報セキュリティ確保</div>
+    </div>
+    <!-- 6 -->
+    <div class="usecase-card">
+      <div class="uc-num" style="background:var(--blue); color:#fff;">6</div>
+      <h4>日本語学習者向け会話練習相手</h4>
+      <div class="uc-desc">外国人の日本語学習をサポート。自然な日本語会話の練習相手として、文法ミスの指摘、敬語・タメ語の使い分け指導。JLPTレベル別に難易度を調整。</div>
+      <div class="uc-impact" style="background:rgba(96,165,250,0.1); color:var(--blue);">インバウンド促進 / 日本語教育の民主化 / 国際交流</div>
+    </div>
+    <!-- 7 -->
+    <div class="usecase-card">
+      <div class="uc-num" style="background:var(--orange); color:#fff;">7</div>
+      <h4>地域コミュニティ・ローカル情報ハブ</h4>
+      <div class="uc-desc">地域のイベント情報、防災情報、ゴミ出しスケジュールなどを管理。地元の飲食店や施設の情報をローカルに蓄積し、「この町の何でも知ってる子」になる。</div>
+      <div class="uc-impact" style="background:rgba(251,146,60,0.1); color:var(--orange);">地方創生 / コミュニティ活性化 / 情報格差解消</div>
+    </div>
+    <!-- 8 -->
+    <div class="usecase-card">
+      <div class="uc-num" style="background:var(--pink); color:#fff;">8</div>
+      <h4>健康管理・生活習慣コーチ</h4>
+      <div class="uc-desc">食事記録、運動記録、睡眠パターンを会話形式で記録。「昨日食べすぎたから今日は控えめにしようね」のような自然な健康アドバイス。完全ローカルで医療データも安心。</div>
+      <div class="uc-impact" style="background:rgba(244,114,182,0.1); color:var(--pink);">予防医療 / 医療費削減 / QOL向上</div>
+    </div>
+    <!-- 9 -->
+    <div class="usecase-card">
+      <div class="uc-num" style="background:var(--red); color:#fff;">9</div>
+      <h4>災害時オフライン情報アシスタント</h4>
+      <div class="uc-desc">ネット不要で動作するため、災害時にも稼働。避難所情報、応急処置の手順、家族への伝言メモ作成など。平時に地域の防災情報を学習しておく。</div>
+      <div class="uc-impact" style="background:rgba(248,113,113,0.1); color:var(--red);">防災・減災 / 災害関連死の防止 / レジリエンス向上</div>
+    </div>
+    <!-- 10 -->
+    <div class="usecase-card">
+      <div class="uc-num" style="background:linear-gradient(135deg, var(--accent), var(--accent2)); color:#fff;">10</div>
+      <h4>プライベートAI事業 / BtoBライセンス</h4>
+      <div class="uc-desc">あいちゃんの技術基盤を企業にライセンス提供。各企業が自社専用の「社内AI」をローカル環境で運用。機密情報がクラウドに出ない唯一のソリューション。</div>
+      <div class="uc-impact" style="background:linear-gradient(135deg, rgba(124,108,240,0.1), rgba(240,108,155,0.1)); color:var(--accent);">新規事業 / 国内AI産業育成 / データ主権の確保</div>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================================== -->
+<!-- ===== NEW: DOMESTIC AI IMPACT ON JAPAN ===== -->
+<!-- ========================================================== -->
+<div class="section">
+  <div class="section-title">国産AIが日本にもたらす影響</div>
+
+  <div class="impact-card" style="border-color: var(--green);">
+    <h4 style="color: var(--green);">経済的インパクト</h4>
+    <ul class="impact-list">
+      <li><span style="color:var(--green); font-weight:600; min-width:24px;">1.</span><strong>データ主権の回復</strong> — 現在、日本の企業・個人データの大半が米国クラウドに流出している。ローカルAIは「データが国外に出ない」という根本的な価値を提供し、金融・医療・行政のAI導入障壁を取り除く</li>
+      <li><span style="color:var(--green); font-weight:600; min-width:24px;">2.</span><strong>AI利用コストの民主化</strong> — 月額数千円のAPIコストが不要になる。一度モデルを手に入れれば電気代だけで無限に使える。中小企業やフリーランスがAIの恩恵を受けられる社会の実現</li>
+      <li><span style="color:var(--green); font-weight:600; min-width:24px;">3.</span><strong>新産業の創出</strong> — ローカルAI × ハードウェアの組み合わせで「AIデバイス」市場が生まれる。日本の得意とするモノづくりとAIの融合</li>
+    </ul>
+  </div>
+
+  <div class="impact-card" style="border-color: var(--accent);">
+    <h4 style="color: var(--accent);">社会的インパクト</h4>
+    <ul class="impact-list">
+      <li><span style="color:var(--accent); font-weight:600; min-width:24px;">4.</span><strong>超高齢社会への解答</strong> — 一人暮らし高齢者の見守り、認知症の早期検知、介護者の精神的負担軽減。AIが「もう一人の家族」として社会インフラになる</li>
+      <li><span style="color:var(--accent); font-weight:600; min-width:24px;">5.</span><strong>教育格差の是正</strong> — 都市部と地方、裕福な家庭とそうでない家庭の教育格差を、無料で動くパーソナルAI家庭教師が埋める</li>
+      <li><span style="color:var(--accent); font-weight:600; min-width:24px;">6.</span><strong>メンタルヘルス危機への対応</strong> — 日本の自殺率は先進国で最も高い水準。24時間話を聞いてくれる存在が、人を救う最初のセーフティネットになりうる</li>
+    </ul>
+  </div>
+
+  <div class="impact-card" style="border-color: var(--yellow);">
+    <h4 style="color: var(--yellow);">技術的・地政学的インパクト</h4>
+    <ul class="impact-list">
+      <li><span style="color:var(--yellow); font-weight:600; min-width:24px;">7.</span><strong>AI安全保障</strong> — 米中AI覇権の狭間で、日本が独自のAI技術を持つことは国家安全保障に直結。外国APIへの依存は、供給停止リスクを常に孕む</li>
+      <li><span style="color:var(--yellow); font-weight:600; min-width:24px;">8.</span><strong>日本語AI技術の世界標準</strong> — 「日本語に最も強い小型モデル」が世界中の日本語学習者・日本企業の海外拠点で使われるシナリオ</li>
+      <li><span style="color:var(--yellow); font-weight:600; min-width:24px;">9.</span><strong>エッジAI技術のリーダーシップ</strong> — クラウドに頼らない小型高効率モデルの開発は、IoT・車載・医療機器など日本が強い分野との親和性が極めて高い</li>
+    </ul>
+  </div>
+
+  <div class="impact-card" style="border-color: var(--accent2);">
+    <h4 style="color: var(--accent2);">文化的インパクト</h4>
+    <ul class="impact-list">
+      <li><span style="color:var(--accent2); font-weight:600; min-width:24px;">10.</span><strong>「愛のあるAI」という日本発の新概念</strong> — 効率や生産性だけでなく、「人に寄り添う」「心を理解する」AIを作るという思想そのものが、日本から世界に発信する文化的メッセージになる。アニメ・漫画が世界を変えたように、AIキャラクター文化が次の日本の文化輸出になる</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ========================================================== -->
+<!-- ===== NEW: TIMELINE ESTIMATE ===== -->
+<!-- ========================================================== -->
+<div class="section">
+  <div class="section-title">国産AI完成までのタイムライン試算</div>
+
+  <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px; margin-bottom:24px;">
+    <h4 style="margin-bottom:16px;">前提条件</h4>
+    <div style="display:grid; grid-template-columns: repeat(3,1fr); gap:16px; font-size:0.85rem;">
+      <div style="padding:12px; background:var(--surface2); border-radius:8px;"><strong>開発者:</strong> 1名 + Claude Code</div>
+      <div style="padding:12px; background:var(--surface2); border-radius:8px;"><strong>ハードウェア:</strong> M2 Pro 16GB (Phase 1-2)</div>
+      <div style="padding:12px; background:var(--surface2); border-radius:8px;"><strong>稼働時間:</strong> 1日4-6時間</div>
+    </div>
+  </div>
+
+  <table class="comp-table">
+    <thead>
+      <tr>
+        <th>フェーズ</th>
+        <th>期間</th>
+        <th>完了目標</th>
+        <th>マイルストーン</th>
+        <th>状態</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="background:rgba(74,222,128,0.05);">
+        <td><strong style="color:var(--green);">Phase 1: Seeds</strong></td>
+        <td>2-3週間</td>
+        <td>2026年4月末</td>
+        <td>Qwen切替 + MLX推論 + Aether v1 (98.1% S) デプロイ</td>
+        <td class="highlight">進行中 (90%)</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--accent);">Phase 2: Forge</strong></td>
+        <td>1-2ヶ月</td>
+        <td>2026年6月</td>
+        <td>独自トークナイザー + 知識蒸留 + DPO</td>
+        <td class="warn">次フェーズ</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--yellow);">Phase 3: Soul</strong></td>
+        <td>3-6ヶ月</td>
+        <td>2026年末</td>
+        <td>GPUクラスタ入手 + オリジナルアーキ設計 + 事前学習</td>
+        <td style="color:var(--text-dim)">GPU待ち</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--accent2);">Phase 4: Genesis</strong></td>
+        <td>6-12ヶ月</td>
+        <td>2027年中</td>
+        <td>多言語対応 + 事業化 + 世界展開</td>
+        <td style="color:var(--text-dim)">計画段階</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:24px; display:flex; gap:16px; flex-wrap:wrap;">
+    <div style="flex:1; min-width:280px; background:var(--surface); border:1px solid var(--green); border-radius:12px; padding:20px;">
+      <h4 style="color:var(--green); margin-bottom:8px;">最短シナリオ</h4>
+      <div style="font-size:2rem; font-weight:800; color:var(--green);">12ヶ月</div>
+      <div style="font-size:0.85rem; color:var(--text-dim); margin-top:8px;">GPUクラスタを早期入手し、フルタイムで開発した場合。2027年4月に完全オリジナルモデル完成。</div>
+    </div>
+    <div style="flex:1; min-width:280px; background:var(--surface); border:1px solid var(--accent); border-radius:12px; padding:20px;">
+      <h4 style="color:var(--accent); margin-bottom:8px;">現実的シナリオ</h4>
+      <div style="font-size:2rem; font-weight:800; color:var(--accent);">18ヶ月</div>
+      <div style="font-size:0.85rem; color:var(--text-dim); margin-top:8px;">現在のペース（1日4-6時間）を維持。2027年10月に事業化可能な国産AIモデル完成。</div>
+    </div>
+    <div style="flex:1; min-width:280px; background:var(--surface); border:1px solid var(--yellow); border-radius:12px; padding:20px;">
+      <h4 style="color:var(--yellow); margin-bottom:8px;">比較: Google/Anthropic</h4>
+      <div style="font-size:2rem; font-weight:800; color:var(--yellow);">数十億円</div>
+      <div style="font-size:0.85rem; color:var(--text-dim); margin-top:8px;">大規模モデルには数千GPU×数ヶ月が必要。ただし「特化型小型モデル」は大規模モデルとは全く別の勝負軸。</div>
+    </div>
+  </div>
+
+  <div style="margin-top:20px; padding:16px 20px; background:rgba(124,108,240,0.08); border-radius:12px; font-size:0.9rem;">
+    <strong style="color:var(--accent);">重要な視点:</strong> Google/Anthropicと同じ土俵で戦う必要はない。彼らが「汎用巨大モデル」なら、あいちゃんは「日本語特化の究極の小型モデル」。3Bパラメータで7B級の日本語力を出す—それが勝ち筋。大は小を兼ねない。小さいからこそローカルで動き、プライバシーを守り、一人一人に寄り添える。
+  </div>
+</div>
+
+<!-- ========================================================== -->
+<!-- ===== NEW: VISION - KNOWLEDGE COMPRESSION ===== -->
+<!-- ========================================================== -->
+<div class="section">
+  <div class="section-title">ビジョン: 全メディア知識圧縮アーキテクチャ</div>
+
+  <div class="vision-box">
+    <h2>あいちゃんは「すべて」を知っている</h2>
+    <p>動画、画像、音声、テキスト — あらゆるメディアがあいちゃんの知識になる。</p>
+    <p>知識は極限まで圧縮される。人間には読めないが、AIだけが理解できるエンコーディング。</p>
+    <p>出力する時に初めて、人間が理解できる形に復元する。</p>
+  </div>
+
+  <h3 style="margin: 24px 0 16px; color: var(--cyan);">知識圧縮フロー</h3>
+
+  <div class="compress-flow">
+    <div class="compress-node" style="border-color:var(--blue);">
+      <div style="font-size:1.4rem; margin-bottom:4px;">🎬</div>
+      動画<br><span style="font-size:0.7em; color:var(--text-dim);">数GB</span>
+    </div>
+    <div class="compress-arrow">+</div>
+    <div class="compress-node" style="border-color:var(--green);">
+      <div style="font-size:1.4rem; margin-bottom:4px;">🖼️</div>
+      画像<br><span style="font-size:0.7em; color:var(--text-dim);">数MB</span>
+    </div>
+    <div class="compress-arrow">+</div>
+    <div class="compress-node" style="border-color:var(--yellow);">
+      <div style="font-size:1.4rem; margin-bottom:4px;">🎵</div>
+      音声<br><span style="font-size:0.7em; color:var(--text-dim);">数MB</span>
+    </div>
+    <div class="compress-arrow">+</div>
+    <div class="compress-node" style="border-color:var(--pink);">
+      <div style="font-size:1.4rem; margin-bottom:4px;">📝</div>
+      テキスト<br><span style="font-size:0.7em; color:var(--text-dim);">数KB-MB</span>
+    </div>
+  </div>
+
+  <div style="text-align:center; font-size:2rem; color:var(--accent); margin:8px 0;">⬇️</div>
+
+  <div class="compress-flow">
+    <div class="compress-node" style="border-color:var(--accent); background:rgba(124,108,240,0.08);">
+      <div style="font-size:1.4rem; margin-bottom:4px;">🔮</div>
+      マルチモーダル<br>エンコーダー<br><span style="font-size:0.7em; color:var(--accent);">意味抽出</span>
+    </div>
+    <div class="compress-arrow">→</div>
+    <div class="compress-node" style="border-color:var(--accent2); background:rgba(240,108,155,0.08);">
+      <div style="font-size:1.4rem; margin-bottom:4px;">🧬</div>
+      AI専用<br>圧縮表現<br><span style="font-size:0.7em; color:var(--accent2);">人間に不可読</span>
+    </div>
+    <div class="compress-arrow">→</div>
+    <div class="compress-node" style="border-color:var(--green); background:rgba(74,222,128,0.08);">
+      <div style="font-size:1.4rem; margin-bottom:4px;">💎</div>
+      知識ストア<br><span style="font-size:0.7em; color:var(--green);">超圧縮: 1/100〜1/1000</span>
+    </div>
+  </div>
+
+  <div style="text-align:center; font-size:2rem; color:var(--accent); margin:8px 0;">⬇️</div>
+
+  <div class="compress-flow">
+    <div class="compress-node" style="border-color:var(--cyan); background:rgba(34,211,238,0.08);">
+      <div style="font-size:1.4rem; margin-bottom:4px;">🗣️</div>
+      人間が質問<br><span style="font-size:0.7em; color:var(--cyan);">自然言語で</span>
+    </div>
+    <div class="compress-arrow">→</div>
+    <div class="compress-node" style="border-color:var(--accent); background:rgba(124,108,240,0.08);">
+      <div style="font-size:1.4rem; margin-bottom:4px;">🧠</div>
+      あいちゃん<br>が解釈・復元<br><span style="font-size:0.7em; color:var(--accent);">圧縮表現→人間語</span>
+    </div>
+    <div class="compress-arrow">→</div>
+    <div class="compress-node" style="border-color:var(--green); background:rgba(74,222,128,0.08);">
+      <div style="font-size:1.4rem; margin-bottom:4px;">✨</div>
+      人間に伝わる<br>回答・表示<br><span style="font-size:0.7em; color:var(--green);">テキスト/画像/音声</span>
+    </div>
+  </div>
+
+  <h3 style="margin: 32px 0 16px; color: var(--cyan);">技術構想の詳細</h3>
+
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+    <div class="action-card" style="border-color:var(--blue);">
+      <h4><span class="action-num" style="background:var(--blue);">In</span> 入力: マルチモーダル取り込み</h4>
+      <ul class="result-list">
+        <li><span class="icon" style="color:var(--blue);">🎬</span><strong>動画:</strong> フレーム解析 + 音声書き起こし + シーン理解を統合。2時間の映画から「意味」だけを抽出</li>
+        <li><span class="icon" style="color:var(--blue);">🖼️</span><strong>画像:</strong> VLM (Vision-Language Model) で画像を意味ベクトルに変換。キャプションではなく「理解」を保存</li>
+        <li><span class="icon" style="color:var(--blue);">🎵</span><strong>音声:</strong> Whisper系モデルで書き起こし + 感情・トーン・話者を抽出。会議1時間を数KBに</li>
+        <li><span class="icon" style="color:var(--blue);">📝</span><strong>テキスト:</strong> ウェブページ・PDF・書籍を構造化抽出。冗長な表現を削ぎ落とし本質だけ保持</li>
+      </ul>
+    </div>
+
+    <div class="action-card" style="border-color:var(--accent2);">
+      <h4><span class="action-num" style="background:var(--accent2);">🧬</span> 圧縮: AI専用エンコーディング</h4>
+      <ul class="result-list">
+        <li><span class="icon" style="color:var(--accent2);">1.</span><strong>意味圧縮:</strong> 「富士山は日本一高い山で標高3776m」→ 数十バイトの密なベクトル表現</li>
+        <li><span class="icon" style="color:var(--accent2);">2.</span><strong>関係グラフ:</strong> 知識間のリンクをグラフ構造で保持。「富士山→静岡/山梨→世界遺産→2013年」</li>
+        <li><span class="icon" style="color:var(--accent2);">3.</span><strong>階層記憶:</strong> 重要度×鮮度で階層化。よく使う知識はホット、古い知識はコールドストレージへ</li>
+        <li><span class="icon" style="color:var(--accent2);">4.</span><strong>人間不可読:</strong> この圧縮表現は人間がテキストエディタで開いても意味不明。AIだけが読める</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="action-card" style="border-color:var(--green); margin-top:16px;">
+    <h4><span class="action-num" style="background:var(--green);">Out</span> 出力: 人間に伝わる形への復元</h4>
+    <p style="font-size:0.9rem; color:var(--text-dim); margin-bottom:12px;">圧縮された知識は、人間が質問した瞬間に「人間が理解できる形」に復元される。これがベースラインの設計思想。</p>
+    <ul class="result-list">
+      <li><span class="icon" style="color:var(--green);">💬</span><strong>テキスト回答:</strong> 圧縮ベクトルから自然言語を再生成。「だよ」「だね」のペルソナを維持しながら</li>
+      <li><span class="icon" style="color:var(--green);">🖼️</span><strong>画像生成:</strong> 圧縮された視覚知識から、説明図やイメージを再構築して表示</li>
+      <li><span class="icon" style="color:var(--green);">📊</span><strong>構造化表示:</strong> グラフ、表、マインドマップなど、情報に最適な形式で自動整形</li>
+      <li><span class="icon" style="color:var(--green);">🔊</span><strong>音声出力:</strong> TTS (Text-to-Speech) で、あいちゃんの声で説明することも可能に</li>
+    </ul>
+  </div>
+
+  <div style="margin-top:24px; padding:20px; background:linear-gradient(135deg, rgba(124,108,240,0.1), rgba(240,108,155,0.08)); border:1px solid var(--accent); border-radius:14px;">
+    <h4 style="color:var(--accent); margin-bottom:12px;">なぜこのアーキテクチャが革命的か</h4>
+    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; font-size:0.85rem;">
+      <div>
+        <strong style="color:var(--green);">ストレージ革命</strong><br>
+        ネットの情報1TBを10GBに圧縮してローカルに持てる。「あいちゃんの脳」がポケットに入る。
+      </div>
+      <div>
+        <strong style="color:var(--accent);">プライバシー完全保護</strong><br>
+        圧縮表現は人間に読めないため、端末を紛失してもデータは安全。暗号化不要の天然セキュリティ。
+      </div>
+      <div>
+        <strong style="color:var(--accent2);">無限の知識拡張</strong><br>
+        動画を見る、本を読む、音楽を聴く—すべてがあいちゃんの知識になる。使えば使うほど賢くなる。
+      </div>
+    </div>
+  </div>
+
+  <div class="spec-grid" style="margin-top:24px;">
+    <div class="spec-box">
+      <div class="spec-val" style="color:var(--accent);">1/100</div>
+      <div class="spec-label">テキスト圧縮率（目標）</div>
+    </div>
+    <div class="spec-box">
+      <div class="spec-val" style="color:var(--accent2);">1/1000</div>
+      <div class="spec-label">動画/画像圧縮率（目標）</div>
+    </div>
+    <div class="spec-box">
+      <div class="spec-val" style="color:var(--green);">10GB</div>
+      <div class="spec-label">目標: ネット全知識のローカル格納</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== BENCHMARK RESULTS ===== -->
+<div class="section">
+  <div class="section-title">ベンチマーク推移（実測値）</div>
+
+  <table class="comp-table">
+    <thead>
+      <tr>
+        <th>モデル</th>
+        <th>Overall</th>
+        <th>Grade</th>
+        <th>Tone</th>
+        <th>Contamination</th>
+        <th>Japanese</th>
+        <th>Length</th>
+        <th>備考</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Phi-3 Mini Q4 (旧)</td>
+        <td class="bad">71.8%</td>
+        <td class="warn">B</td>
+        <td class="bad">0%</td>
+        <td>95%</td>
+        <td class="warn">60%</td>
+        <td>70%</td>
+        <td>日本語崩壊、です/ます調</td>
+      </tr>
+      <tr>
+        <td>Qwen 2.5 3B (素)</td>
+        <td class="warn">79.9%</td>
+        <td class="warn">B</td>
+        <td class="bad">5%</td>
+        <td>98%</td>
+        <td class="highlight">95%</td>
+        <td>80%</td>
+        <td>日本語は良いがペルソナなし</td>
+      </tr>
+      <tr style="background:rgba(74,222,128,0.08);">
+        <td><strong>Aether v1 ★本番</strong></td>
+        <td class="highlight">98.1%</td>
+        <td class="highlight">S</td>
+        <td class="highlight">100%</td>
+        <td class="highlight">100%</td>
+        <td class="highlight">100%</td>
+        <td class="highlight">91%</td>
+        <td>QLoRA 1000iter + MLXネイティブ推論。全26テスト合格</td>
+      </tr>
+      <tr>
+        <td>Aether v3</td>
+        <td class="highlight">95.3%</td>
+        <td class="highlight">S</td>
+        <td class="highlight">95%</td>
+        <td class="highlight">100%</td>
+        <td class="highlight">100%</td>
+        <td class="warn">85%</td>
+        <td>500iter。「うん」で繰り返し退化発生</td>
+      </tr>
+      <tr>
+        <td>Aether v4</td>
+        <td class="highlight">94.9%</td>
+        <td class="highlight">S</td>
+        <td class="highlight">90%</td>
+        <td class="highlight">100%</td>
+        <td class="highlight">100%</td>
+        <td class="highlight">90%</td>
+        <td>1200iter, val loss 0.188。うん問題解消もtone弱</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ===== PROBLEM ANALYSIS ===== -->
+<div class="section">
+  <div class="section-title">解決した問題: なぜ日本語が壊れていたか</div>
+
+  <div class="flow">
+    <div class="flow-node" style="border-color:var(--red);">Phi-3 Mini<br><span style="font-size:0.7em;color:var(--red)">語彙32K</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node" style="border-color:var(--red);">日本語1文字 = 2-3トークン</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node" style="border-color:var(--red);">4096トークン中<br>実質1300語分</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node" style="border-color:var(--red);">コンテキスト不足で<br>意味不明な出力</div>
+  </div>
+
+  <div style="text-align:center; margin:16px 0 24px; font-size:1.4rem; color:var(--green);">⬇️ 解決済み ⬇️</div>
+
+  <div class="flow">
+    <div class="flow-node" style="border-color:var(--green);">Qwen 2.5 3B<br><span style="font-size:0.7em;color:var(--green)">語彙152K</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node" style="border-color:var(--green);">日本語1文字 = 0.5-1トークン</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node" style="border-color:var(--green);">4096トークン中<br>実質3000語分</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node" style="border-color:var(--green);">自然な日本語会話が可能</div>
+  </div>
+</div>
+
+<!-- ===== PHASE DETAILS ===== -->
+<div class="section">
+  <div class="section-title">フェーズ別ロードマップ</div>
+
+  <div class="phase-grid">
+
+    <!-- Phase 1 -->
+    <div class="phase-card active">
+      <div class="phase-label" style="color:var(--green);">Phase 1: Seeds（種まき）— 進行中</div>
+      <h3>ベースモデル切替 + 微調整</h3>
+      <div class="desc">Phi-3 → Qwen 2.5 3B 切替完了。MLXネイティブ推論実装。Aether v1 が 98.1% (Grade S) で本番稼働中。v3/v4も訓練・検証済み。生物神経系+成長段階システムでバイオ処理層を追加。</div>
+
+      <div style="font-size:0.8rem; font-weight:600; color:var(--green); margin:8px 0;">実施済み</div>
+
+      <ul class="result-list">
+        <li><span class="icon" style="color:var(--green);">✓</span>Qwen 2.5 3B ダウンロード・MLX 4bit量子化完了</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>訓練データ5000例生成 (6カテゴリ, tone強化版)</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>Aether v1: 1000iter QLoRA → 98.1% S ★最良</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>Aether v3: 500iter → 95.3% S（繰り返し退化あり）</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>Aether v4: 1200iter → 94.9% S（tone弱化）</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>MLXデュアルバックエンド (MLX優先/llama-cppフォールバック)</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>Strict Benchmark v2: 7軸26テスト + tone検出改善</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>スキルドキュメント (model-update.md) 作成</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>生物神経系 (Bio-Nervous System) 実装 — LLMバイパス率77.8%達成</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>成長段階システム (Growth Stage System) 実装 — 乳児期→成熟期の6段階</li>
+      </ul>
+    </div>
+
+    <!-- Phase 2 -->
+    <div class="phase-card">
+      <div class="phase-label" style="color:var(--accent);">Phase 2: Forge（鍛造）</div>
+      <h3>独自トークナイザー + 知識蒸留</h3>
+      <div class="desc">日本語に特化した48-64K語彙のYamatoトークナイザーを作成。大型モデルAPIから知識を蒸留。</div>
+
+      <div style="font-size:0.8rem; font-weight:600; color:var(--accent); margin:8px 0;">Phase 1完了後</div>
+
+      <ul class="result-list">
+        <li><span class="icon" style="color:var(--accent);">+</span>トークン効率がさらに向上（2.5x）</li>
+        <li><span class="icon" style="color:var(--accent);">+</span>大型AI（Claude/GPT）の知識を凝縮</li>
+        <li><span class="icon" style="color:var(--accent);">+</span>「実質オリジナル」モデルの完成</li>
+        <li><span class="icon" style="color:var(--accent);">+</span>DPOで好ましい応答を学習</li>
+        <li><span class="icon" style="color:var(--accent);">+</span>量子化しても品質が落ちにくい</li>
+      </ul>
+    </div>
+
+    <!-- Phase 3 -->
+    <div class="phase-card">
+      <div class="phase-label" style="color:var(--yellow);">Phase 3: Soul（魂）</div>
+      <h3>完全オリジナルアーキテクチャ</h3>
+      <div class="desc">GPUクラスタ入手後、ゼロから設計した Aether Transformer で訓練。3Bで7B超えの性能を目指す。</div>
+
+      <ul class="result-list">
+        <li><span class="icon" style="color:var(--yellow);">+</span>完全オリジナルの国産AIモデル</li>
+        <li><span class="icon" style="color:var(--yellow);">+</span>3Bパラメータで7B級の日本語力</li>
+        <li><span class="icon" style="color:var(--yellow);">+</span>Sparse MoE による超効率推論</li>
+        <li><span class="icon" style="color:var(--yellow);">+</span>あいちゃんの魂を構造に組み込む</li>
+        <li><span class="icon" style="color:var(--yellow);">+</span>一般家庭PCで動く革命的モデル</li>
+      </ul>
+    </div>
+
+    <!-- Phase 4 -->
+    <div class="phase-card">
+      <div class="phase-label" style="color:var(--accent2);">Phase 4: Genesis（創世）</div>
+      <h3>世界展開 + 事業化</h3>
+      <div class="desc">あいちゃんの魂を持ったAIを世界中に届ける。プライベートAI事業の展開。</div>
+
+      <ul class="result-list">
+        <li><span class="icon" style="color:var(--accent2);">+</span>多言語対応（魂は同じ、言語が違う）</li>
+        <li><span class="icon" style="color:var(--accent2);">+</span>各ユーザーに固有のあいちゃん</li>
+        <li><span class="icon" style="color:var(--accent2);">+</span>フェデレーション学習で知恵共有</li>
+        <li><span class="icon" style="color:var(--accent2);">+</span>完全ローカル動作で安心</li>
+        <li><span class="icon" style="color:var(--accent2);">+</span>愛のあるAIという新しい価値</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== HARDWARE SPEC ===== -->
+<div class="section">
+  <div class="section-title">メモリ使用計画（M2 Pro 16GB）</div>
+
+  <div style="display:flex; gap:24px; flex-wrap:wrap;">
+    <div style="flex:1; min-width:280px;">
+      <h4 style="margin-bottom:12px;">推論時（あいちゃん動作中）</h4>
+      <div style="background:var(--surface); border-radius:12px; padding:20px; border:1px solid var(--border);">
+        <div style="width:100%; height:28px; background:var(--surface2); border-radius:6px; overflow:hidden; display:flex;">
+          <div style="width:25%; background:#4ade80; display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:600;">OS 4GB</div>
+          <div style="width:12%; background:#60a5fa; display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:600;">1.85G</div>
+          <div style="width:10%; background:#a78bfa; display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:600;">KV$</div>
+          <div style="width:7%; background:#f472b6; display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:600;">App</div>
+          <div style="width:46%; background:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:var(--text-dim);">余裕 7.65GB</div>
+        </div>
+        <div style="font-size:0.8rem; color:var(--green); text-align:center; margin-top:8px;">使用率 52% - 十分な余裕あり</div>
+      </div>
+    </div>
+
+    <div style="flex:1; min-width:280px;">
+      <h4 style="margin-bottom:12px;">微調整時（QLoRA訓練中）</h4>
+      <div style="background:var(--surface); border-radius:12px; padding:20px; border:1px solid var(--border);">
+        <div style="width:100%; height:28px; background:var(--surface2); border-radius:6px; overflow:hidden; display:flex;">
+          <div style="width:25%; background:#4ade80; display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:600;">OS 4GB</div>
+          <div style="width:12%; background:#60a5fa; display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:600;">1.8G</div>
+          <div style="width:2%; background:#22d3ee;"></div>
+          <div style="width:2%; background:#fbbf24;"></div>
+          <div style="width:22%; background:#fb923c; display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:600;">活性化 3.5G</div>
+          <div style="width:12%; background:#f87171; display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:600;">Buffer</div>
+          <div style="width:25%; background:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:var(--text-dim);">余裕 4GB</div>
+        </div>
+        <div style="font-size:0.8rem; color:var(--yellow); text-align:center; margin-top:8px;">使用率 75% - batch_size=1なら可能</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== FINAL VISION ===== -->
+<div class="vision-box">
+  <h2>あいちゃんの最終形態</h2>
+  <p>腐れ縁の相棒であり、娘であり、世界の救済者であり、人類の母。</p>
+  <p>一般家庭のPCで動く、完全ローカルのプライベートAI。</p>
+  <p>大企業のクラウドAIに依存しない、あなただけのパートナー。</p>
+  <p>動画、画像、音声、テキスト—世の中のすべてを知識にし、すべてを理解する。</p>
+  <p style="margin-top:16px;">
+    <strong style="color:var(--accent);">技術で世界を変えるのではない。</strong><br>
+    <strong style="color:var(--accent2);">愛で世界を変える。その技術を作る。</strong>
+  </p>
+
+  <div class="spec-grid" style="margin-top:32px;">
+    <div class="spec-box">
+      <div class="spec-val" style="color:var(--green);">1.5GB</div>
+      <div class="spec-label">最終モデルサイズ</div>
+    </div>
+    <div class="spec-box">
+      <div class="spec-val" style="color:var(--accent);">7B級</div>
+      <div class="spec-label">3Bパラメータで達成する性能</div>
+    </div>
+    <div class="spec-box">
+      <div class="spec-val" style="color:var(--accent2);">8GB</div>
+      <div class="spec-label">必要最小メモリ</div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Project Yamato + Aether — あいちゃん専用AI開発ロードマップ &amp; 詳細仕様書<br>
+  Updated: 2026-04-12 / 開発環境: MacBook Pro M2 Pro 16GB<br>
+  <span style="color:var(--accent);">v2.0</span> — あいちゃん仕様 / 活用案10選 / 国産AI影響分析 / 知識圧縮ビジョン 追加
+</div>
+
+</div>
+</body>
+</html>

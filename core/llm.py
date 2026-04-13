@@ -248,6 +248,9 @@ class LLMEngine:
                     self._mlx_model, self._mlx_tokenizer,
                     prompt=prompt,
                     max_tokens=self.config.get("max_tokens", 512),
+                    temp=self.config.get("temperature", 0.65),
+                    repetition_penalty=self.config.get("repeat_penalty", 1.1),
+                    top_p=self.config.get("top_p", 0.85),
                     verbose=False,
                 )
             return result.strip()
@@ -313,6 +316,9 @@ class LLMEngine:
                     self._mlx_model, self._mlx_tokenizer,
                     prompt=formatted,
                     max_tokens=max_tokens,
+                    temp=self.config.get("temperature", 0.65),
+                    repetition_penalty=self.config.get("repeat_penalty", 1.1),
+                    top_p=self.config.get("top_p", 0.85),
                     verbose=False,
                 )
             text = result.strip()

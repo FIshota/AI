@@ -21,8 +21,10 @@ except ImportError:
 try:
     from llama_cpp import Llama
     LLAMA_AVAILABLE = True
-except ImportError:
+except (ImportError, RuntimeError, OSError) as _e:
+    # Metal シェーダーコンパイル失敗等でロード不可の場合も捕捉
     LLAMA_AVAILABLE = False
+    print(f"[LLM] llama-cpp-python ロード不可: {_e}")
 
 # ─── チャットテンプレート定義 ───────────────────────────────────
 # モデルごとのプロンプト形式。ファイル名で自動判定する。
@@ -71,9 +73,9 @@ def _detect_template(model_name: str) -> str:
 
 
 FALLBACK_RESPONSES = [
-    "モデルファイルを読み込んでいます……もう少し待ってね。",
-    "まだモデルが設定されていないみたい。セットアップを完了させてね！",
-    "LLMモデルが見つからないよ。`python scripts/setup_model.py` を実行してみて！",
+    "ごめんね、今モデルが使えない状態なの……ターミナルのログを見てみて！",
+    "モデルの読み込みに問題があったみたい。設定を確認してね。",
+    "LLMが動いてないよ。arm64版Pythonへの切り替えが必要かも。",
 ]
 _fallback_idx = 0
 _fallback_lock = threading.Lock()
@@ -114,6 +116,25 @@ class LLMEngine:
             self._try_load_llama()
             return
 
+        import platform
+        arch = platform.machine()
+        py_arch = "arm64" if "arm" in arch or "aarch" in arch else arch
+        import struct
+        py_bits = struct.calcsize("P") * 8
+        # x86 Python on Apple Silicon の検出
+        if arch == "x86_64" and py_bits == 64:
+            import subprocess
+            try:
+                real_arch = subprocess.check_output(["uname", "-m"], text=True).strip()
+                if real_arch == "arm64":
+                    print(
+                        "[LLM] ⚠ Apple Silicon (M2) で x86版Python を使用中 (Rosetta 2)。\n"
+                        "[LLM]   arm64ネイティブのPythonに切り替えると MLX + Metal が使えます。\n"
+                        "[LLM]   推奨: Miniforge (arm64) をインストールしてください。\n"
+                        "[LLM]   https://github.com/conda-forge/miniforge"
+                    )
+            except Exception:
+                pass
         print("[LLM] MLX も llama-cpp-python も利用不可。フォールバックモードで動作します。")
 
     def _try_load_mlx(self) -> bool:
@@ -205,27 +226,47 @@ class LLMEngine:
             print("[LLM] モデルファイルが見つかりません。フォールバックモードで動作します。")
             return
 
+        base_kwargs = dict(
+            model_path=str(model_file),
+            n_ctx=self.config.get("context_length", 2048),
+            n_threads=self.config.get("n_threads", 8),
+            n_batch=self.config.get("n_batch", 512),
+            use_mmap=self.config.get("use_mmap", True),
+            use_mlock=self.config.get("use_mlock", False),
+            verbose=False,
+        )
+
+        # ① GPU (Metal) で試行
         try:
-            print(f"[LLM/llama] モデルを読み込み中: {model_file.name}")
-            llama_kwargs = dict(
-                model_path=str(model_file),
-                n_ctx=self.config.get("context_length", 2048),
-                n_gpu_layers=self.config.get("n_gpu_layers", -1),
-                n_threads=self.config.get("n_threads", 8),
-                n_batch=self.config.get("n_batch", 512),
-                flash_attn=self.config.get("flash_attn", True),
-                use_mmap=self.config.get("use_mmap", True),
-                use_mlock=self.config.get("use_mlock", False),
-                verbose=False,
-            )
-            self._llm = Llama(**llama_kwargs)
+            print(f"[LLM/llama] モデルを読み込み中 (GPU): {model_file.name}")
+            gpu_kwargs = {
+                **base_kwargs,
+                "n_gpu_layers": self.config.get("n_gpu_layers", -1),
+                "flash_attn": self.config.get("flash_attn", True),
+            }
+            self._llm = Llama(**gpu_kwargs)
             self._backend = "llama"
             self._loaded = True
             self._model_name = model_file.name
             self._template_id = _detect_template(model_file.name)
-            print(f"[LLM/llama] ✓ 読み込み完了: {model_file.name} (template={self._template_id})")
+            print(f"[LLM/llama] ✓ 読み込み完了 (GPU): {model_file.name} (template={self._template_id})")
+            return
         except Exception as e:
-            print(f"[LLM/llama] 読み込みエラー: {e}\nフォールバックモードで動作します。")
+            print(f"[LLM/llama] GPU読み込み失敗: {e}")
+
+        # ② CPUフォールバック（Metal非対応時）
+        try:
+            print(f"[LLM/llama] CPUモードで再試行: {model_file.name}")
+            cpu_kwargs = {**base_kwargs, "n_gpu_layers": 0}
+            self._llm = Llama(**cpu_kwargs)
+            self._backend = "llama"
+            self._loaded = True
+            self._model_name = model_file.name
+            self._template_id = _detect_template(model_file.name)
+            print(f"[LLM/llama] ✓ 読み込み完了 (CPU): {model_file.name} (template={self._template_id})")
+            return
+        except Exception as e:
+            print(f"[LLM/llama] CPU読み込みも失敗: {e}\nフォールバックモードで動作します。")
 
     def is_loaded(self) -> bool:
         return self._loaded

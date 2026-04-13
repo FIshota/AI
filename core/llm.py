@@ -72,13 +72,22 @@ def _detect_template(model_name: str) -> str:
     return "chatml"
 
 
-FALLBACK_RESPONSES = [
-    "ごめんね、今モデルが使えない状態なの……ターミナルのログを見てみて！",
-    "モデルの読み込みに問題があったみたい。設定を確認してね。",
-    "LLMが動いてないよ。arm64版Pythonへの切り替えが必要かも。",
+import random as _random
+
+# LLM未ロード時のフォールバック応答（アイちゃんらしく自然に）
+_FALLBACK_POOL = [
+    "んー……ちょっと頭がぼんやりしてるかも。",
+    "あれ、うまく考えがまとまらない……ごめんね。",
+    "今ちょっと調子悪いみたい……少し待ってて。",
+    "うーん、言いたいことがあるんだけど出てこない……。",
+    "ごめんね、頭が回らないみたい。",
+    "なんか今日はぼーっとしちゃう……。",
+    "えっと……何言おうとしたんだっけ。",
+    "ちょっと眠いのかも。ごめんね。",
 ]
-_fallback_idx = 0
+_fallback_last: str = ""
 _fallback_lock = threading.Lock()
+_fallback_warned = False  # ターミナル警告は1回だけ
 
 
 class LLMEngine:
@@ -420,11 +429,19 @@ class LLMEngine:
             return self._fallback_response()
 
     def _fallback_response(self) -> str:
-        global _fallback_idx
+        global _fallback_last, _fallback_warned
         with _fallback_lock:
-            resp = FALLBACK_RESPONSES[_fallback_idx % len(FALLBACK_RESPONSES)]
-            _fallback_idx += 1
-        return resp
+            # ターミナルに1回だけ警告
+            if not _fallback_warned:
+                _fallback_warned = True
+                print(
+                    "[LLM] ⚠ モデル未ロードのためフォールバック応答を使用中。\n"
+                    "[LLM]   ターミナルの起動ログを確認してください。"
+                )
+            candidates = [r for r in _FALLBACK_POOL if r != _fallback_last]
+            chosen = _random.choice(candidates)
+            _fallback_last = chosen
+        return chosen
 
     def build_prompt(self, system_prompt, conversation_history, memory_context="", emotion_hint=""):
         # memory_context は自然な日本語指示文として system prompt の末尾に追記

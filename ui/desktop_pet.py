@@ -588,14 +588,15 @@ class DesktopPet:
     def _setup_window(self):
         # macOS Sequoia (15.x) + Tk 8.6.12+ では overrideredirect(True) が
         # マウスイベントを消すバグがある。MacWindowStyle で枠なしウィンドウにする。
-        # 'plain' はクリック可だがドラッグ不可のため 'floating' を使用。
+        # 'plain' はドラッグ不可、'floating' はタイトルバーが出るが
+        # クリック+ドラッグ両対応のため 'floating' を採用。
         self._use_mac_style = False
         if IS_MAC:
             try:
                 tk_patch = self.root.tk.eval("info patchlevel")
                 tk_minor = int(tk_patch.split(".")[2]) if tk_patch.count(".") >= 2 else 0
                 if tk_minor >= 12:
-                    # Tk 8.6.12+: floating ユーティリティウィンドウ（クリック+ドラッグ両対応）
+                    self.root.title("")  # タイトルバーの "tk" テキストを消す
                     self.root.call(
                         "::tk::unsupported::MacWindowStyle", "style",
                         self.root._w, "floating", "none",
@@ -616,6 +617,7 @@ class DesktopPet:
         self._win_start_x = 600
         self._win_start_y = 400
         self._dragging = False
+        self._drag_ready = False  # _on_press〜_on_release の間 True
         # 初期位置（_move_to_bottom_right が上書きする）
         self._base_x = 600
         self._base_y = 400
@@ -727,11 +729,6 @@ class DesktopPet:
         self.canvas.bind("<ButtonPress-1>",   self._on_press)
         self.canvas.bind("<B1-Motion>",       self._drag_motion)
         self.canvas.bind("<ButtonRelease-1>", self._on_release)
-        # MacWindowStyle 環境ではroot側にもバインド（イベント伝播の保険）
-        if getattr(self, "_use_mac_style", False):
-            self.root.bind("<ButtonPress-1>",   self._on_press)
-            self.root.bind("<B1-Motion>",       self._drag_motion)
-            self.root.bind("<ButtonRelease-1>", self._on_release)
 
         # 右クリック: macOS では Button-2 が右クリック、Button-3 はミドル
         # overrideredirect 環境では Release で拾う方が確実
@@ -746,7 +743,6 @@ class DesktopPet:
             ctx_seqs = ("<ButtonPress-3>", "<ButtonRelease-3>")
         for seq in ctx_seqs:
             self.canvas.bind(seq, self._show_context_menu)
-            self.root.bind(seq, self._show_context_menu)
 
         # コンテキストメニュー
         self.context_menu = tk.Menu(self.root, tearoff=0,
@@ -766,16 +762,18 @@ class DesktopPet:
         self.context_menu.add_command(label="終了",              command=self.root.quit)
 
     def _on_press(self, event):
-        """マウス押下：ドラッグ起点を記録"""
+        """マウス押下：ドラッグ起点を記録。アニメーションを一時停止。"""
         self._press_x = event.x_root
         self._press_y = event.y_root
-        # ウィンドウの初期位置を保存（delta計算用）
-        self._win_start_x = self.root.winfo_x()
-        self._win_start_y = self.root.winfo_y()
+        # アニメの geometry() がドラッグと競合しないよう即座に停止
+        self._drag_ready = True
         self._dragging = False
+        # winfo ではなく _base_x/_base_y を信頼（macOS floating で winfo が不正確なため）
+        self._win_start_x = self._base_x
+        self._win_start_y = self._base_y
 
     def _drag_motion(self, event):
-        """5px以上動いたらドラッグと判定（delta方式: winfo_x/y の精度に依存しない）"""
+        """5px以上動いたらドラッグと判定（delta方式）"""
         dx = event.x_root - self._press_x
         dy = event.y_root - self._press_y
         if abs(dx) > 5 or abs(dy) > 5:
@@ -787,24 +785,19 @@ class DesktopPet:
 
     def _on_release(self, event):
         """マウス離し：ドラッグ完了 or クリック判定"""
+        self._drag_ready = False
         if self._dragging:
-            # ドラッグ後の位置をアニメ基準に確定
-            # update_idletasks で compositor に反映を促してから winfo_x/y を読む
-            self.root.update_idletasks()
-            self._base_x = self.root.winfo_x()
-            self._base_y = self.root.winfo_y()
+            # ドラッグ後の位置を delta から計算（winfo_x/y は macOS で不正確なため使わない）
+            dx = event.x_root - self._press_x
+            dy = event.y_root - self._press_y
+            self._base_x = self._win_start_x + dx
+            self._base_y = self._win_start_y + dy
             self._dragging = False
             return
         # ユーザー操作でアイドルタイマーをリセット
         self._last_interaction = time.time()
         # シングルクリックでチャットを開く
         self._open_chat()
-
-    def _on_single_click(self):
-        import random
-        phrases = ["なあに？😊", "何かあった？", "一緒にいるよ💕",
-                   "呼んだ？✨", "えへへ〜", "どうしたの？"]
-        self._show_bubble(random.choice(phrases))
 
     def _open_chat(self, event=None):
         if self.chat_window is None or not self.chat_window.winfo_exists():
@@ -839,10 +832,8 @@ class DesktopPet:
 
         def _popup():
             try:
-                # macOS overrideredirect: フォーカスを確実に奪う
                 self.root.focus_force()
                 self.root.lift()
-                self.root.update_idletasks()
                 self.context_menu.tk_popup(x, y, 0)
             except Exception as e:
                 print(f"[Menu] popup failed: {e}", flush=True)
@@ -1058,6 +1049,20 @@ class DesktopPet:
         self._anim_tick = 0
         self._idle_anim()
 
+    def _build_breath_frames(self, base_image):
+        """ブリージングアニメのフレームを事前計算（メインスレッドの毎フレームLANCZOS廃止）"""
+        n_frames = 64  # sin 周期を64分割
+        iw, ih = base_image.size
+        frames = []
+        for i in range(n_frames):
+            scale = 1.0 + math.sin(i * (2 * math.pi / n_frames)) * 0.012
+            w = max(1, int(iw * scale))
+            h = max(1, int(ih * scale))
+            resized = base_image.resize((w, h), Image.LANCZOS)
+            frames.append(ImageTk.PhotoImage(resized))
+        self._breath_frames = frames
+        self._breath_dirty = False
+
     def _idle_anim(self):
         """浮遊アニメーション（上下にゆっくり揺れる）"""
         try:
@@ -1094,23 +1099,23 @@ class DesktopPet:
                     pass
             if hasattr(self, "_emotion_display"):
                 display = self._emotion_display
+                self._breath_dirty = True  # 感情変化時にフレーム再構築
 
-            # わずかに拡縮するブリージングエフェクト
-            scale = 1.0 + math.sin(self._anim_tick * 0.03) * 0.012
-            iw, ih = display.size
-            w = max(1, int(iw * scale))
-            h = max(1, int(ih * scale))
+            # わずかに拡縮するブリージングエフェクト（プリコンピュート済みフレームを使用）
             try:
-                resized = display.resize((w, h), Image.LANCZOS)
-                self._current_photo = ImageTk.PhotoImage(resized)
+                if not hasattr(self, "_breath_frames") or self._breath_dirty:
+                    self._build_breath_frames(display)
+                    self._breath_dirty = False
+                frame_idx = self._anim_tick % len(self._breath_frames)
+                self._current_photo = self._breath_frames[frame_idx]
                 self.canvas.itemconfig(self.sprite_id, image=self._current_photo)
             except Exception as e:
                 if self._anim_tick <= 2:
                     print(f"[Pet] アニメエラー: {e}", flush=True)
 
-        # ドラッグ中はアニメを停止
-        # base_x を使うことで winfo_x() が 0 を返す macOS のタイミング問題を回避
-        if by is not None and bx is not None and not self._dragging:
+        # ドラッグ準備中〜ドラッグ中は geometry() を呼ばない
+        # （_drag_ready は _on_press で即座に True になるので 5px 閾値前も防御）
+        if by is not None and bx is not None and not self._drag_ready:
             try:
                 self.root.geometry(f"+{bx}+{by + offset}")
             except tk.TclError:

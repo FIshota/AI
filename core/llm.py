@@ -575,7 +575,7 @@ class LLMEngine:
         system_content = system_prompt
         ctx = (memory_context or "").strip()
         if ctx:
-            system_content += "\n" + ctx[:600]
+            system_content += "\n" + ctx[:350]
         messages = [{"role": "system", "content": system_content}]
         messages.extend(conversation_history)
         return messages

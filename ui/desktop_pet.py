@@ -588,17 +588,17 @@ class DesktopPet:
     def _setup_window(self):
         # macOS Sequoia (15.x) + Tk 8.6.12+ では overrideredirect(True) が
         # マウスイベントを消すバグがある。MacWindowStyle で枠なしウィンドウにする。
+        # 'plain' はクリック可だがドラッグ不可のため 'floating' を使用。
         self._use_mac_style = False
         if IS_MAC:
             try:
-                import tkinter
                 tk_patch = self.root.tk.eval("info patchlevel")
                 tk_minor = int(tk_patch.split(".")[2]) if tk_patch.count(".") >= 2 else 0
                 if tk_minor >= 12:
-                    # Tk 8.6.12+: MacWindowStyle で装飾なしウィンドウ
+                    # Tk 8.6.12+: floating ユーティリティウィンドウ（クリック+ドラッグ両対応）
                     self.root.call(
                         "::tk::unsupported::MacWindowStyle", "style",
-                        self.root._w, "plain", "none",
+                        self.root._w, "floating", "none",
                     )
                     self._use_mac_style = True
                 else:
@@ -613,8 +613,8 @@ class DesktopPet:
 
         # 初期位置は画面中央に固定（_move_to_bottom_right で後から移動）
         self.root.geometry(f"{PET_WIDTH}x{PET_HEIGHT}+600+400")
-        self._drag_x = 0
-        self._drag_y = 0
+        self._win_start_x = 600
+        self._win_start_y = 400
         self._dragging = False
         # 初期位置（_move_to_bottom_right が上書きする）
         self._base_x = 600
@@ -727,6 +727,11 @@ class DesktopPet:
         self.canvas.bind("<ButtonPress-1>",   self._on_press)
         self.canvas.bind("<B1-Motion>",       self._drag_motion)
         self.canvas.bind("<ButtonRelease-1>", self._on_release)
+        # MacWindowStyle 環境ではroot側にもバインド（イベント伝播の保険）
+        if getattr(self, "_use_mac_style", False):
+            self.root.bind("<ButtonPress-1>",   self._on_press)
+            self.root.bind("<B1-Motion>",       self._drag_motion)
+            self.root.bind("<ButtonRelease-1>", self._on_release)
 
         # 右クリック: macOS では Button-2 が右クリック、Button-3 はミドル
         # overrideredirect 環境では Release で拾う方が確実
@@ -764,17 +769,20 @@ class DesktopPet:
         """マウス押下：ドラッグ起点を記録"""
         self._press_x = event.x_root
         self._press_y = event.y_root
-        self._drag_x  = event.x_root - self.root.winfo_x()
-        self._drag_y  = event.y_root - self.root.winfo_y()
+        # ウィンドウの初期位置を保存（delta計算用）
+        self._win_start_x = self.root.winfo_x()
+        self._win_start_y = self.root.winfo_y()
         self._dragging = False
 
     def _drag_motion(self, event):
-        """5px以上動いたらドラッグと判定"""
-        if abs(event.x_root - self._press_x) > 5 or abs(event.y_root - self._press_y) > 5:
+        """5px以上動いたらドラッグと判定（delta方式: winfo_x/y の精度に依存しない）"""
+        dx = event.x_root - self._press_x
+        dy = event.y_root - self._press_y
+        if abs(dx) > 5 or abs(dy) > 5:
             self._dragging = True
         if self._dragging:
-            x = event.x_root - self._drag_x
-            y = event.y_root - self._drag_y
+            x = self._win_start_x + dx
+            y = self._win_start_y + dy
             self.root.geometry(f"+{x}+{y}")
 
     def _on_release(self, event):

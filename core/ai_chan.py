@@ -1078,16 +1078,16 @@ class AiChan:
             except Exception:
                 pass
 
-        # Sprint K1: 会話知能の応答指示をコンテキストに追加
+        # Sprint K1: 会話知能の応答指示をコンテキストに追加（短縮）
         if conv_analysis and conv_analysis.get("instruction_text"):
-            extra_parts.append(conv_analysis["instruction_text"][:80])
+            extra_parts.append(conv_analysis["instruction_text"][:40])
 
-        # Sprint K3: 性格進化ヒントをコンテキストに追加
+        # Sprint K3: 性格進化ヒントをコンテキストに追加（短縮）
         if getattr(self, "personality_evo", None):
             try:
                 evo_hint = self.personality_evo.get_personality_prompt_hint()
                 if evo_hint:
-                    extra_parts.append(evo_hint[:60])
+                    extra_parts.append(evo_hint[:30])
             except Exception:
                 pass
 
@@ -1096,14 +1096,14 @@ class AiChan:
             extra_parts.insert(0, _correction_context)
         # 最近の訂正履歴も追加（同じ間違いの繰り返し防止）
         elif getattr(self, "correction_learning", None):
-            _corr_hint = self.correction_learning.get_recent_corrections_hint(max_entries=2)
+            _corr_hint = self.correction_learning.get_recent_corrections_hint(max_entries=1)
             if _corr_hint:
-                extra_parts.append(_corr_hint[:150])
+                extra_parts.append(_corr_hint[:80])
 
-        # 追加コンテキストを400文字以内で結合
+        # 追加コンテキストを200文字以内で結合（3Bモデルへのノイズ軽減）
         extra = "\n".join(extra_parts)
         if extra:
-            memory_context = memory_context + "\n" + extra[:400]
+            memory_context = memory_context + "\n" + extra[:200]
 
         # 会話履歴に追加
         self.conversation_history.append({"role": "user", "content": user_input})
@@ -1127,53 +1127,20 @@ class AiChan:
                 pass
 
         # ヤマト C7: マルチエージェント検証
-        if getattr(self, "multi_verifier", None):
-            try:
-                consensus = self.multi_verifier.verify(user_input, response)
-                if self.multi_verifier.should_regenerate(consensus) and self.llm.is_loaded():
-                    hint = consensus.improvement_hint
-                    if hint:
-                        retry_msgs = list(messages)
-                        retry_msgs[-1] = {
-                            "role": retry_msgs[-1]["role"],
-                            "content": retry_msgs[-1]["content"] + f"\n{hint}",
-                        }
-                        retry = self.llm.generate_chat(retry_msgs)
-                        retry = self._clean_response(retry)
-                        retry_consensus = self.multi_verifier.verify(user_input, retry)
-                        if retry_consensus.overall_score > consensus.overall_score:
-                            response = retry
-            except Exception:
-                pass
+        # 注意: 3Bモデルでは再生成コストが高すぎるため、検証のみ行い再生成はスキップ。
+        # 将来的に大きいモデルに切り替えた際に再生成を有効化する。
+        # if getattr(self, "multi_verifier", None):
+        #     try:
+        #         consensus = self.multi_verifier.verify(user_input, response)
+        #         if self.multi_verifier.should_regenerate(consensus) and self.llm.is_loaded():
+        #             ...
+        #     except Exception:
+        #         pass
 
         # Sprint K4: 応答品質自己評価
-        # 脊髄反射パターン: 短い入力+短い応答は評価スキップ（LLM再呼び出し回避）
-        _skip_eval = (
-            len(user_input) <= 8 and len(response) <= 60  # 短い相槌はスキップ
-            or not getattr(self, "response_evaluator", None)
-        )
+        # 3Bモデルでは評価+再生成で3回もLLMを呼ぶのは品質劣化の原因になるため無効化。
+        # 将来モデルが大きくなった時に再有効化する。
         _evaluated_quality: float | None = None
-        if not _skip_eval:
-            try:
-                quality = self.response_evaluator.evaluate(user_input, response)
-                _evaluated_quality = quality.overall
-                # 品質が低すぎる場合、改善ヒントで再生成を試みる（1回だけ）
-                if self.response_evaluator.should_regenerate(quality) and self.llm.is_loaded():
-                    hint = self.response_evaluator.get_improvement_hint(quality)
-                    if hint:
-                        retry_msgs = list(messages)
-                        retry_msgs[-1] = {
-                            "role": retry_msgs[-1]["role"],
-                            "content": retry_msgs[-1]["content"] + f"\n補足: {hint}",
-                        }
-                        retry_response = self.llm.generate_chat(retry_msgs)
-                        retry_response = self._clean_response(retry_response)
-                        retry_quality = self.response_evaluator.evaluate(user_input, retry_response)
-                        if retry_quality.overall > quality.overall:
-                            response = retry_response
-                            _evaluated_quality = retry_quality.overall
-            except Exception:
-                pass
 
         # TTS で読み上げ（有効な場合のみ）
         try:
@@ -2248,11 +2215,11 @@ class AiChan:
             desc = "、".join(f"{k}は{v}" for k, v in items)
             parts.append(f"ユーザーの{desc}。")
 
-        # ── 関連記憶の自動検索（キーワード+セマンティック） ──
+        # ── 関連記憶の自動検索（キーワード+セマンティック、1件に絞って軽量化） ──
         try:
-            related = self._search_relevant_memories(user_input, limit=3)
+            related = self._search_relevant_memories(user_input, limit=1)
             if related:
-                snippets = [m.content[:80].replace("\n", " ") for m in related]
+                snippets = [m.content[:40].replace("\n", " ") for m in related]
                 parts.append("関連する過去の記憶：" + "／".join(snippets) + "。")
         except Exception:
             pass
@@ -2305,24 +2272,14 @@ class AiChan:
             except Exception:
                 pass
 
-        # ── few-shot 会話例（常時2例を注入して口調を安定させる） ──
-        try:
-            examples = self.learning.get_few_shot_examples(n=2, user_input=user_input)
-            if examples:
-                parts.append(examples)
-        except Exception:
-            pass
+        # few-shot 会話例は core.yaml の system_prompt に含まれているため、
+        # ここでの重複注入は省略（3Bモデルのコンテキスト容量を節約）
 
         # ── 直近の応答を繰り返さないよう指示 ──
-        recent_responses = [
-            m["content"][:30]
-            for m in self.conversation_history[-6:]
-            if m["role"] == "assistant"
-        ]
-        if recent_responses:
+        if len(self.conversation_history) >= 4:
             parts.append("直前と同じ言い回しを繰り返さず、新鮮な表現で答えて。")
 
-        result = "".join(parts)[:500]
+        result = "".join(parts)[:250]
         self._mem_ctx_cache = result
         self._mem_ctx_turn = self.turn_count
         return result

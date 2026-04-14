@@ -320,6 +320,15 @@ class ChatWindow(tk.Toplevel):
             font=("Hiragino Sans", 10)
         ).pack(side="left", padx=12)
 
+        # 音声ステータスインジケータ（録音中・読み上げ中）
+        self._voice_status_var = tk.StringVar(value="")
+        self._voice_status_label = tk.Label(
+            emotion_bar, textvariable=self._voice_status_var,
+            bg=COLOR_PANEL, fg="#E84040",
+            font=("Hiragino Sans", 10, "bold")
+        )
+        self._voice_status_label.pack(side="right", padx=12)
+
         # 入力エリア
         input_frame = tk.Frame(self, bg=COLOR_PANEL, pady=10)
         input_frame.pack(fill="x", side="bottom")
@@ -356,7 +365,30 @@ class ChatWindow(tk.Toplevel):
         )
         self._mic_btn.pack(side="right", padx=(0, 4))
         self._mic_recording = False
+        self._mic_processing = False  # 変換処理中フラグ
+
+        # 連続リスニングボタン（Phase C）
+        self._continuous_btn = tk.Button(
+            input_frame, text="♾",
+            bg=COLOR_PANEL, fg=COLOR_SUBTEXT,
+            font=("Hiragino Sans", 12),
+            relief="flat", cursor="hand2",
+            command=self._toggle_continuous_mode,
+            padx=4, pady=4
+        )
+        self._continuous_btn.pack(side="right", padx=(0, 2))
+        self._continuous_mode = False
+
         self._update_mic_button_visibility()
+
+        # キーボードショートカット: Ctrl+M でマイクトグル, Ctrl+Shift+M で連続モード
+        self.bind("<Control-m>", lambda e: self._toggle_mic())
+        self.input_entry.bind("<Control-m>", lambda e: self._toggle_mic())
+        self.bind("<Control-Shift-M>", lambda e: self._toggle_continuous_mode())
+        self.input_entry.bind("<Control-Shift-M>", lambda e: self._toggle_continuous_mode())
+
+        # TTS 読み上げ中インジケータの定期チェックを開始
+        self._start_voice_status_poll()
 
     def _focus_input(self):
         """入力欄にフォーカスを確実にセットする（macOS 対策）"""
@@ -368,27 +400,37 @@ class ChatWindow(tk.Toplevel):
             pass
 
     def _update_mic_button_visibility(self):
-        """STT が有効な場合のみマイクボタンを表示する"""
+        """STT が有効な場合のみマイクボタン・連続モードボタンを表示する"""
         stt_enabled = False
         if self.ai_chan and hasattr(self.ai_chan, "settings"):
             stt_enabled = self.ai_chan.settings.get("stt", {}).get("enabled", False)
         if stt_enabled:
             self._mic_btn.pack(side="right", padx=(0, 4))
+            self._continuous_btn.pack(side="right", padx=(0, 2))
         else:
             self._mic_btn.pack_forget()
+            self._continuous_btn.pack_forget()
 
     def _toggle_mic(self):
-        """マイク録音を開始/停止してテキストを入力欄に入れる"""
+        """マイク録音を開始/停止して、変換テキストを自動送信する"""
         if not (self.ai_chan and hasattr(self.ai_chan, "settings")):
             return
         stt_enabled = self.ai_chan.settings.get("stt", {}).get("enabled", False)
         if not stt_enabled:
+            return
+        # 連続モード中は通常マイク操作を無視
+        if self._continuous_mode:
+            return
+        # 変換処理中は操作を無視
+        if self._mic_processing:
             return
 
         if not self._mic_recording:
             # 録音開始
             self._mic_recording = True
             self._mic_btn.configure(bg="#E84040", text="■")
+            self._voice_status_var.set("● 録音中...")
+            self._voice_status_label.configure(fg="#E84040")
             from core.stt import STTEngine
             model_size = self.ai_chan.settings.get("stt", {}).get("model_size", "small")
             if not hasattr(self, "_stt_engine"):
@@ -396,17 +438,199 @@ class ChatWindow(tk.Toplevel):
                 self._stt_engine.load_model_async()
             self._stt_engine.start_recording()
         else:
-            # 録音停止・変換
+            # 録音停止・変換・自動送信
             self._mic_recording = False
-            self._mic_btn.configure(bg=COLOR_PANEL, text="🎤")
+            self._mic_processing = True
+            self._mic_btn.configure(bg=COLOR_ACCENT2, text="⏳")
+            self._voice_status_var.set("変換中...")
+            self._voice_status_label.configure(fg=COLOR_ACCENT2)
 
-            def _transcribe():
+            def _transcribe_and_send():
+                text = ""
                 if hasattr(self, "_stt_engine"):
                     text = self._stt_engine.stop_recording_and_transcribe()
+
+                def _on_result():
+                    self._mic_processing = False
+                    self._mic_btn.configure(bg=COLOR_PANEL, text="🎤")
+                    self._voice_status_var.set("")
                     if text:
-                        self.after(0, lambda: self.input_var.set(text))
-                        self.after(0, lambda: self.input_entry.icursor("end"))
-            threading.Thread(target=_transcribe, daemon=True).start()
+                        # テキストを入力欄にセットしてから送信
+                        self.input_var.set(text)
+                        self._on_send()
+                    else:
+                        self._voice_status_var.set("音声が聞き取れませんでした")
+                        self._voice_status_label.configure(fg=COLOR_SUBTEXT)
+                        self.after(2000, lambda: self._voice_status_var.set(""))
+
+                self.after(0, _on_result)
+
+            threading.Thread(target=_transcribe_and_send, daemon=True).start()
+
+    # ─── 連続リスニングモード（Phase C） ────────────────────────
+
+    def _toggle_continuous_mode(self):
+        """連続リスニングモードの ON/OFF を切り替える"""
+        if not (self.ai_chan and hasattr(self.ai_chan, "settings")):
+            return
+        stt_enabled = self.ai_chan.settings.get("stt", {}).get("enabled", False)
+        if not stt_enabled:
+            return
+
+        # 通常のマイク録音中は切り替え不可
+        if self._mic_recording or self._mic_processing:
+            return
+
+        if not self._continuous_mode:
+            self._start_continuous_mode()
+        else:
+            self._stop_continuous_mode()
+
+    def _start_continuous_mode(self):
+        """連続リスニングモードを開始する"""
+        from core.stt import STTEngine
+
+        model_size = self.ai_chan.settings.get("stt", {}).get("model_size", "small")
+        if not hasattr(self, "_stt_engine"):
+            self._stt_engine = STTEngine(model_size=model_size)
+            self._stt_engine.load_model_async()
+
+        if not self._stt_engine.is_ready():
+            self._voice_status_var.set("モデル読み込み中...")
+            self._voice_status_label.configure(fg=COLOR_ACCENT2)
+            # モデルがまだ読み込み中の場合、1秒後に再試行
+            self._stt_engine.load_model_async()
+            self.after(1000, self._retry_continuous_start)
+            return
+
+        self._activate_continuous_listening()
+
+    def _retry_continuous_start(self):
+        """モデル読み込み完了を待って連続モード開始を再試行"""
+        if not hasattr(self, "_stt_engine"):
+            self._voice_status_var.set("")
+            return
+        if self._stt_engine.is_ready():
+            self._activate_continuous_listening()
+        elif self._stt_engine.get_status().startswith("error"):
+            self._voice_status_var.set("モデル読み込みエラー")
+            self._voice_status_label.configure(fg="#E84040")
+            self.after(2000, lambda: self._voice_status_var.set(""))
+        else:
+            # まだ読み込み中 — 再試行
+            self.after(1000, self._retry_continuous_start)
+
+    def _activate_continuous_listening(self):
+        """STT エンジンの連続リスニングを実際に起動する"""
+        if not hasattr(self, "_stt_engine"):
+            return
+
+        def _on_continuous_text(text: str):
+            """連続リスニングで認識されたテキストを UI スレッドで処理"""
+            def _apply():
+                try:
+                    if not self.winfo_exists():
+                        return
+                    if text.strip():
+                        self.input_var.set(text)
+                        self._on_send()
+                except tk.TclError:
+                    pass
+            try:
+                self.after(0, _apply)
+            except Exception:
+                pass
+
+        ok = self._stt_engine.start_continuous_listening(
+            on_text=_on_continuous_text,
+            silence_threshold=0.01,
+            silence_duration=1.5,
+        )
+        if ok:
+            self._continuous_mode = True
+            self._continuous_btn.configure(bg="#4CAF50", fg=COLOR_TEXT)
+            self._mic_btn.configure(state="disabled")
+            self._voice_status_var.set("連続リスニング中")
+            self._voice_status_label.configure(fg="#4CAF50")
+            # TTS 読み上げ中の自動一時停止を開始
+            self._start_continuous_tts_monitor()
+        else:
+            self._voice_status_var.set("連続リスニング開始失敗")
+            self._voice_status_label.configure(fg="#E84040")
+            self.after(2000, lambda: self._voice_status_var.set(""))
+
+    def _stop_continuous_mode(self):
+        """連続リスニングモードを停止する"""
+        self._continuous_mode = False
+        if hasattr(self, "_stt_engine"):
+            self._stt_engine.stop_continuous_listening()
+        self._continuous_btn.configure(bg=COLOR_PANEL, fg=COLOR_SUBTEXT)
+        self._mic_btn.configure(state="normal")
+        self._voice_status_var.set("")
+
+    def _start_continuous_tts_monitor(self):
+        """
+        連続モード中、TTS が読み上げ中ならリスニングを一時停止し、
+        終わったら再開するモニター。
+        """
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+
+        if not self._continuous_mode:
+            return
+
+        tts = self._get_tts_engine()
+        stt = getattr(self, "_stt_engine", None)
+
+        if tts is not None and stt is not None:
+            if tts.is_speaking():
+                if not stt.is_continuous_paused:
+                    stt.pause_continuous_listening()
+                    self._voice_status_var.set("読み上げ中（リスニング一時停止）")
+                    self._voice_status_label.configure(fg=COLOR_ACCENT)
+            else:
+                if stt.is_continuous_paused:
+                    stt.resume_continuous_listening()
+                    self._voice_status_var.set("連続リスニング中")
+                    self._voice_status_label.configure(fg="#4CAF50")
+
+        self.after(200, self._start_continuous_tts_monitor)
+
+    def _start_voice_status_poll(self):
+        """TTS 読み上げ中かどうかを定期的にチェックしてインジケータを更新する"""
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+
+        # 連続モード中はそちらの TTS モニターが表示を管理するのでスキップ
+        if self._continuous_mode:
+            self.after(300, self._start_voice_status_poll)
+            return
+
+        # 録音中・変換中はそちらの表示を優先
+        if not self._mic_recording and not self._mic_processing:
+            tts = self._get_tts_engine()
+            if tts is not None and tts.is_speaking():
+                self._voice_status_var.set("🔊 読み上げ中")
+                self._voice_status_label.configure(fg=COLOR_ACCENT)
+            else:
+                # 他のステータス表示がなければクリア
+                current = self._voice_status_var.get()
+                if current == "🔊 読み上げ中":
+                    self._voice_status_var.set("")
+
+        self.after(300, self._start_voice_status_poll)
+
+    def _get_tts_engine(self):
+        """AiChan インスタンスから TTS エンジンを取得する"""
+        if self.ai_chan and hasattr(self.ai_chan, "tts"):
+            return self.ai_chan.tts
+        return None
 
     def _on_frame_configure(self, event):
         self.chat_canvas.configure(

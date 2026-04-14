@@ -126,6 +126,7 @@ CMD_DOC_SEARCH = re.compile(r'^(資料|ドキュメント).*?(検索|探して)[
 # ─── コードエンジン コマンド ──────────────────
 # ─── Web検索 コマンド ──────────────────
 CMD_WEB_SEARCH   = re.compile(r'^(.+?)(について|を)?(調べて|検索|検索して|サーチ|ググって)$')
+CMD_WEB_SEARCH_PREFIX = re.compile(r'^(検索|調べて|ググって|サーチ)[：:。]?\s*(.+)$')
 CMD_WEB_FETCH    = re.compile(r'^(URL|サイト|ページ)(を?)?(読んで|取得|見て)[：:。]?\s*(.+)$')
 
 # ─── コードエンジン コマンド ──────────────────
@@ -1007,9 +1008,9 @@ class AiChan:
                 self.conversation_history.append({"role": "assistant", "content": bio_response})
                 # 自律神経ハートビート（呼吸のように軽く）
                 self.bio_nervous.autonomic.heartbeat(self.turn_count)
-                # TTS
+                # TTS（文単位逐次読み上げ）
                 try:
-                    self.tts.speak(bio_response)
+                    self.tts.speak_sentence_by_sentence(bio_response)
                 except Exception:
                     pass
                 # 最小限の記録（話題追跡・感情保存）
@@ -1082,10 +1083,28 @@ class AiChan:
             if _corr_hint:
                 extra_parts.append(_corr_hint[:120])
 
-        # 追加コンテキストを結合（訂正のみなので短い）
+        # 継続学習: 高品質会話例を1件だけ軽量注入（学習データのread-path）
+        cl = getattr(self, "continuous_learner", None)
+        if cl and cl.example_count > 0 and not _correction_context:
+            try:
+                _topic = ""
+                if getattr(self, "conv_intelligence", None):
+                    ci = self.conv_intelligence
+                    if ci.last_intent:
+                        _topic = ci.last_intent.intent_type
+                examples = cl.get_curriculum_examples(
+                    n=1, topic=_topic, user_input=user_input
+                )
+                if examples:
+                    ex = examples[0]
+                    extra_parts.append(f"参考: {ex['user'][:30]}→{ex['ai'][:40]}")
+            except Exception:
+                pass
+
+        # 追加コンテキストを結合（訂正 + 学習例で短く保つ）
         extra = "\n".join(extra_parts)
         if extra:
-            memory_context = memory_context + "\n" + extra[:250]
+            memory_context = memory_context + "\n" + extra[:300]
 
         # 会話履歴に追加
         self.conversation_history.append({"role": "user", "content": user_input})
@@ -1101,9 +1120,14 @@ class AiChan:
         response = self.llm.generate_chat(messages)
         response = self._clean_response(response)
 
-        # フォローアップトピックを応答生成後にマーク（生成前だと未使用のまま消費される）
+        # フォローアップトピックを応答生成後にマーク（応答に実際にトピックが含まれた場合のみ）
         if getattr(self, "_pending_followup_topic", None):
-            self.topic_tracker.mark_followed_up(self._pending_followup_topic)
+            _ft = self._pending_followup_topic
+            _ft_text = _ft.get("text", "")[:10] if isinstance(_ft, dict) else ""
+            # 応答に話題のキーワードが含まれていれば成功とみなす
+            if _ft_text and _ft_text in response:
+                self.topic_tracker.mark_followed_up(_ft)
+            # 含まれていなくても3Bモデルなのである程度は許容（次回に持ち越し可能に）
             self._pending_followup_topic = None
 
         # Sprint K1: 会話知能による後処理（日本語品質フィルタ）
@@ -1128,9 +1152,9 @@ class AiChan:
         # LLM呼び出しなしで品質を推定する。完璧でなくても常に0.6固定よりはるかに良い。
         _evaluated_quality = self._estimate_response_quality(user_input, response)
 
-        # TTS で読み上げ（有効な場合のみ）
+        # TTS で読み上げ（文単位逐次読み上げ — 自然な体験）
         try:
-            self.tts.speak(response)
+            self.tts.speak_sentence_by_sentence(response)
         except Exception:
             pass
 
@@ -1822,6 +1846,11 @@ class AiChan:
         m = CMD_WEB_SEARCH.match(user_input)
         if m:
             return self._handle_web_search(m.group(1).strip())
+
+        # 「検索: 〇〇」「ググって 〇〇」
+        m = CMD_WEB_SEARCH_PREFIX.match(user_input)
+        if m:
+            return self._handle_web_search(m.group(2).strip())
 
         # 「URL読んで: https://...」
         m = CMD_WEB_FETCH.match(user_input)
@@ -2727,12 +2756,27 @@ class AiChan:
 
         sc.register_handler("adjust_max_tokens", _adjust_max_tokens)
 
-        # ③ 筋肉記憶プルーニング（現行プリセットは精度不足のため無効。
-        #    会話統計から高精度パターンが形成された後に再有効化する）
-        sc.register_handler("reset_muscle_memory_low_quality", lambda p: {"pruned": 0})
+        # ③ 筋肉記憶プルーニング（低品質パターンを除去）
+        def _prune_low_quality(params: dict) -> dict:
+            bio = getattr(self, "bio_nervous", None)
+            if not bio or not hasattr(bio, "muscle"):
+                return {"pruned": 0}
+            threshold = params.get("threshold", 0.5)
+            pruned = bio.muscle.prune_low_quality(threshold)
+            return {"pruned": pruned, "threshold": threshold}
 
-        # ④ 古い筋肉記憶の忘却（同上 — パターン蓄積後に再有効化）
-        sc.register_handler("prune_stale_patterns", lambda p: {"pruned": 0})
+        sc.register_handler("reset_muscle_memory_low_quality", _prune_low_quality)
+
+        # ④ 古い筋肉記憶の忘却（未使用パターンを削除）
+        def _prune_stale(params: dict) -> dict:
+            bio = getattr(self, "bio_nervous", None)
+            if not bio or not hasattr(bio, "muscle"):
+                return {"pruned": 0}
+            bio.muscle._forget_stale()
+            bio.muscle.save()
+            return {"pruned": "stale_cleanup_done"}
+
+        sc.register_handler("prune_stale_patterns", _prune_stale)
 
         # ⑤ 免疫系チェック
         def _run_immune(params: dict) -> dict:
@@ -2993,6 +3037,35 @@ class AiChan:
             return " / ".join(results) if results else "チェック完了"
 
         sw.register("check_health", _check_health)
+
+        # 会話振り返り → 最近の会話を要約して自己評価
+        def _review_conversation(desire):
+            recent = self.conversation_history[-10:]
+            if not recent:
+                return "振り返る会話がない"
+            user_msgs = [m["content"] for m in recent if m.get("role") == "user"]
+            topics = set()
+            for msg in user_msgs:
+                if len(msg) > 3:
+                    topics.add(msg[:15])
+            return f"最近の話題: {', '.join(list(topics)[:5])}"
+
+        sw.register("review_conversation", _review_conversation)
+
+        # 話題提案 → pending_message にセット
+        def _suggest_topic(desire):
+            import random
+            topic = desire.params.get("topic", "面白いこと")
+            templates = [
+                f"そういえば「{topic}」のことなんだけど…",
+                f"ねえ、「{topic}」について話さない？",
+                f"「{topic}」って最近どう？",
+            ]
+            msg = random.choice(templates)
+            self.self_will._pending_message = msg
+            return msg
+
+        sw.register("suggest_topic", _suggest_topic)
 
     def _estimate_importance(self, text: str) -> float:
         """テキストの重要度を簡易推定します"""

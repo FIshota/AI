@@ -517,9 +517,9 @@ class MuscleMemoryLayer:
     品質スコアが高い応答だけを記憶する（悪い癖は覚えない）。
     """
 
-    QUALITY_THRESHOLD = 0.85  # この品質以上の応答だけ記憶する
-    MAX_PATTERNS = 200        # 記憶パターン上限（メモリ節約）
-    STALENESS_DAYS = 30       # この日数使われないパターンは忘れる
+    QUALITY_THRESHOLD = 0.6   # この品質以上の応答だけ記憶する（0.65基準値の少し下）
+    MAX_PATTERNS = 300        # 記憶パターン上限（多いほどLLMバイパス率向上）
+    STALENESS_DAYS = 45       # この日数使われないパターンは忘れる（余裕を持たせる）
 
     SKIP_PROBABILITY = 0.3    # この確率でLLMに回す（応答の多様性確保）
     CONSECUTIVE_LIMIT = 2     # 同じ応答がこの回数連続したらスキップ
@@ -611,6 +611,18 @@ class MuscleMemoryLayer:
         remove_count = len(sorted_patterns) // 4
         for p in sorted_patterns[:remove_count]:
             del self._patterns[p.input_hash]
+
+    def prune_low_quality(self, threshold: float = 0.5) -> int:
+        """低品質パターンを削除する（SelfCorrectionから呼ばれる）"""
+        to_remove = [
+            h for h, p in self._patterns.items()
+            if p.quality_score < threshold
+        ]
+        for h in to_remove:
+            del self._patterns[h]
+        if to_remove:
+            self.save()
+        return len(to_remove)
 
     def _load(self):
         if self._storage and self._storage.exists():

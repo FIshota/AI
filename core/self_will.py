@@ -205,6 +205,51 @@ class DesireGenerator:
                 params={"health": health},
             ))
 
+        # ⑧ 記憶整理欲: 100ターンごとに記憶を整理したい
+        if turn_count > 100 and turn_count % 100 == 0:
+            desires.append(Desire(
+                desire_type=DesireType.MAINTENANCE,
+                intensity=0.5,
+                description="記憶を整理したい",
+                trigger="memory_accumulation",
+                action_key="organize_memory",
+                params={},
+            ))
+
+        # ⑨ 振り返り欲: 30ターンごとに最近の会話を振り返る
+        if turn_count > 30 and turn_count % 30 == 0:
+            desires.append(Desire(
+                desire_type=DesireType.GROWTH,
+                intensity=0.4,
+                description="最近の会話を振り返りたい",
+                trigger="conversation_milestone",
+                action_key="review_conversation",
+                params={},
+            ))
+
+        # ⑩ 話題提案欲: 興味があるとき15%の確率で話題を提案
+        if interests and random.random() < 0.15:
+            topic = random.choice(interests)
+            desires.append(Desire(
+                desire_type=DesireType.EXPRESSION,
+                intensity=0.5,
+                description=f"「{topic}」について話したい",
+                trigger="topic_interest",
+                action_key="suggest_topic",
+                params={"topic": topic},
+            ))
+
+        # ⑪ 健康チェック欲: 200ターンごとに自分の健康状態を確認
+        if turn_count > 0 and turn_count % 200 == 0:
+            desires.append(Desire(
+                desire_type=DesireType.MAINTENANCE,
+                intensity=0.5,
+                description="自分の健康状態を確認したい",
+                trigger="periodic_health_check",
+                action_key="check_health",
+                params={},
+            ))
+
         return desires
 
 

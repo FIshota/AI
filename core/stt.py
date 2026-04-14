@@ -3,6 +3,10 @@
 faster-whisper を使ってマイク入力をテキストに変換します。
 モデルは初回起動時に自動ダウンロード（~150MB, 以降オフライン）。
 
+Phase C: 連続リスニングモード
+  - start_continuous_listening(): VAD ベースの自動発話検出と送信
+  - 振幅ベースの無音検出で発話終了を判定
+
 インストール: pip install faster-whisper sounddevice soundfile
 """
 from __future__ import annotations
@@ -10,7 +14,9 @@ import threading
 import tempfile
 import os
 import platform
+import time
 from pathlib import Path
+from typing import Callable, Optional
 
 IS_MAC = platform.system() == "Darwin"
 
@@ -40,6 +46,11 @@ class STTEngine:
         self._stream     = None
         self._audio_lock = threading.Lock()
         self._load_lock  = threading.Lock()
+
+        # 連続リスニング状態（Phase C）
+        self._continuous_active = False
+        self._continuous_paused = False  # TTS 読み上げ中の一時停止
+        self._continuous_thread: Optional[threading.Thread] = None
 
     # ─── モデル管理 ──────────────────────────────────────────────
 
@@ -191,6 +202,179 @@ class STTEngine:
                     os.unlink(tmp_path)
                 except Exception:
                     pass
+
+    # ─── 連続リスニング（Phase C） ─────────────────────────────────
+
+    def start_continuous_listening(
+        self,
+        on_text: Callable[[str], None],
+        silence_threshold: float = 0.01,
+        silence_duration: float = 1.5,
+        min_speech_duration: float = 0.3,
+    ) -> bool:
+        """
+        連続リスニングモードを開始する。
+        音声を検出し、無音が silence_duration 秒続いたら自動的に変換して
+        on_text コールバックを呼ぶ。その後、再びリスニングを再開する。
+
+        Args:
+            on_text: 認識テキストを受け取るコールバック
+            silence_threshold: 無音判定の振幅閾値
+            silence_duration: 発話終了と判定する無音の秒数
+            min_speech_duration: 最小発話時間（秒、ノイズ除去用）
+
+        Returns:
+            開始成功なら True
+        """
+        if self._continuous_active:
+            return False
+        if not self.is_ready():
+            print("[STT] モデル未ロード — 連続リスニング開始不可", flush=True)
+            return False
+
+        self._continuous_active = True
+        self._continuous_paused = False
+        self._continuous_thread = threading.Thread(
+            target=self._continuous_loop,
+            args=(on_text, silence_threshold, silence_duration, min_speech_duration),
+            daemon=True,
+        )
+        self._continuous_thread.start()
+        print("[STT] 連続リスニング開始", flush=True)
+        return True
+
+    def stop_continuous_listening(self):
+        """連続リスニングモードを停止する"""
+        self._continuous_active = False
+        self._continuous_paused = False
+        # 進行中の録音ストリームも停止
+        if self._stream:
+            try:
+                self._stream.stop()
+                self._stream.close()
+            except Exception:
+                pass
+            self._stream = None
+        print("[STT] 連続リスニング停止", flush=True)
+
+    def pause_continuous_listening(self):
+        """連続リスニングを一時停止する（TTS 読み上げ中など）"""
+        self._continuous_paused = True
+
+    def resume_continuous_listening(self):
+        """連続リスニングを再開する"""
+        self._continuous_paused = False
+
+    @property
+    def is_continuous_active(self) -> bool:
+        return self._continuous_active
+
+    @property
+    def is_continuous_paused(self) -> bool:
+        return self._continuous_paused
+
+    def _continuous_loop(
+        self,
+        on_text: Callable[[str], None],
+        silence_threshold: float,
+        silence_duration: float,
+        min_speech_duration: float,
+    ):
+        """連続リスニングのメインループ"""
+        try:
+            import sounddevice as sd
+            import numpy as np
+        except ImportError:
+            print("[STT] sounddevice/numpy が見つかりません", flush=True)
+            self._continuous_active = False
+            return
+
+        chunk_duration = 0.1  # 100ms ごとにチェック
+        chunk_samples = int(SAMPLE_RATE * chunk_duration)
+
+        while self._continuous_active:
+            # 一時停止中はスリープして待機
+            if self._continuous_paused:
+                time.sleep(0.2)
+                continue
+
+            speech_chunks: list = []
+            silence_start: Optional[float] = None
+            speech_detected = False
+            speech_start_time: Optional[float] = None
+
+            try:
+                stream = sd.InputStream(
+                    samplerate=SAMPLE_RATE,
+                    channels=CHANNELS,
+                    dtype="float32",
+                    blocksize=chunk_samples,
+                )
+                stream.start()
+                self._stream = stream
+            except Exception as e:
+                print(f"[STT] ストリーム開始エラー: {e}", flush=True)
+                time.sleep(1.0)
+                continue
+
+            try:
+                while self._continuous_active and not self._continuous_paused:
+                    data, overflowed = stream.read(chunk_samples)
+                    amplitude = float(np.abs(data).mean())
+
+                    if amplitude >= silence_threshold:
+                        # 音声あり
+                        speech_chunks.append(data.copy())
+                        silence_start = None
+                        if not speech_detected:
+                            speech_detected = True
+                            speech_start_time = time.monotonic()
+                    else:
+                        # 無音
+                        if speech_detected:
+                            # 発話後の無音 — バッファには追加（末尾の無音も含める）
+                            speech_chunks.append(data.copy())
+                            if silence_start is None:
+                                silence_start = time.monotonic()
+                            elif (time.monotonic() - silence_start) >= silence_duration:
+                                # 無音が十分長い → 発話終了
+                                speech_elapsed = (
+                                    time.monotonic() - speech_start_time
+                                    if speech_start_time
+                                    else 0
+                                )
+                                if speech_elapsed >= min_speech_duration:
+                                    break  # 変換へ進む
+                                else:
+                                    # 短すぎる — ノイズとみなしてリセット
+                                    speech_chunks = []
+                                    speech_detected = False
+                                    speech_start_time = None
+                                    silence_start = None
+                        # 発話前の無音はスキップ
+            except Exception as e:
+                print(f"[STT] 連続リスニングエラー: {e}", flush=True)
+            finally:
+                try:
+                    stream.stop()
+                    stream.close()
+                except Exception:
+                    pass
+                self._stream = None
+
+            # 変換（発話データがある場合のみ）
+            if speech_chunks and self._continuous_active and not self._continuous_paused:
+                text = self._transcribe_buffer(speech_chunks)
+                if text and self._continuous_active:
+                    on_text(text)
+
+        self._continuous_active = False
+
+    @staticmethod
+    def _is_silence(audio_chunk, threshold: float = 0.01) -> bool:
+        """音声チャンクが無音かどうか判定する"""
+        import numpy as np
+        return float(np.abs(audio_chunk).mean()) < threshold
 
     # ─── ワンショット認識 ────────────────────────────────────────
 

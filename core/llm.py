@@ -13,9 +13,16 @@ from typing import Callable, Generator
 # MLX (Apple Silicon) が利用可能か確認
 try:
     from mlx_lm import load as mlx_load, generate as mlx_generate
+    # mlx_lm 0.31+: temp/top_p は sampler 経由
+    try:
+        from mlx_lm.sample_utils import make_sampler as _mlx_make_sampler
+        _MLX_USE_SAMPLER = True
+    except ImportError:
+        _MLX_USE_SAMPLER = False
     MLX_AVAILABLE = True
 except ImportError:
     MLX_AVAILABLE = False
+    _MLX_USE_SAMPLER = False
 
 # llama-cpp-python が利用可能か確認
 try:
@@ -287,6 +294,20 @@ class LLMEngine:
         """現在の推論バックエンドを返す"""
         return self._backend or "none"
 
+    def _mlx_sampling_kwargs(self) -> dict:
+        """MLXバージョンに応じたサンプリングパラメータを返す"""
+        temp = self.config.get("temperature", 0.65)
+        top_p = self.config.get("top_p", 0.85)
+        if _MLX_USE_SAMPLER:
+            # mlx_lm 0.31+: sampler オブジェクト経由
+            return {"sampler": _mlx_make_sampler(temp=temp, top_p=top_p)}
+        # 旧バージョン: 直接パラメータ
+        return {
+            "temp": temp,
+            "top_p": top_p,
+            "repetition_penalty": self.config.get("repeat_penalty", 1.1),
+        }
+
     def generate(self, prompt: str, stream: bool = False) -> str | Generator:
         """プロンプトからテキストを生成します"""
         if not self._loaded:
@@ -298,10 +319,8 @@ class LLMEngine:
                     self._mlx_model, self._mlx_tokenizer,
                     prompt=prompt,
                     max_tokens=self.config.get("max_tokens", 512),
-                    temp=self.config.get("temperature", 0.65),
-                    repetition_penalty=self.config.get("repeat_penalty", 1.1),
-                    top_p=self.config.get("top_p", 0.85),
                     verbose=False,
+                    **self._mlx_sampling_kwargs(),
                 )
             return result.strip()
 
@@ -366,10 +385,8 @@ class LLMEngine:
                     self._mlx_model, self._mlx_tokenizer,
                     prompt=formatted,
                     max_tokens=max_tokens,
-                    temp=self.config.get("temperature", 0.65),
-                    repetition_penalty=self.config.get("repeat_penalty", 1.1),
-                    top_p=self.config.get("top_p", 0.85),
                     verbose=False,
+                    **self._mlx_sampling_kwargs(),
                 )
             text = result.strip()
             # ストリーミングコールバック（MLXは一括生成後にまとめて送信）

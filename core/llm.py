@@ -179,19 +179,24 @@ class LLMEngine:
         if not mlx_path.exists():
             return False
 
-        # アダプターパスの決定
-        adapter_path = mlx_config.get("adapter_path", "")
-        if not adapter_path:
-            # models/adapters/ 以下で最新のアダプターを探す
-            adapters_dir = model_dir / "adapters"
-            if adapters_dir.is_dir():
-                adapter_dirs = sorted(
-                    [d for d in adapters_dir.iterdir() if d.is_dir() and (d / "adapters.safetensors").exists()],
-                    key=lambda p: p.name,
-                    reverse=True,
-                )
-                if adapter_dirs:
-                    adapter_path = str(adapter_dirs[0])
+        # アダプターパスの決定（adapter_enabled: false で無効化可能）
+        adapter_enabled = mlx_config.get("adapter_enabled", True)
+        adapter_path = ""
+        if adapter_enabled:
+            adapter_path = mlx_config.get("adapter_path", "")
+            if not adapter_path:
+                # models/adapters/ 以下で最新のアダプターを探す
+                adapters_dir = model_dir / "adapters"
+                if adapters_dir.is_dir():
+                    adapter_dirs = sorted(
+                        [d for d in adapters_dir.iterdir() if d.is_dir() and (d / "adapters.safetensors").exists()],
+                        key=lambda p: p.name,
+                        reverse=True,
+                    )
+                    if adapter_dirs:
+                        adapter_path = str(adapter_dirs[0])
+        else:
+            print("[LLM/MLX] adapter無効（adapter_enabled: false）— ベースモデルで動作")
 
         try:
             adapter_msg = ""

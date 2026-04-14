@@ -586,7 +586,27 @@ class DesktopPet:
         self.root.after(60000, self._autonomous_tick)
 
     def _setup_window(self):
-        self.root.overrideredirect(True)
+        # macOS Sequoia (15.x) + Tk 8.6.12+ では overrideredirect(True) が
+        # マウスイベントを消すバグがある。MacWindowStyle で枠なしウィンドウにする。
+        self._use_mac_style = False
+        if IS_MAC:
+            try:
+                import tkinter
+                tk_patch = self.root.tk.eval("info patchlevel")
+                tk_minor = int(tk_patch.split(".")[2]) if tk_patch.count(".") >= 2 else 0
+                if tk_minor >= 12:
+                    # Tk 8.6.12+: MacWindowStyle で装飾なしウィンドウ
+                    self.root.call(
+                        "::tk::unsupported::MacWindowStyle", "style",
+                        self.root._w, "plain", "none",
+                    )
+                    self._use_mac_style = True
+                else:
+                    self.root.overrideredirect(True)
+            except (tk.TclError, ValueError):
+                self.root.overrideredirect(True)
+        else:
+            self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
         self.root.attributes("-alpha", 0.97)
         self.root.configure(bg=WIN_BG)
@@ -619,6 +639,10 @@ class DesktopPet:
         self._base_y = y
         self.root.geometry(f"{PET_WIDTH}x{PET_HEIGHT}+{x}+{y}")
         self.root.update_idletasks()
+        # macOS Sequoia: フォーカスを強制してイベント受付を有効化
+        if IS_MAC:
+            self.root.focus_force()
+            self.root.lift()
         self._request_mic_permission_in_app()
 
     def _request_mic_permission_in_app(self):

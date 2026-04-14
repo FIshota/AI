@@ -78,6 +78,17 @@ CMD_SERVER_SYNC    = re.compile(r'^(サーバー|ホーム)(に?同期|と同期
 CMD_SERVER_SETUP   = re.compile(r'^(サーバー|ホーム).*?(設定|登録|接続設定).*$')
 CMD_PROACTIVE      = re.compile(r'^(話しかけて|会話して|何か話して).*$')
 
+# _clean_response 用: 三人称ナレーション行の検出パターン（モジュールレベルで1回だけコンパイル）
+# NG: 「アイは微笑んだ」「アイが答えてしまった」（俯瞰描写）
+# OK: 「アイはね、嬉しいよ」「アイがやってあげる」（一人称発話）
+_NARRATION_RE = re.compile(
+    r'^アイ[はが].+'
+    r'(した|った|ている|てる|ていた|ます|ました'
+    r'|てしまった|ちゃった|てしまいました'
+    r'|思った|考えた|感じた|見た|言った|答えた|呟いた|微笑んだ'
+    r'|笑った|頷いた|首を振った|目を細めた|手を振った|息を吐いた|声を出した)$'
+)
+
 # Sprint K: 国産AI進化コマンド
 CMD_KNOWLEDGE      = re.compile(r'^(知識|ナレッジ|知ってること)(グラフ|一覧|を?見せて|確認|について).*$')
 CMD_RELATIONSHIP   = re.compile(r'^(関係性|親密度|仲良し度|絆)(を?見せて|確認|どのくらい).*$')
@@ -1350,14 +1361,6 @@ class AiChan:
         text = re.sub(r'指示[１２３\d][^\s。]*', '', text).strip()
 
         # 三人称ナレーション行を除去（一人称発話は残す）
-        # NG: 「アイは微笑んだ」「アイが答えた」（俯瞰描写）
-        # OK: 「アイはね、嬉しいよ」「アイがやってあげる」（一人称発話）
-        _narration_re = re.compile(
-            r'^アイ[はが].{0,20}'
-            r'(した|った|ている|てる|ていた|ます|ました'
-            r'|思った|考えた|感じた|見た|言った|答えた|呟いた|微笑んだ'
-            r'|笑った|頷いた|首を|目を|手を|息を|声を)$'
-        )
         lines = text.splitlines()
         filtered = []
         for line in lines:
@@ -1365,7 +1368,7 @@ class AiChan:
             if not stripped:
                 continue
             # 俯瞰描写パターンのみ除去（一人称発話は通す）
-            if _narration_re.search(stripped):
+            if _NARRATION_RE.search(stripped):
                 continue
             filtered.append(stripped)
         text = '\n'.join(filtered).strip() if filtered else text.strip()
@@ -1433,8 +1436,6 @@ class AiChan:
 
         Returns: 0.0 ~ 1.0 の品質スコア
         """
-        import re as _re
-
         # 空応答
         if not response or not response.strip():
             return 0.1
@@ -1447,7 +1448,7 @@ class AiChan:
             return 0.3
 
         # 日本語文字の割合チェック
-        jp_chars = len(_re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]', resp))
+        jp_chars = len(re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]', resp))
         if resp_len > 10 and jp_chars / resp_len < 0.2:
             return 0.25
 
@@ -1465,7 +1466,7 @@ class AiChan:
                 return 0.2
 
         # オウム返し検出（ユーザー入力が応答に丸ごと含まれる）
-        _strip_p = _re.compile(r'[！!。、？?〜～\s…・「」]+')
+        _strip_p = re.compile(r'[！!。、？?〜～\s…・「」]+')
         u_clean = _strip_p.sub("", user_input)
         r_clean = _strip_p.sub("", resp)
         if u_clean and r_clean and len(u_clean) >= 5 and u_clean in r_clean:
@@ -2244,6 +2245,9 @@ class AiChan:
         脊髄反射パターン: 2ターン以内で同トピックなら重い検索をスキップし
         キャッシュされたコンテキストを再利用。
         """
+        # フォローアップ保留をリセット（前回の例外で残っている可能性を排除）
+        self._pending_followup_topic = None
+
         # ── キャッシュ判定: 短い相槌(5文字以下)で直近キャッシュがあればそのまま返す ──
         if (len(user_input) <= 5
                 and hasattr(self, "_mem_ctx_cache")

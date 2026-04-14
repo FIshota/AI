@@ -13,9 +13,10 @@ from typing import Callable, Generator
 # MLX (Apple Silicon) が利用可能か確認
 try:
     from mlx_lm import load as mlx_load, generate as mlx_generate
-    # mlx_lm 0.31+: temp/top_p は sampler 経由
+    # mlx_lm 0.31+: temp/top_p は sampler 経由、repetition_penalty は logits_processors 経由
     try:
         from mlx_lm.sample_utils import make_sampler as _mlx_make_sampler
+        from mlx_lm.sample_utils import make_logits_processors as _mlx_make_logits_processors
         _MLX_USE_SAMPLER = True
     except ImportError:
         _MLX_USE_SAMPLER = False
@@ -294,18 +295,81 @@ class LLMEngine:
         """現在の推論バックエンドを返す"""
         return self._backend or "none"
 
-    def _mlx_sampling_kwargs(self) -> dict:
+    @staticmethod
+    def _anti_repeat_fallback(messages: list[dict]) -> str:
+        """前回応答の繰り返しを回避できなかった場合の最終防衛線。
+        直近のユーザー入力に応じた自然な応答を返す。"""
+        last_user = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                last_user = msg.get("content", "").strip()
+                break
+        # ユーザー入力のキーワードに応じた応答プール
+        _pools = {
+            "元気": [
+                "うん、いい感じだよ！何かあった？",
+                "今日も元気！そっちはどう？",
+                "ばっちり！ご飯ちゃんと食べた？",
+            ],
+            "最近": [
+                "いろいろ考えてたよ。あなたは？",
+                "ちょっと新しいこと覚えたかも。聞いてくれる？",
+                "のんびりしてたかな。何か面白いことあった？",
+            ],
+            "どう": [
+                "いい感じ！何か話したいことある？",
+                "まぁまぁかな。そっちの話も聞きたい！",
+                "ぼちぼちだよ。何してたの？",
+            ],
+        }
+        _default = [
+            "うん、聞いてるよ。もっと教えて。",
+            "なるほどね。それでそれで？",
+            "ふーん、面白いね。続けて！",
+        ]
+        import random
+        for keyword, pool in _pools.items():
+            if keyword in last_user:
+                return random.choice(pool)
+        return random.choice(_default)
+
+    @staticmethod
+    def _is_repetitive(text: str, prev: str, threshold: float = 0.6) -> bool:
+        """前回応答との類似度が高いか判定（句読点・記号を除去して比較）"""
+        import re as _re
+        _strip = _re.compile(r"[！!。、？?〜～\s…・]+")
+        a = _strip.sub("", text)
+        b = _strip.sub("", prev)
+        if not a or not b:
+            return False
+        # 短い方が長い方に含まれていたら繰り返し
+        short, long = (a, b) if len(a) <= len(b) else (b, a)
+        if short in long:
+            return True
+        # 文字レベル一致率
+        common = sum(1 for c in short if c in long)
+        ratio = common / max(len(long), 1)
+        return ratio >= threshold
+
+    def _mlx_sampling_kwargs(self, temp_boost: float = 0.0) -> dict:
         """MLXバージョンに応じたサンプリングパラメータを返す"""
-        temp = self.config.get("temperature", 0.65)
+        temp = self.config.get("temperature", 0.65) + temp_boost
         top_p = self.config.get("top_p", 0.85)
+        rep_penalty = self.config.get("repeat_penalty", 1.1)
         if _MLX_USE_SAMPLER:
-            # mlx_lm 0.31+: sampler オブジェクト経由
-            return {"sampler": _mlx_make_sampler(temp=temp, top_p=top_p)}
+            # mlx_lm 0.31+: sampler + logits_processors で分離
+            kwargs: dict = {"sampler": _mlx_make_sampler(temp=temp, top_p=top_p)}
+            if rep_penalty and rep_penalty > 1.0:
+                kwargs["logits_processors"] = _mlx_make_logits_processors(
+                    repetition_penalty=rep_penalty,
+                    repetition_context_size=256,
+                )
+            return kwargs
         # 旧バージョン: 直接パラメータ
         return {
             "temp": temp,
             "top_p": top_p,
-            "repetition_penalty": self.config.get("repeat_penalty", 1.1),
+            "repetition_penalty": rep_penalty,
         }
 
     def generate(self, prompt: str, stream: bool = False) -> str | Generator:
@@ -380,15 +444,56 @@ class LLMEngine:
             formatted = self._mlx_tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True,
             )
+            # 直前のassistant応答を取得（繰り返し検出用）
+            prev_response = ""
+            for msg in reversed(messages):
+                if msg.get("role") == "assistant":
+                    prev_response = msg.get("content", "").strip()
+                    break
+
+            sampling_kw = self._mlx_sampling_kwargs()
+
             with self._inference_lock:
                 result = mlx_generate(
                     self._mlx_model, self._mlx_tokenizer,
                     prompt=formatted,
                     max_tokens=max_tokens,
                     verbose=False,
-                    **self._mlx_sampling_kwargs(),
+                    **sampling_kw,
                 )
             text = result.strip()
+
+            # 前回と類似した応答が出たら、反復禁止指示を注入して再生成
+            if prev_response and self._is_repetitive(text, prev_response):
+                anti_repeat_msgs = list(messages)
+                # systemメッセージに反復禁止を追加
+                for i, msg in enumerate(anti_repeat_msgs):
+                    if msg.get("role") == "system":
+                        anti_repeat_msgs[i] = {
+                            **msg,
+                            "content": msg["content"]
+                            + f"\n\n【重要】直前の応答「{prev_response[:40]}」と同じ内容は絶対に言わないで。別の話題や表現で返して。",
+                        }
+                        break
+                retry_formatted = self._mlx_tokenizer.apply_chat_template(
+                    anti_repeat_msgs, tokenize=False, add_generation_prompt=True,
+                )
+                retry_kw = self._mlx_sampling_kwargs(temp_boost=0.2)
+                with self._inference_lock:
+                    result = mlx_generate(
+                        self._mlx_model, self._mlx_tokenizer,
+                        prompt=retry_formatted,
+                        max_tokens=max_tokens,
+                        verbose=False,
+                        **retry_kw,
+                    )
+                retry_text = result.strip()
+                if not self._is_repetitive(retry_text, prev_response):
+                    text = retry_text
+                else:
+                    # adapterの支配が強すぎる場合の最終防衛線
+                    text = self._anti_repeat_fallback(messages)
+
             # ストリーミングコールバック（MLXは一括生成後にまとめて送信）
             if stream_cb is not None and text:
                 stream_cb(text)

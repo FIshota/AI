@@ -339,22 +339,18 @@ class LLMEngine:
         return random.choice(_default)
 
     @staticmethod
-    def _is_repetitive(text: str, prev: str, threshold: float = 0.6) -> bool:
-        """前回応答との類似度が高いか判定（句読点・記号を除去して比較）"""
+    def _is_repetitive(text: str, prev: str) -> bool:
+        """前回応答との類似度が高いか判定（部分文字列一致のみ、false positive を抑制）"""
         import re as _re
-        _strip = _re.compile(r"[！!。、？?〜～\s…・]+")
+        _strip = _re.compile(r"[！!。、？?〜～\s…・「」]+")
         a = _strip.sub("", text)
         b = _strip.sub("", prev)
         if not a or not b:
             return False
-        # 短い方が長い方に含まれていたら繰り返し
+        # 短い方が長い方に完全に含まれている場合のみ繰り返しと判定
+        # （文字レベル一致率は日本語で false positive が多すぎるため廃止）
         short, long = (a, b) if len(a) <= len(b) else (b, a)
-        if short in long:
-            return True
-        # 文字レベル一致率
-        common = sum(1 for c in short if c in long)
-        ratio = common / max(len(long), 1)
-        return ratio >= threshold
+        return short in long
 
     def _mlx_sampling_kwargs(self, temp_boost: float = 0.0) -> dict:
         """MLXバージョンに応じたサンプリングパラメータを返す"""

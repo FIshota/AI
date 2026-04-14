@@ -22,19 +22,21 @@ from typing import Optional
 
 # ── 訂正検出パターン ──
 _CORRECTION_PATTERNS = [
-    # 明示的な否定・訂正（文頭で「違う」+ 任意の続き）
-    re.compile(r'^(違う|ちがう|ちゃう)[よ！!。、 ]'),
+    # 明示的な否定・訂正（文頭 + 文中両対応）
+    re.compile(r'(違う|ちがう|ちゃう)[よって！!。、 ]'),
     re.compile(r'^(違う|ちがう|ちゃう)$'),
+    re.compile(r'(違くない|違うって|違うってば)'),
     re.compile(r'^(そうじゃ|そーじゃ)(ない|なくて|ないよ|ないって)'),
     re.compile(r'^(そういう)(意味|こと)(じゃ|では)(ない|なくて)'),
     re.compile(r'^(そうじゃなくて|そうじゃないよ|そうじゃないって)'),
-    re.compile(r'^(いや|いやいや)[、。 ]'),
-    re.compile(r'^(ちょっと|なんか)(違う|ずれてる|合ってない)'),
-    re.compile(r'^(それ|そこ)(は|が)(違う|間違い|間違ってる|おかしい|変)'),
-    re.compile(r'^(間違い|間違えてる|間違ってる)'),
+    re.compile(r'(いや|いやいや)[、。 ]'),
+    re.compile(r'^いやいや$'),
+    re.compile(r'(ちょっと|なんか|それ)(違う|ずれてる|合ってない)'),
+    re.compile(r'(それ|そこ)(は|が)(違う|間違い|間違ってる|おかしい|変)'),
+    re.compile(r'(間違い|間違えてる|間違ってる|間違ってない[？?])'),
 
     # やり直し要求
-    re.compile(r'^(もう一回|もう1回|やり直し|もう一度|言い直して)'),
+    re.compile(r'(もう一回|もう1回|やり直し|もう一度|言い直して)'),
 
     # 訂正を伴う言い換え（「〜じゃなくて〜」パターン）
     re.compile(r'.+じゃなくて.+'),
@@ -42,16 +44,22 @@ _CORRECTION_PATTERNS = [
     re.compile(r'.+じゃない[よ。、].+'),
 
     # 繰り返しへの不満・修正指示
-    re.compile(r'(同じこと|おなじこと|おんなじこと)(言う|言わないで|繰り返|ばっかり|ばかり)'),
-    re.compile(r'(さっき|前)(と|も)(同じ|おなじ|一緒)'),
+    re.compile(r'(同じ(こと|話)|おなじこと|おんなじこと)(言う|言わないで|繰り返|ばっかり|ばかり)'),
+    re.compile(r'(さっき|前)(と|も|に)(同じ|おなじ|一緒|言った)'),
     re.compile(r'(繰り返|くりかえ)し(てる|すぎ|ないで|やめて)'),
     re.compile(r'(それ|それって|それは)(さっき|前に)(も|聞いた|言った)'),
     re.compile(r'(ワンパターン|マンネリ|飽きた|また同じ|また一緒)'),
+    re.compile(r'(何回|なんかい)(も|言わせる|同じ)'),
+    re.compile(r'もう聞いた[よ。]?$'),
+
+    # フラストレーション系
+    re.compile(r'(話|会話)(聞いて|が通じ|にならない|が成り立|を聞いて)'),
+    re.compile(r'(ちゃんと|よく)(聞いて|読んで|見て|理解して)'),
 ]
 
-# 訂正の後に正しい情報が続くパターン
+# 訂正の後に正しい情報が続くパターン（幅広く拾う）
 _CORRECTION_WITH_ANSWER = re.compile(
-    r'(?:違う|ちがう|そうじゃなくて|いや)[、。 ]*(.+)',
+    r'(?:違う|ちがう|そうじゃなくて|そうじゃないよ|いや|いやいや)[、。 ]*(.+)',
     re.DOTALL,
 )
 
@@ -100,8 +108,8 @@ class CorrectionLearning:
                     correction_input=obj.get("correction", ""),
                     correct_info=obj.get("correct_info", ""),
                 ))
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[CorrectionLearning] 読込エラー: {e}", flush=True)
         self._correction_count = len(self.corrections)
 
     def _save_entry(self, entry: CorrectionEntry) -> None:
@@ -148,6 +156,11 @@ class CorrectionLearning:
         if m:
             correct_info = m.group(1).strip()
 
+        # correct_info が取れなかった場合、訂正フレーズ自体を記録
+        # （「繰り返してる 〇〇していいからね」のような指示も保持する）
+        if not correct_info and len(user_input) > 10:
+            correct_info = user_input
+
         entry = CorrectionEntry(
             timestamp=time.time(),
             user_original=self._last_user_input,
@@ -173,17 +186,17 @@ class CorrectionLearning:
         直前の応答が間違いであることを伝え、正しい方向に誘導する。
         """
         parts = [
-            f"【訂正注意】直前の応答「{entry.ai_wrong_response[:80]}」はユーザーに訂正されました。"
+            f"直前の応答「{entry.ai_wrong_response[:60]}」はユーザーに訂正された。"
         ]
         if entry.correct_info:
-            parts.append(f"正しくは: {entry.correct_info}")
-        parts.append("同じ間違いを繰り返さないでください。ユーザーの訂正に素直に従ってください。")
-        return "\n".join(parts)
+            parts.append(f"ユーザーの指示: {entry.correct_info[:80]}")
+        parts.append("素直に従って。")
+        return " ".join(parts)
 
     def get_recent_corrections_hint(self, max_entries: int = 3) -> str:
         """
         最近の訂正履歴をLLMコンテキストに追加するヒント文を返す。
-        同じ間違いの繰り返しを防ぐため。
+        correct_info が空でも訂正フレーズ自体を表示する。
         """
         if not self.corrections:
             return ""
@@ -193,11 +206,16 @@ class CorrectionLearning:
         for c in recent:
             if c.correct_info:
                 hints.append(
-                    f"・「{c.ai_wrong_response[:40]}」は間違い → 正: {c.correct_info[:60]}"
+                    f"・「{c.ai_wrong_response[:30]}」は誤り → {c.correct_info[:50]}"
+                )
+            elif c.correction_input:
+                # correct_info がなくても訂正フレーズを表示
+                hints.append(
+                    f"・ユーザーの指摘: {c.correction_input[:50]}"
                 )
         if not hints:
             return ""
-        return "【過去の訂正】\n" + "\n".join(hints)
+        return "過去の訂正: " + " / ".join(hints)
 
     def stats(self) -> dict:
         return {

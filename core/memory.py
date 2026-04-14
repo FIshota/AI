@@ -391,7 +391,7 @@ class MemoryManager:
             keywords = [q_lower]
 
         # SQL LIKE で絞り込み（暗号化時はフォールバック）
-        if self._encrypt:
+        if self.encrypt:
             # 暗号化時は復号しないと LIKE が使えないので従来ロジック
             return self.search(query, limit=limit)
 

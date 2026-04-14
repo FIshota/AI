@@ -1056,54 +1056,25 @@ class AiChan:
         # 記憶から関連情報を取得
         memory_context = self._build_memory_context(user_input)
 
-        # ── 追加コンテキスト（合計400文字以内に制限。4kモデルの品質維持） ──
+        # ── 追加コンテキスト ──
+        # 3Bモデルには必要最小限のみ注入（ノイズが多いと会話内容を無視する原因になる）
+        # 優先順位: 訂正 > 記憶。RAG/知識グラフ/conv_intelligence/personality_evoは
+        # 3Bモデルでは混乱の原因になるため無効化。大きいモデルで再有効化する。
         extra_parts: list[str] = []
-
-        # Sprint 3.0-B: RAG からドキュメントコンテキストを追加
-        if getattr(self, "rag", None) and self.rag.total_chunks > 0:
-            try:
-                rag_ctx = self.rag.search_for_context(user_input, limit=1, max_chars=150)
-                if rag_ctx:
-                    extra_parts.append(rag_ctx)
-            except Exception:
-                pass
-
-        # Sprint K2: 知識グラフからコンテキストを追加（児童期以降）
-        _kg_ok = not _growth or _growth.can_use_knowledge_graph()
-        if _kg_ok and getattr(self, "knowledge_graph", None):
-            try:
-                kg_ctx = self.knowledge_graph.get_context_for_chat(user_input, max_chars=120)
-                if kg_ctx:
-                    extra_parts.append(kg_ctx)
-            except Exception:
-                pass
-
-        # Sprint K1: 会話知能の応答指示をコンテキストに追加（短縮）
-        if conv_analysis and conv_analysis.get("instruction_text"):
-            extra_parts.append(conv_analysis["instruction_text"][:40])
-
-        # Sprint K3: 性格進化ヒントをコンテキストに追加（短縮）
-        if getattr(self, "personality_evo", None):
-            try:
-                evo_hint = self.personality_evo.get_personality_prompt_hint()
-                if evo_hint:
-                    extra_parts.append(evo_hint[:30])
-            except Exception:
-                pass
 
         # ユーザー訂正コンテキストを注入（最優先）
         if _correction_context:
-            extra_parts.insert(0, _correction_context)
+            extra_parts.append(_correction_context)
         # 最近の訂正履歴も追加（同じ間違いの繰り返し防止）
         elif getattr(self, "correction_learning", None):
-            _corr_hint = self.correction_learning.get_recent_corrections_hint(max_entries=1)
+            _corr_hint = self.correction_learning.get_recent_corrections_hint(max_entries=2)
             if _corr_hint:
-                extra_parts.append(_corr_hint[:80])
+                extra_parts.append(_corr_hint[:120])
 
-        # 追加コンテキストを200文字以内で結合（3Bモデルへのノイズ軽減）
+        # 追加コンテキストを結合（訂正のみなので短い）
         extra = "\n".join(extra_parts)
         if extra:
-            memory_context = memory_context + "\n" + extra[:200]
+            memory_context = memory_context + "\n" + extra[:250]
 
         # 会話履歴に追加
         self.conversation_history.append({"role": "user", "content": user_input})
@@ -1118,6 +1089,11 @@ class AiChan:
 
         response = self.llm.generate_chat(messages)
         response = self._clean_response(response)
+
+        # フォローアップトピックを応答生成後にマーク（生成前だと未使用のまま消費される）
+        if getattr(self, "_pending_followup_topic", None):
+            self.topic_tracker.mark_followed_up(self._pending_followup_topic)
+            self._pending_followup_topic = None
 
         # Sprint K1: 会話知能による後処理（日本語品質フィルタ）
         if getattr(self, "conv_intelligence", None):
@@ -1137,10 +1113,9 @@ class AiChan:
         #     except Exception:
         #         pass
 
-        # Sprint K4: 応答品質自己評価
-        # 3Bモデルでは評価+再生成で3回もLLMを呼ぶのは品質劣化の原因になるため無効化。
-        # 将来モデルが大きくなった時に再有効化する。
-        _evaluated_quality: float | None = None
+        # Sprint K4: 応答品質自己評価（軽量ヒューリスティック版）
+        # LLM呼び出しなしで品質を推定する。完璧でなくても常に0.6固定よりはるかに良い。
+        _evaluated_quality = self._estimate_response_quality(user_input, response)
 
         # TTS で読み上げ（有効な場合のみ）
         try:
@@ -1374,16 +1349,23 @@ class AiChan:
         text = re.sub(r'\[★[^\]]*\]', '', text).strip()
         text = re.sub(r'指示[１２３\d][^\s。]*', '', text).strip()
 
-        # 三人称ナレーション行を除去
-        # 「アイは〜」「アイが〜」で始まる行（一人称ではない）
+        # 三人称ナレーション行を除去（一人称発話は残す）
+        # NG: 「アイは微笑んだ」「アイが答えた」（俯瞰描写）
+        # OK: 「アイはね、嬉しいよ」「アイがやってあげる」（一人称発話）
+        _narration_re = re.compile(
+            r'^アイ[はが].{0,20}'
+            r'(した|った|ている|てる|ていた|ます|ました'
+            r'|思った|考えた|感じた|見た|言った|答えた|呟いた|微笑んだ'
+            r'|笑った|頷いた|首を|目を|手を|息を|声を)$'
+        )
         lines = text.splitlines()
         filtered = []
         for line in lines:
             stripped = line.strip()
             if not stripped:
                 continue
-            # 「アイは/が〜と言った」「アイは/が〜する」など俯瞰描写
-            if re.match(r'^アイ[はがのをに]', stripped):
+            # 俯瞰描写パターンのみ除去（一人称発話は通す）
+            if _narration_re.search(stripped):
                 continue
             filtered.append(stripped)
         text = '\n'.join(filtered).strip() if filtered else text.strip()
@@ -1435,6 +1417,78 @@ class AiChan:
             text = ''.join(sentences[:max_s])
 
         return text if text else "うん、聞いてるよ"
+
+    def _estimate_response_quality(self, user_input: str, response: str) -> float:
+        """
+        LLM呼び出しなしで応答品質を推定する軽量ヒューリスティック。
+
+        評価基準:
+        - 応答が空/極端に短い → 低品質
+        - 日本語文字が少ない（英語漏れ） → 低品質
+        - 応答がユーザー入力のオウム返し → 低品質
+        - ユーザー入力長に対して応答が極端に短い → やや低品質
+        - フォールバック応答 → 低品質
+        - 直前の応答と酷似 → 低品質（繰り返し）
+        - それ以外 → 基準値 0.65
+
+        Returns: 0.0 ~ 1.0 の品質スコア
+        """
+        import re as _re
+
+        # 空応答
+        if not response or not response.strip():
+            return 0.1
+
+        resp = response.strip()
+        resp_len = len(resp)
+
+        # 極端に短い（3文字以下）
+        if resp_len <= 3:
+            return 0.3
+
+        # 日本語文字の割合チェック
+        jp_chars = len(_re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]', resp))
+        if resp_len > 10 and jp_chars / resp_len < 0.2:
+            return 0.25
+
+        score = 0.65  # 基準値
+
+        # フォールバック応答の検出
+        _fallback_phrases = (
+            "うまく言えなかった",
+            "もう一回話しかけて",
+            "ちょっと考えすぎちゃった",
+            "うん、聞いてるよ",
+        )
+        for fb in _fallback_phrases:
+            if fb in resp:
+                return 0.2
+
+        # オウム返し検出（ユーザー入力が応答に丸ごと含まれる）
+        _strip_p = _re.compile(r'[！!。、？?〜～\s…・「」]+')
+        u_clean = _strip_p.sub("", user_input)
+        r_clean = _strip_p.sub("", resp)
+        if u_clean and r_clean and len(u_clean) >= 5 and u_clean in r_clean:
+            score -= 0.15
+
+        # ユーザー入力に対して応答が極端に短い
+        if len(user_input) > 20 and resp_len < 8:
+            score -= 0.1
+
+        # 直前の応答と酷似（繰り返し検出）
+        prev_responses = [
+            m["content"] for m in self.conversation_history[-4:]
+            if m.get("role") == "assistant"
+        ]
+        for prev in prev_responses:
+            prev_clean = _strip_p.sub("", prev)
+            if r_clean and prev_clean:
+                short, long_ = (r_clean, prev_clean) if len(r_clean) <= len(prev_clean) else (prev_clean, r_clean)
+                if len(short) >= 5 and short in long_:
+                    score -= 0.2
+                    break
+
+        return max(0.1, min(1.0, score))
 
     def _handle_commands(self, user_input: str) -> str | None:
         """特殊コマンドを解析・実行します"""
@@ -2238,7 +2292,8 @@ class AiChan:
         if followup:
             brief = followup["text"][:20]
             parts.append(f"会話の中で「{brief}」のことも自然に聞いて。")
-            self.topic_tracker.mark_followed_up(followup)
+            # mark_followed_up は LLM 応答生成 *後* に呼ぶ（chat() 側で処理）
+            self._pending_followup_topic = followup
 
         # ── 天気・ニュース（ネットワーク許可時、5ターンに1回） ──
         if self._allow_network and self.turn_count % 5 == 1:

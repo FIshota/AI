@@ -19,9 +19,14 @@ numpy>=1.26.4,<2.0; python_version < "3.13"
 numpy>=2.1.0; python_version >= "3.13"
 sentence-transformers>=3.3.0
 
-# ── 音声 ────────────────────────────────────────────────
-# edge-tts: v6 系で ja-JP-NanamiNeural 安定（v7 は別PRで検証）
-edge-tts>=6.1.14
+# ── 音声 (Phase 0.75: γ 切替式) ─────────────────────────
+# 既定エンジン: pyttsx3 (BSD License, 完全ローカル, 軽量)
+pyttsx3>=2.98
+# オプション: VOICEVOX (高音質日本語。別途 VOICEVOX Engine の起動必要)
+#   docker run -p 50021:50021 voicevox/voicevox_engine:cpu-latest
+# 非推奨: edge-tts (GPL-3.0 汚染リスク + Azure 外部送信)
+#   明示的に必要な場合のみ: pip install "edge-tts>=6.1.14"
+# edge-tts>=6.1.14   # Phase 0.75 で default 無効化
 sounddevice>=0.5.0
 soundfile>=0.13.0
 librosa>=0.10.0

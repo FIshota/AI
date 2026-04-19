@@ -131,6 +131,17 @@ def _acquire_single_instance_lock(base_dir: Path) -> bool:
         return False
 
 
+def _ensure_runtime_dirs(base_dir: Path) -> None:
+    """Phase 0: data/, logs/ 等が無い状態でも起動できるよう空ディレクトリを用意する。
+
+    記憶切り離し (Phase B) 後の新生起動 / CI / 公開デモ での
+    "記憶ゼロから動く ai-chan" を保証する最小限の土台整備。
+    personality/ と yamato_dna/ はアーカイブ復元でしか作らない方針なので除外。
+    """
+    for d in ("data", "logs", "output", "reports", "backups", "models"):
+        (base_dir / d).mkdir(parents=True, exist_ok=True)
+
+
 def _configure_logging(base_dir: Path) -> None:
     """Item #61: RotatingFileHandler によるログローテーション"""
     from logging.handlers import RotatingFileHandler
@@ -453,9 +464,38 @@ def main():
     parser.add_argument("--copy", metavar="DEST", help="指定先にアイをコピー")
     parser.add_argument("--diagnose", action="store_true", help="起動診断のみ実行")
     parser.add_argument("--base-dir", default=str(BASE_DIR), help="ベースディレクトリ（デフォルト: スクリプトと同じ場所）")
+    parser.add_argument("--restore-memory", metavar="ARCHIVE_DIR",
+                        help="記憶アーカイブから復元してから起動（家族モード）")
+    parser.add_argument("--smoke-test", action="store_true",
+                        help="主要モジュールの import のみ行い終了（CI/検証用）")
 
     args = parser.parse_args()
     base_dir = Path(args.base_dir)
+
+    # Phase 0 切り離し対応: --restore-memory があればアーカイブから復元
+    if args.restore_memory:
+        print(f"[main] 記憶を復元中: {args.restore_memory}", flush=True)
+        import subprocess
+        r = subprocess.run(
+            [sys.executable, str(base_dir / "scripts" / "restore_memory.py"),
+             "--from", args.restore_memory],
+            cwd=str(base_dir),
+        )
+        if r.returncode != 0:
+            print("[main] 復元に失敗しました。起動を中止します。", flush=True)
+            return
+
+    # Phase 0 切り離し対応: data/ が無ければ空で自動初期化（新生モード）
+    _ensure_runtime_dirs(base_dir)
+
+    # smoke test: 主要モジュールの import だけ確認して終了
+    if args.smoke_test:
+        print("[smoke] importing core modules ...", flush=True)
+        from core import llm  # noqa: F401
+        from bench import runner  # noqa: F401
+        print(f"[smoke] model_family default: {__import__('core.llm', fromlist=['default_model_family']).default_model_family()}")
+        print("[smoke] ✓ OK", flush=True)
+        return
 
     # Item #61: ログローテーション設定
     _configure_logging(base_dir)

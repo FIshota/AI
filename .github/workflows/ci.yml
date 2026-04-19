@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, "phase**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────
+  # 1. Lint — ruff / black / isort
+  # ─────────────────────────────────────────────────────────
+  lint:
+    name: Lint (ruff + black)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install ruff==0.8.4 black==24.10.0 isort==5.13.2
+      - name: ruff check
+        run: ruff check --output-format=github . || echo "::warning::ruff found issues (Phase 0: non-blocking)"
+        continue-on-error: true
+      - name: black --check
+        run: black --check --diff . || echo "::warning::black would reformat (Phase 0: non-blocking)"
+        continue-on-error: true
+      - name: isort --check
+        run: isort --check-only --diff . || echo "::warning::isort would reorder (Phase 0: non-blocking)"
+        continue-on-error: true
+
+  # ─────────────────────────────────────────────────────────
+  # 2. Smoke test — import 健全性
+  # ─────────────────────────────────────────────────────────
+  smoke:
+    name: Smoke test (import + bench --list)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install minimal deps (bench + core llm module only)
+        run: |
+          pip install --upgrade pip
+          # 本体の重い依存 (llama-cpp-python, faiss) はスキップし
+          # Phase 0 で追加したモジュールの import 可否のみ検証
+          pip install cryptography pyyaml
+      - name: Import check
+        run: |
+          python -c "
+          import sys; sys.path.insert(0, '.')
+          from bench import runner
+          from bench.suites import SUITES
+          for name, mod in SUITES.items():
+              print(f'{name}: {mod.describe()}')
+          "
+      - name: bench --list
+        run: python bench/runner.py --list
+
+  # ─────────────────────────────────────────────────────────
+  # 3. Security — pip-audit / gitleaks / bandit
+  # ─────────────────────────────────────────────────────────
+  security:
+    name: Security scans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # gitleaks で全履歴検査するため
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install scanners
+        run: pip install pip-audit==2.7.3 bandit==1.8.0
+      - name: pip-audit (requirements.txt)
+        run: pip-audit -r requirements.txt || echo "::warning::pip-audit found vulnerabilities (see config/security_policy.yaml)"
+        continue-on-error: true
+      - name: bandit
+        run: bandit -r core utils ui web bench -q || echo "::warning::bandit found issues"
+        continue-on-error: true
+      - name: gitleaks (all history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          config-path: .gitleaks.toml
+
+  # ─────────────────────────────────────────────────────────
+  # 4. Tests — pytest (Phase 0 は best-effort)
+  # ─────────────────────────────────────────────────────────
+  test:
+    name: Tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install test deps
+        run: |
+          pip install --upgrade pip
+          pip install pytest pytest-cov cryptography pyyaml
+          # 重い依存は Phase 0 では skip、pytest 実行時にインポートエラーで落ちるテストは除外
+      - name: pytest (collect only — 依存不足で失敗するテストを除外)
+        run: |
+          pytest tests/ --collect-only -q 2>&1 | tail -20 || true
+      - name: pytest (best-effort)
+        run: |
+          pytest tests/ -q --tb=short --continue-on-collection-errors \
+            -k "not llama and not mlx and not voice and not stt and not tts" \
+            || echo "::warning::pytest has failures (Phase 0: non-blocking)"
+        continue-on-error: true

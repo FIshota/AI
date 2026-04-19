@@ -78,8 +78,9 @@ gitleaks-report.json
 pip-audit-*.json
 .secrets.baseline
 
-# ── lock ファイル（hash 固定済みだがサイズ大） ───────
-requirements.lock
+# ── lock ファイル ───────
+# Phase 0.5: 再現性のため requirements.lock は追跡する（2026-04-20）
+# requirements.lock  # ← 追跡対象
 
 # ── LLM キャッシュ（CVE-2025-69872 対策） ────────────
 data/llm_cache/

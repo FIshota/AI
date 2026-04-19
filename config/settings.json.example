@@ -1,0 +1,122 @@
+{
+  "version": "0.1.0",
+  "_comment": "このファイルを settings.json にコピーして編集してください。絶対パス・LAN IP・パスワードなどは各環境で設定。",
+  "llm": {
+    "model_path": "models/",
+    "model_file": "qwen2.5-3b-instruct-q4_k_m.gguf",
+    "model_family": "sarashina2-7b",
+    "context_length": 8192,
+    "max_tokens": 400,
+    "max_sentences": 8,
+    "temperature": 0.65,
+    "top_p": 0.85,
+    "repeat_penalty": 1.1,
+    "top_k": 30,
+    "n_gpu_layers": -1,
+    "n_threads": 8,
+    "n_batch": 512,
+    "flash_attn": true,
+    "use_mmap": true,
+    "use_mlock": false,
+    "mlx": {
+      "model_path": "models/Qwen2.5-3B-Instruct-mlx-4bit",
+      "adapter_path": "models/adapters/aether-v1",
+      "adapter_enabled": false
+    }
+  },
+  "memory": {
+    "short_term_max": 100,
+    "mid_term_max": 200,
+    "compression_threshold": 0.6,
+    "importance_threshold": 0.4,
+    "db_path": "data/memories.db"
+  },
+  "security": {
+    "encrypt_database": true,
+    "key_file": "data/.key"
+  },
+  "ui": {
+    "language": "ja",
+    "show_emotion": true,
+    "color_theme": "pink",
+    "user_icon": "\ud83d\udc64",
+    "ai_icon": "\ud83d\udc97",
+    "user_name": "\u3042\u306a\u305f",
+    "pet_image": "assets/ai_chan.png",
+    "ai_icon_image": "",
+    "user_icon_image": ""
+  },
+  "portability": {
+    "auto_backup": false,
+    "backup_interval_hours": 24
+  },
+  "autonomous": {
+    "idle_minutes": 30,
+    "allow_network": true,
+    "weather_city": "Tokyo",
+    "schedule_enabled": true,
+    "clipboard_watch": true
+  },
+  "tts": {
+    "enabled": true,
+    "voice": "Kyoko",
+    "neural_voice": "ja-JP-NanamiNeural",
+    "rate": 175
+  },
+  "stt": {
+    "enabled": true,
+    "model_size": "small",
+    "language": "ja"
+  },
+  "semantic_search": { "enabled": true },
+  "vision": { "enable_moondream": true },
+  "integrations": {
+    "notion": {
+      "enabled": false,
+      "api_key": "<SET_VIA_ENV_OR_CREDENTIAL_STORE>",
+      "minutes_database_id": "",
+      "todo_database_id": ""
+    },
+    "google_calendar": {
+      "enabled": false,
+      "credentials_file": "~/.config/ai-chan/google_credentials.json",
+      "calendar_id": "primary"
+    }
+  },
+  "server_home": {
+    "enabled": false,
+    "host": "<YOUR_LAN_SERVER_IP>",
+    "port": 22,
+    "username": "<YOUR_SSH_USER>",
+    "password": "<MIGRATED_TO_FERNET_STORE_ON_FIRST_RUN>",
+    "connect_timeout_sec": 10,
+    "ssh_trust_on_first_use": false,
+    "allowed_commands": ["docker", "df", "free", "uptime", "cat", "ls", "pwd", "whoami", "hostname", "uname"]
+  },
+  "autonomous_actions": {
+    "greeting_enabled": true,
+    "proactive_enabled": true,
+    "diary_enrich_enabled": true,
+    "idle_learn_enabled": true
+  },
+  "initiative": {
+    "enabled": true,
+    "tick_interval_sec": 30,
+    "min_silence_sec": 60,
+    "cooldown_after_self_sec": 180,
+    "max_per_hour": 3,
+    "max_per_day": 15,
+    "quiet_hours_start": 22,
+    "quiet_hours_end": 7,
+    "channels": ["cli", "desktop", "voice", "web"]
+  },
+  "voice_activation": {
+    "enabled": false,
+    "backend": "vosk",
+    "wake_words": ["\u30a2\u30a4\u3061\u3083\u3093", "\u30a2\u30a4"],
+    "vosk_model_path": "models/vosk-small-ja",
+    "threshold": 0.5,
+    "hands_free_mode": true,
+    "greeting_on_wake": "\u306f\u3044\u3001\u306a\u3042\u306b\uff1f"
+  }
+}

@@ -1,14 +1,91 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ai-chan .gitignore
+# セキュリティファースト: 迷ったら除外
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ── Python ──────────────────────────────────────────
 __pycache__/
 *.pyc
-.DS_Store
+*.pyo
+*.pyd
 *.egg-info/
 dist/
 build/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# ── OS ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── 個人情報・設定（絶対にコミット禁止） ─────────────
+# settings.json にはホストIP・ローカルパスが含まれるためコミット不可
+# .example をテンプレートとして提供
+config/settings.json
+config/*.local.json
+personality/memories.yaml.local
+.env
+.env.local
+.env.*.local
+
+# ── 認証情報・鍵 ─────────────────────────────────────
+*.pem
+*.key
+*.p12
+*.crt
+*_credentials.json
+google_credentials.json
+service_account*.json
+token.json
+.fernet_key
+data/.key
+
+# ── 実行時データ（PII・会話ログを含む） ─────────────
 data/
 output/
+backups/
+reports/
+logs/
+*.log
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.enc
+
+# ── LLM モデル（再配布不可 + 巨大） ──────────────────
 models/
 *.gguf
-.env
+*.safetensors
+*.bin
+*.onnx
+
+# ── macOS アプリバンドル ──────────────────────────────
 AiChan.app/
-reports/
+*.app/
+
+# ── セキュリティ成果物（漏洩防止のため除外） ─────────
+logs/security/
+*.sbom.json
+bandit-report.json
+gitleaks-report.json
+pip-audit-*.json
+.secrets.baseline
+
+# ── lock ファイル（hash 固定済みだがサイズ大） ───────
+requirements.lock
+
+# ── LLM キャッシュ（CVE-2025-69872 対策） ────────────
+data/llm_cache/
+
+# ── IDE ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo

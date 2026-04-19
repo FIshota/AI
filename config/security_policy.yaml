@@ -1,0 +1,51 @@
+# ai-chan セキュリティポリシー
+#
+# このファイルは daily_security_audit.sh が severity 判定時に参照する。
+# ここに載っている CVE は「既知かつ受容済み」として severity から除外される
+# （ただし summary には Accepted セクションで表示される）。
+#
+# エントリ追加時の注意:
+#   - id: CVE番号 (必須)
+#   - rationale: なぜ受容したか (必須・1-2行)
+#   - mitigation: どう緩和したか (必須)
+#   - expires: いつまで受容可能か (ISO 8601, 過ぎたら再警告)
+#   - reviewer: 判断した人
+#
+# 期限切れになると自動監査が再度 HIGH として通知する。
+
+version: 1
+
+accepted_cves:
+  - id: CVE-2025-69872
+    package: diskcache
+    rationale: "diskcache の pickle 使用による RCE。LLM キャッシュで内部使用のみ。upstream未修正。"
+    mitigation: "_harden_llm_cache() でキャッシュディレクトリ権限 0o700 / .pkl 自動除去 / オーナー確認"
+    file_refs:
+      - core/llm.py::_secure_cache_dir
+      - core/llm.py::_harden_llm_cache
+    expires: "2026-10-20"     # 6ヶ月後に再評価
+    reviewer: "owner"
+
+  - id: CVE-2026-1839
+    package: transformers
+    rationale: "Trainer._load_rng_state() の RCE。ai-chan は Trainer 未使用のため非到達。"
+    mitigation: "transformers.Trainer API を一切呼び出していないことを静的に保証 (grep 確認)"
+    file_refs:
+      - "確認コマンド: grep -r 'from transformers.*Trainer\\|transformers\\.Trainer' core/ utils/ ui/ web/"
+    expires: "2026-07-20"     # 3ヶ月後に再評価 (transformers 5.x 移行時に自動解消の見込み)
+    reviewer: "owner"
+
+# Bandit の既知受容 (static analysis)
+accepted_bandit:
+  # 例: 現時点では全て解消済みのため空。将来追加される場合は以下形式:
+  # - test_id: B301
+  #   file: core/xxx.py
+  #   line: 42
+  #   rationale: "..."
+  #   expires: "2026-XX-XX"
+
+# 古くなった依存 (outdated) で許容するもの
+accepted_outdated:
+  # - package: numpy
+  #   reason: "Py3.13 対応の都合で 1.26.x 系に固定"
+  #   expires: "2026-12-31"

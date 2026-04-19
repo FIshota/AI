@@ -1,0 +1,35 @@
+# ai-chan gitleaks 設定
+# デフォルトルールを継承しつつ、検査対象外のパスを除外する。
+
+[extend]
+# デフォルトルールを継承
+useDefault = true
+
+[allowlist]
+description = "ai-chan known false-positives"
+
+# 除外パス (正規表現)
+paths = [
+    '''__pycache__/''',
+    '''\.pyc$''',
+    '''tests/.*test_.*\.py$''',     # テスト用ダミー値を含むため
+    '''tests/fixtures/''',
+    '''docs/.*\.md$''',              # ドキュメント内のサンプル値
+    '''\.env\.example$''',           # テンプレート
+    '''requirements\.lock$''',       # hash は false-positive 率高
+    '''config/.*\.example$''',
+    '''\.gitleaks\.toml$''',
+]
+
+# 除外コミット (必要に応じて追加)
+commits = []
+
+# 除外 regex (ダミーAPIキーパターン)
+regexes = [
+    '''test[_-]?api[_-]?key''',
+    '''dummy[_-]?(key|secret|token)''',
+    '''example[_-]?(key|secret|token)''',
+    '''your[_-]?(key|secret|token|password)[_-]?here''',
+    '''xxxxxxxx''',
+    '''AKIA[0-9A-Z]{16}EXAMPLE''',
+]

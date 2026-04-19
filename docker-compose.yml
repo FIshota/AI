@@ -1,0 +1,76 @@
+# ai-chan docker-compose (Phase 0.75)
+#
+# 開発向けサービス定義。本番用ではない。
+#
+# 使い方:
+#   docker-compose up dev   # 対話開発シェル
+#   docker-compose run --rm test   # テスト実行
+#   docker-compose run --rm bench --list
+#
+# モデル / データはホスト側からボリュームマウント
+
+services:
+  dev:
+    build:
+      context: .
+      target: dev
+    image: ai-chan:0.75-dev
+    volumes:
+      - ./:/app
+      - ./models:/app/models:ro      # モデルは read-only
+      - ai-chan-data:/app/data       # データは名前付きボリューム
+      - ai-chan-logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    tty: true
+    stdin_open: true
+    command: bash
+
+  smoke:
+    build:
+      context: .
+      target: base
+    image: ai-chan:0.75
+    command: python3 main.py --smoke-test
+
+  test:
+    build:
+      context: .
+      target: dev
+    image: ai-chan:0.75-dev
+    volumes:
+      - ./:/app
+    command: >
+      pytest tests/ -q --tb=short
+      --cov=core --cov=utils --cov=bench
+      --cov-report=term-missing
+
+  bench:
+    build:
+      context: .
+      target: base
+    image: ai-chan:0.75
+    volumes:
+      - ./:/app
+      - ./models:/app/models:ro
+    command: python3 bench/runner.py --list
+
+  security:
+    build:
+      context: .
+      target: dev
+    image: ai-chan:0.75-dev
+    volumes:
+      - ./:/app
+    command: >
+      bash -c "
+        pip-audit -r requirements.txt &&
+        bandit -r core utils ui web bench -q &&
+        python3 scripts/check_licenses.py --fail-on-gpl &&
+        python3 scripts/check_security_policy.py --strict
+      "
+
+volumes:
+  ai-chan-data:
+  ai-chan-logs:

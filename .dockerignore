@@ -1,0 +1,55 @@
+# ai-chan .dockerignore
+# イメージに含めない = ユーザー固有 / サイズ過大 / 機密
+
+# ユーザー固有データ (絶対に含めない)
+data/
+logs/
+personality/
+yamato_dna/
+backups/
+output/
+reports/
+config/settings.json
+config/settings.json.bak
+*.key
+*.keyfile
+*.enc
+*.pem
+
+# モデル本体 (GB 級)
+models/
+*.gguf
+*.bin
+*.safetensors
+
+# Python キャッシュ
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# git
+.git/
+.github/    # CI は repo で、コンテナには不要
+.gitignore
+.gitleaks.toml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 一時ファイル
+tmp/
+*.tmp
+*.log

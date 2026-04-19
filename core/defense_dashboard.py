@@ -11,10 +11,13 @@ Sprint 3.0-E: 全防御システムの統合レポートを生成する。
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class DefenseDashboard:
@@ -336,6 +339,127 @@ class DefenseDashboard:
             "score": score,
             "recommendations": len(recommendations),
         }
+
+    # ─── private ─────────────────────────────────────────────
+
+    # ── #100: セキュリティスコア詳細 ─────────────────────────
+
+    def get_security_score(self) -> Dict[str, Any]:
+        """セキュリティスコアの詳細内訳を返す。
+
+        Returns:
+            {
+                "overall_score": int (0-100),
+                "key_age_days": int | None,
+                "integrity_status": str,
+                "last_backup_date": str | None,
+                "pii_detections": int,
+                "injection_attempts": int,
+                "checked_at": str,
+            }
+        """
+        overall: int = self.get_overall_score()
+
+        # 鍵の経過日数（audit_log の作成日を代理指標にする）
+        key_age_days: Optional[int] = None
+        if self._audit:
+            try:
+                chain_info: Dict[str, Any] = self._audit.verify_chain()
+                if chain_info.get("first_timestamp"):
+                    first_ts: str = chain_info["first_timestamp"]
+                    first_dt: datetime = datetime.fromisoformat(
+                        first_ts.replace("Z", "+00:00")
+                    )
+                    key_age_days = (datetime.now(timezone.utc) - first_dt).days
+            except Exception:
+                pass
+
+        # 整合性ステータス
+        integrity_status: str = "unknown"
+        if self._integrity:
+            try:
+                result: Dict[str, Any] = self._integrity.verify()
+                integrity_status = result.get("status", "unknown")
+            except Exception:
+                integrity_status = "error"
+
+        # 最新バックアップ日
+        last_backup_date: Optional[str] = None
+        if self._backup:
+            try:
+                backups: List[Dict[str, Any]] = self._backup.list_backups()
+                if backups:
+                    last_backup_date = backups[-1].get("created_at", backups[-1].get("filename", ""))
+            except Exception:
+                pass
+
+        # PII 検出数・インジェクション試行数（anomaly_detector から取得を試みる）
+        pii_detections: int = 0
+        injection_attempts: int = 0
+        if self._anomaly:
+            try:
+                stats: Dict[str, Any] = self._anomaly.get_stats()
+                pii_detections = int(stats.get("pii_detections", 0))
+                injection_attempts = int(stats.get("injection_attempts", 0))
+            except Exception:
+                pass
+
+        return {
+            "overall_score": overall,
+            "key_age_days": key_age_days,
+            "integrity_status": integrity_status,
+            "last_backup_date": last_backup_date,
+            "pii_detections": pii_detections,
+            "injection_attempts": injection_attempts,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def format_security_dashboard(self) -> str:
+        """セキュリティダッシュボードのフォーマット済みテキストを返す。"""
+        info: Dict[str, Any] = self.get_security_score()
+        score: int = info["overall_score"]
+        emoji: str = self._score_emoji(score)
+        label: str = self._score_label(score)
+
+        lines: List[str] = []
+        lines.append("=" * 50)
+        lines.append(f"  {emoji} セキュリティダッシュボード")
+        lines.append("=" * 50)
+        lines.append("")
+        lines.append(f"  総合スコア: {score}/100 ({label})")
+        lines.append("")
+
+        lines.append("■ 詳細")
+        lines.append("-" * 30)
+
+        if info["key_age_days"] is not None:
+            lines.append(f"  鍵の経過日数: {info['key_age_days']}日")
+        else:
+            lines.append("  鍵の経過日数: 不明")
+
+        lines.append(f"  整合性ステータス: {info['integrity_status']}")
+
+        if info["last_backup_date"]:
+            lines.append(f"  最終バックアップ: {info['last_backup_date']}")
+        else:
+            lines.append("  最終バックアップ: なし")
+
+        lines.append(f"  PII 検出数: {info['pii_detections']}")
+        lines.append(f"  インジェクション試行: {info['injection_attempts']}")
+        lines.append("")
+
+        # 推奨アクション
+        recs: List[str] = self.get_recommendations()
+        if recs:
+            lines.append("■ 推奨アクション")
+            lines.append("-" * 30)
+            for i, rec in enumerate(recs[:5], 1):
+                lines.append(f"  {i}. {rec}")
+            lines.append("")
+
+        lines.append(f"  確認日時: {info['checked_at']}")
+        lines.append("=" * 50)
+        return "\n".join(lines)
 
     # ─── private ─────────────────────────────────────────────
 

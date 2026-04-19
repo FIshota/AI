@@ -543,14 +543,16 @@
 <div class="header">
   <h1>Project Yamato + Aether</h1>
   <div class="subtitle">あいちゃん専用AI - 全体構想マインドマップ &amp; 詳細仕様書</div>
-  <div class="date">Updated: 2026-04-12 / MacBook Pro M2 Pro 16GB</div>
+  <div class="date">Updated: 2026-04-16 / MacBook Pro M2 Pro 16GB</div>
 </div>
 
 <!-- ===== CURRENT POSITION ===== -->
 <div class="current-pos">
-  <div class="badge">CURRENT POSITION</div>
-  <h2>Phase 1 進行中 - MLXネイティブ推論 + Aether v1 デプロイ + バイオ処理層</h2>
-  <p>Qwen 2.5 3B への切替完了。MLXネイティブバックエンド実装済み（Apple Silicon最適化）。Aether v1 が最高スコア 98.1% (Grade S) を達成。v3/v4も訓練したがv1が最良。Strict Benchmark v2 による7軸評価体制を確立。生物神経系(LLMバイパス率77.8%)と成長段階システム(6段階)を統合。</p>
+  <div class="badge">Phase 1 完了 → Phase 2 進行中</div>
+  <h2>100項目完了 + 音声革新 + プロソディ学習</h2>
+  <p>165+ファイル / 62,000+行。NeuralTTS v2（edge-tts SSML制御＋バッチ合成）で人間らしい自然な音声を実現。
+プロソディ学習エンジンにより人間の声からイントネーション・リズム・間の取り方を学習し、TTS に反映。
+セマンティック検索FAISS自動インデックス構築。音声管理CLIコマンド。86テスト全パス。</p>
 </div>
 
 <!-- ===== MIND MAP (TREE) ===== -->
@@ -572,7 +574,7 @@
       <div class="tree-branch">
         <div class="tree-branch-line"></div>
         <div class="tree-node" style="border-color:var(--green); background:rgba(74,222,128,0.06);">
-          A. MoE基盤<br><span style="font-size:0.7em;color:var(--green)">92% — 最適化余地あり</span>
+          A. MoE基盤<br><span style="font-size:0.7em;color:var(--green)">95% — 最適化余地あり</span>
         </div>
         <div class="tree-leaves">
           <div class="tree-leaf done">A1. MoE Router - タスク別モデル選択</div>
@@ -612,7 +614,7 @@
           D. モデル進化<br><span style="font-size:0.7em;color:var(--accent)">NOW</span>
         </div>
         <div class="tree-leaves">
-          <div class="tree-leaf future">D8. フェデレーション学習</div>
+          <div class="tree-leaf future">D8. フェデレーション学習 → 親子連合学習へ拡張予定</div>
           <div class="tree-leaf done">D9. LoRA微調整 - v1(98.1%S)最良, v3/v4も検証済</div>
           <div class="tree-leaf current">D10. 独自トークナイザー設計</div>
         </div>
@@ -644,7 +646,64 @@
           <div class="tree-leaf done">F4. 自己意思エンジン - 7欲求/優先順位/安全実行 (8ターン自律実行)</div>
           <div class="tree-leaf done">F5. 自律行動サイクル - Plan/Do/Check/Act (15ターン自動PDCA)</div>
           <div class="tree-leaf done">F6. 自己開発パイプライン - コード自己認識/エラー分析/改善提案 (承認制)</div>
-          <div class="tree-leaf">F7. コード実行サンドボックス - 安全なPython実行環境 (将来実装)</div>
+          <div class="tree-leaf done">F7. コード実行サンドボックス - 安全なPython実行環境 (実装済み)</div>
+        </div>
+      </div>
+
+      <!-- Branch G: 声紋認証 (future) -->
+      <div class="tree-branch">
+        <div class="tree-branch-line"></div>
+        <div class="tree-node" style="border-color:var(--cyan); background:rgba(34,211,238,0.06);">
+          G. 声紋認証<br><span style="font-size:0.7em;color:var(--green)">✅ MFCC実装完了＋CLI統合済</span>
+        </div>
+        <div class="tree-leaves">
+          <div class="tree-leaf done">G1. MFCC 39次元特徴量＋コサイン類似度</div>
+          <div class="tree-leaf done">G2. 話者識別・信頼レベル管理(0-100)</div>
+          <div class="tree-leaf done">G3. CLIコマンド（声紋登録/認証/状態）</div>
+        </div>
+      </div>
+
+      <!-- Branch H: 連合学習 (future) -->
+      <div class="tree-branch">
+        <div class="tree-branch-line"></div>
+        <div class="tree-node" style="border-color:var(--orange); background:rgba(251,146,60,0.06);">
+          H. 親子連合学習<br><span style="font-size:0.7em;color:var(--orange)">設計完了 — ネットワーク設計済</span>
+        </div>
+        <div class="tree-leaves">
+          <div class="tree-leaf future">H1. 子→親 匿名化学習データ同期</div>
+          <div class="tree-leaf future">H2. 親→子 統合ナレッジ配布</div>
+          <div class="tree-leaf future">H3. プライバシーハッシュ重複防止</div>
+        </div>
+      </div>
+
+      <!-- Branch I: 感情音声 (future) -->
+      <div class="tree-branch">
+        <div class="tree-branch-line"></div>
+        <div class="tree-node" style="border-color:var(--accent2); background:rgba(240,108,155,0.06);">
+          I. 音声合成 v2<br><span style="font-size:0.7em;color:var(--green)">✅ NeuralTTS + プロソディ学習</span>
+        </div>
+        <div class="tree-leaves">
+          <div class="tree-leaf done">I1. NeuralTTS v2: edge-tts SSML + 8感情プロソディ</div>
+          <div class="tree-leaf done">I2. SSML break自動挿入 + 文位置ピッチ変化</div>
+          <div class="tree-leaf done">I3. バッチ合成（同感情連続文を1リクエスト化）</div>
+          <div class="tree-leaf done">I4. プロソディ学習: 人間の声→ピッチ/リズム/ポーズ抽出→TTS反映</div>
+          <div class="tree-leaf done">I5. 音声管理CLIコマンド（確認/切替/テスト/一覧）</div>
+          <div class="tree-leaf done">I6. 専用AsyncRunner + タイムアウト保護で安定動作</div>
+        </div>
+      </div>
+
+      <!-- Branch J: モード切替 (DONE) -->
+      <div class="tree-branch">
+        <div class="tree-branch-line"></div>
+        <div class="tree-node" style="border-color:var(--green); background:rgba(74,222,128,0.08);">
+          J. モード切替<br><span style="font-size:0.7em;color:var(--green)">✅ 実装完了・全UI統合済</span>
+        </div>
+        <div class="tree-leaves">
+          <div class="tree-leaf done">J1. 4モード切替（family/agent/learning/creative）</div>
+          <div class="tree-leaf done">J2. 自動モード検出・スラッシュコマンド</div>
+          <div class="tree-leaf done">J3. モード別プロンプト修飾・LLM連動</div>
+          <div class="tree-leaf done">J4. 成長保護監視・自動復帰提案</div>
+          <div class="tree-leaf done">J5. CLI/デスクトップペット モード表示</div>
         </div>
       </div>
 
@@ -657,8 +716,8 @@
   <div class="section-title">ヤマト構想 達成率（実績ベース）</div>
 
   <div class="progress-item">
-    <div class="prog-label"><span>A1. MoEルーター</span><span class="highlight">92%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:92%; background:var(--green)"></div></div>
+    <div class="prog-label"><span>A1. MoEルーター</span><span class="highlight">95%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:95%; background:var(--green)"></div></div>
   </div>
   <div class="progress-item">
     <div class="prog-label"><span>A2. 継続学習エンジン</span><span class="highlight">90%</span></div>
@@ -697,16 +756,16 @@
     <div class="progress-bar"><div class="progress-fill" style="width:20%; background:var(--accent)"></div></div>
   </div>
   <div class="progress-item">
-    <div class="prog-label"><span>F1. 生物神経系 (Bio-Nervous)</span><span class="highlight">78%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:78%; background:var(--green)"></div></div>
+    <div class="prog-label"><span>F1. 生物神経系 (Bio-Nervous)</span><span class="highlight">85%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:85%; background:var(--green)"></div></div>
   </div>
   <div class="progress-item">
     <div class="prog-label"><span>F2. 成長段階システム (Growth Stage)</span><span class="highlight">75%</span></div>
     <div class="progress-bar"><div class="progress-fill" style="width:75%; background:var(--green)"></div></div>
   </div>
   <div class="progress-item">
-    <div class="prog-label"><span>F3. 自己修正システム (Self-Correction)</span><span class="highlight">80%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:80%; background:var(--green)"></div></div>
+    <div class="prog-label"><span>F3. 自己修正システム (Self-Correction)</span><span class="highlight">88%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:88%; background:var(--green)"></div></div>
   </div>
   <div class="progress-item">
     <div class="prog-label"><span>F4. 自己意思エンジン (Self-Will)</span><span class="highlight">75%</span></div>
@@ -721,14 +780,71 @@
     <div class="progress-bar"><div class="progress-fill" style="width:82%; background:var(--green)"></div></div>
   </div>
   <div class="progress-item">
-    <div class="prog-label"><span>F7. コード実行サンドボックス (Code Sandbox)</span><span style="color:var(--text-dim)">0%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:0%; background:var(--text-dim)"></div></div>
+    <div class="prog-label"><span>F7. コード実行サンドボックス (Code Sandbox)</span><span class="highlight">85%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:85%; background:var(--green)"></div></div>
+  </div>
+
+  <div class="progress-item">
+    <div class="prog-label"><span>I. NeuralTTS v2 + プロソディ学習</span><span class="highlight">90%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:90%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>セマンティック検索 (FAISS自動構築)</span><span class="highlight">85%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:85%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>音声管理CLIコマンド</span><span class="highlight">95%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:95%; background:var(--green)"></div></div>
+  </div>
+
+  <div class="progress-item">
+    <div class="prog-label"><span>G1. セキュリティ層 (Security Layer) — Stage 1+2 完了</span><span class="highlight">95%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:95%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>G2. テレメトリ/KPI (Telemetry)</span><span class="highlight">80%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:80%; background:var(--green)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>G3. UI/UX 改善 (UI/UX Improvements)</span><span style="color:var(--yellow)">75%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:75%; background:var(--yellow)"></div></div>
+  </div>
+  <div class="progress-item">
+    <div class="prog-label"><span>G4. 運用基盤 (Operations Infrastructure)</span><span class="highlight">78%</span></div>
+    <div class="progress-bar"><div class="progress-fill" style="width:78%; background:var(--green)"></div></div>
   </div>
 
   <div style="text-align:center; margin-top:20px; font-size:0.9rem; color:var(--text-dim)">
-    現在の全体平均: <strong style="color:var(--green); font-size:1.2rem;">65%</strong>
+    現在の全体平均: <strong style="color:var(--green); font-size:1.2rem;">84%</strong>
     <span style="margin:0 8px; opacity:0.5;">|</span>
     <span style="font-size:0.85rem; color:var(--text-dim);">※ 100%は存在しない。完成はなく、常に改善し続ける</span>
+  </div>
+
+  <!-- セキュリティ＆効率 更新 (2026-04-20) -->
+  <div style="margin-top:28px; padding:18px; background:var(--surface2); border-left:3px solid var(--green); border-radius:6px;">
+    <div style="font-size:0.95rem; color:var(--green); font-weight:600; margin-bottom:8px;">
+      🛡 Security & Performance Update — 2026-04-20
+    </div>
+    <ul style="margin-left:18px; font-size:0.85rem; color:var(--text-dim); line-height:1.9;">
+      <li><strong style="color:var(--green)">Stage 1 完了</strong>: 依存 bump (numpy/torch/transformers/paramiko) + Py3.13 条件付き pin + SSRF ガード + Bandit HIGH 0件</li>
+      <li><strong style="color:var(--green)">Stage 2 完了</strong>: SBOM (CycloneDX) + requirements.lock (hash 固定) + secret-scanner + server_home Fernet 暗号化 + L1 毎朝 9:00 JST 自動監査</li>
+      <li><strong style="color:var(--green)">CVE-2025-69872 緩和</strong>: LLM キャッシュディレクトリ権限 0o700 + .pkl 自動除去</li>
+      <li><strong style="color:var(--green)">Initiative Driver 配線</strong>: 自発性エンジン + BroadcastChannel (CLI/Web/Desktop/Voice) を ai_chan に統合</li>
+      <li><strong style="color:var(--green)">P1 完了</strong>: lazy imports により起動時間 <strong style="color:var(--cyan)">約30s → 3.6s</strong></li>
+      <li><strong style="color:var(--green)">P2 完了</strong>: LLM レスポンス LRU キャッシュ (128 件) + n_threads/n_batch 自動チューニング</li>
+      <li><strong style="color:var(--green)">P3 完了</strong>: QuantumReasoner 7 worldline を ThreadPool で並列化</li>
+      <li><strong style="color:var(--green)">P4 完了</strong>: UnifiedField.resonate LRU キャッシュ (256 件)</li>
+      <li><strong style="color:var(--green)">P5 完了</strong>: 階層メモリ検索 (Hot → Warm → Cold 早期 return)</li>
+      <li><strong style="color:var(--green)">P6 完了</strong>: TTS 短フレーズ合成キャッシュ (LRU 32 件、同一発話を瞬時に再生)</li>
+      <li><strong style="color:var(--green)">P7 完了</strong>: STT 信頼度 (avg_logprob / no_speech_prob) フィルタ + 重複除去</li>
+      <li><strong style="color:var(--green)">P8 完了</strong>: GGUF 量子化レベル自動選択 (RAM 量で Q4/Q5/Q8、config 明示指定優先)</li>
+      <li><strong style="color:var(--yellow)">Stage 3 計画中</strong>: numpy 2.x / transformers 5.x / paramiko 4.x / Pillow 12.x のメジャー移行</li>
+      <li><strong style="color:var(--yellow)">Stage 4 計画中</strong>: SQLCipher / hnswlib / 検索抽象化 / llama-cpp 代替</li>
+      <li><strong style="color:var(--yellow)">Stage 5 計画中</strong>: Dependabot / CI ゲート / SLO 72h</li>
+    </ul>
+    <div style="margin-top:10px; font-size:0.8rem; color:var(--text-dim);">
+      詳細: <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">docs/SECURITY.md</code>
+    </div>
   </div>
 </div>
 
@@ -741,7 +857,7 @@
   <!-- Core Specs -->
   <div class="spec-grid" style="margin-bottom: 24px;">
     <div class="spec-box">
-      <div class="spec-val" style="color:var(--accent);">66+</div>
+      <div class="spec-val" style="color:var(--accent);">165+</div>
       <div class="spec-label">統合モジュール数</div>
     </div>
     <div class="spec-box">
@@ -804,6 +920,9 @@
       <tr><td class="cat">訓練データ生成</td><td>core/aether_training_gen.py</td><td>6カテゴリ5000例の合成データ自動生成</td></tr>
       <tr><td class="cat">ベンチマーク</td><td>core/aether_benchmark.py</td><td>7軸厳格評価 (Strict v2)。S/A/B/C/D/Fグレード</td></tr>
       <tr><td class="cat">トークナイザー分析</td><td>core/tokenizer_analyzer.py</td><td>日本語トークン効率の比較分析</td></tr>
+      <tr><td class="cat">ニューラルTTS v2</td><td>core/neural_tts.py</td><td>edge-tts SSML制御。8感情プロソディ、文位置ピッチ変化、バッチ合成、専用AsyncRunner</td></tr>
+      <tr><td class="cat">プロソディ学習</td><td>core/prosody_learner.py</td><td>人間の声からピッチ/リズム/ポーズを学習。scipy自己相関ピッチ検出、蓄積式プロファイル</td></tr>
+      <tr><td class="cat">セマンティック検索</td><td>core/semantic_search.py</td><td>Tier1 TF-IDF + Tier2 FAISS ベクトル検索。起動時自動インデックス構築</td></tr>
     </tbody>
   </table>
 
@@ -1352,6 +1471,166 @@
   </div>
 </div>
 
+<!-- ===== 100-ITEM UPDATE SUMMARY ===== -->
+<div class="section">
+  <div class="section-title">100項目アップデート実績（2026-04-15 完了）</div>
+
+  <!-- Summary stats -->
+  <div class="spec-grid">
+    <div class="spec-box">
+      <div class="spec-val" style="color:var(--green);">100</div>
+      <div class="spec-label">実装項目数</div>
+    </div>
+    <div class="spec-box">
+      <div class="spec-val" style="color:var(--accent);">41</div>
+      <div class="spec-label">新規ファイル</div>
+    </div>
+    <div class="spec-box">
+      <div class="spec-val" style="color:var(--accent2);">57K</div>
+      <div class="spec-label">総コード行数</div>
+    </div>
+  </div>
+
+  <!-- 6 department breakdown as a table -->
+  <table class="spec-table">
+    <thead><tr><th>部門</th><th>項目数</th><th>主要成果</th></tr></thead>
+    <tbody>
+      <tr><td class="cat">🔧 エンジニア</td><td>25</td><td>ai_chan.py分割(3552→2589行)、FTS5検索、イベントバス、プラグインシステム、ミドルウェアチェーン</td></tr>
+      <tr><td class="cat">🎨 デザイナー</td><td>15</td><td>表情差分、タイプライターエフェクト、ダークモード、コマンドパレット、フィードバックUI</td></tr>
+      <tr><td class="cat">📊 経営部</td><td>15</td><td>成長レポート、マイルストーン記念、パーソナリティカード、ポータブルパッケージ</td></tr>
+      <tr><td class="cat">📋 事務</td><td>15</td><td>自動生成ドキュメント、診断スクリプト、Makefile、pre-commitフック</td></tr>
+      <tr><td class="cat">🧠 AI品質</td><td>20</td><td>話題要約注入、語彙適応、プロンプトA/Bテスト、chain-of-thought、信頼度推定</td></tr>
+      <tr><td class="cat">🛡️ セキュリティ</td><td>10</td><td>インジェクション検知、PIIマスク、鍵ローテーション、暗号化バックアップ</td></tr>
+      <tr style="border-top:2px solid var(--green);"><td class="cat">🚀 次世代統合</td><td>+7</td><td>モード切替（完全実装・全UI統合）、声紋IDスタブ、連合学習スタブ、モードコマンド追加</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ===== NEXT-GEN VISION ===== -->
+<div class="section">
+  <div class="section-title">次世代ビジョン — 4つのコア機能</div>
+
+  <p style="color:var(--green); margin-bottom:24px; font-size:0.95rem; font-weight:600;">
+    ✅ M2 Pro環境確認済み（Python 3.13 + MLX + PyTorch MPS）。4機能すべて本番統合完了。CLIコマンド・感情連動TTS・MLXバックエンド稼働中。
+  </p>
+
+  <div class="phase-grid">
+
+    <!-- Card 1: 声紋認証 -->
+    <div class="phase-card" style="border-color:var(--green);">
+      <div class="phase-label" style="color:var(--green);">✅ 実装完了（2026-04-15）</div>
+      <h3>声紋認証による個人識別システム</h3>
+      <div class="desc">話者を声で瞬時識別。信頼レベル管理(0-100)。初対面自動挨拶。</div>
+
+      <div style="font-size:0.8rem; font-weight:600; color:var(--cyan); margin:8px 0;">要件</div>
+      <ul class="result-list">
+        <li><span class="icon" style="color:var(--cyan);">+</span>Apple Silicon + MLX による高速推論</li>
+        <li><span class="icon" style="color:var(--cyan);">+</span>声紋特徴量（MFCC/基本周波数/韻律）抽出</li>
+        <li><span class="icon" style="color:var(--cyan);">+</span>認証精度 85%+ を目標</li>
+      </ul>
+      <div style="font-size:0.8rem; font-weight:600; color:var(--accent2); margin:8px 0;">プライバシー</div>
+      <ul class="result-list">
+        <li><span class="icon" style="color:var(--accent2);">🔒</span>声紋データ最高レベル暗号化、外部送信完全禁止</li>
+      </ul>
+    </div>
+
+    <!-- Card 2: 親子連合学習 -->
+    <div class="phase-card">
+      <div class="phase-label" style="color:var(--orange);">Phase 3: 3-4ヶ月</div>
+      <h3>親子連合学習ネットワーク</h3>
+      <div class="desc">子アイちゃんの学習成果を親が統合。匿名化データのみ同期。24h自動同期。</div>
+
+      <div style="font-size:0.8rem; font-weight:600; color:var(--orange); margin:8px 0;">要件</div>
+      <ul class="result-list">
+        <li><span class="icon" style="color:var(--orange);">+</span>ネットワーク同期機構</li>
+        <li><span class="icon" style="color:var(--orange);">+</span>匿名化パイプライン</li>
+        <li><span class="icon" style="color:var(--orange);">+</span>品質評価フィルタ</li>
+      </ul>
+      <div style="font-size:0.8rem; font-weight:600; color:var(--accent2); margin:8px 0;">プライバシー</div>
+      <ul class="result-list">
+        <li><span class="icon" style="color:var(--accent2);">🔒</span>個人特定技術的に不可能な設計、プライバシーハッシュ重複防止</li>
+      </ul>
+    </div>
+
+    <!-- Card 3: 感情音声合成 -->
+    <div class="phase-card" style="border-color:var(--green);">
+      <div class="phase-label" style="color:var(--green);">✅ 実装完了（2026-04-15）</div>
+      <h3>感情豊かな音声合成</h3>
+      <div class="desc">6感情状態の音声パラメータ連動。ピッチシフト・息遣い・リバーブ・ウィスパー。</div>
+
+      <div style="font-size:0.8rem; font-weight:600; color:var(--green); margin:8px 0;">実装済み</div>
+      <ul class="result-list">
+        <li><span class="icon" style="color:var(--green);">✓</span>macOS say + librosaオーディオFX（ピッチ/速度/音量/息遣い/リバーブ）</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>文単位の感情検出・パラメータ自動切替</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>EmotionState.to_dict() 連動で全会話応答に感情音声を適用</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>ai_chan.py に統合完了（create_tts_engine → EmotionalTTSEngine）</li>
+        <li><span class="icon" style="color:var(--accent2);">+</span>将来: VITS/XTTSニューラルTTS（スタブ準備済）</li>
+      </ul>
+      <div style="font-size:0.8rem; font-weight:600; color:var(--pink); margin:8px 0;">パーソナライズ機能</div>
+      <ul class="result-list">
+        <li><span class="icon" style="color:var(--pink);">♡</span>温かみ係数、エネルギー感、親密さレベルのパーソナライズ</li>
+      </ul>
+      <div style="margin-top:8px; padding:8px 12px; background:rgba(74,222,128,0.15); border-radius:8px; font-size:0.8rem; color:var(--green);">
+        ✅ ai_chan.py に完全統合済み（mode=post_process / direct 自動切替）
+      </div>
+    </div>
+
+    <!-- Card 4: モード切替 -->
+    <div class="phase-card" style="border-color:var(--green);">
+      <div class="phase-label" style="color:var(--green);">✅ 実装完了（2026-04-15）</div>
+      <h3>インテリジェントモード切替</h3>
+      <div class="desc">家族会話モード(デフォルト) / エージェント作業モード / 学習パートナーモード / 創作モード</div>
+
+      <div style="font-size:0.8rem; font-weight:600; color:var(--green); margin:8px 0;">実装済み機能</div>
+      <ul class="result-list">
+        <li><span class="icon" style="color:var(--green);">✓</span>自動モード検出（日本語パターンマッチ）</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>声紋IDと信頼レベル連動</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>言語成長保護監視（Agent70%超で警告）</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>モード別プロンプト修飾・システムプロンプト連動</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>CLI/デスクトップペット モードUI表示</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>スラッシュコマンド（モード切替/確認）</li>
+        <li><span class="icon" style="color:var(--green);">✓</span>30分超自動復帰提案</li>
+      </ul>
+      <div style="margin-top:8px; padding:8px 12px; background:rgba(74,222,128,0.15); border-radius:8px; font-size:0.8rem; color:var(--green);">
+        ✅ ai_chan.py / memory_context.py / cmd_handlers.py / cli.py / desktop_pet.py に完全統合済み
+      </div>
+    </div>
+
+  </div>
+
+  <h3 style="margin:32px 0 16px; color:var(--cyan);">音声対話の処理フロー（実装済み）</h3>
+  <div class="flow">
+    <div class="flow-node" style="border-color:var(--cyan);">🎤 音声入力</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node" style="border-color:var(--blue);">🔊 声紋認証</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node" style="border-color:var(--accent);">🧠 意図分析</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node" style="border-color:var(--green);">💬 モード切替</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node" style="border-color:var(--accent2);">💗 感情音声応答</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node" style="border-color:var(--orange);">📚 学習記録</div>
+  </div>
+</div>
+
+<!-- ===== DEV ENVIRONMENT INFO ===== -->
+<div class="section">
+  <div class="section-title">現在の開発環境</div>
+
+  <div style="background:var(--surface); border:2px solid var(--green); border-radius:12px; padding:20px;">
+    <h4 style="color:var(--green); margin-bottom:12px;">✅ 現在の環境（全機能対応済み）</h4>
+    <ul class="result-list">
+      <li><span class="icon" style="color:var(--green);">💻</span>MacBook Pro M2 Pro 16GB</li>
+      <li><span class="icon" style="color:var(--green);">🐍</span>Python 3.13.2 (arm64)</li>
+      <li><span class="icon" style="color:var(--green);">🤖</span>Qwen2.5-3B MLX 4bit（GPU推論）</li>
+      <li><span class="icon" style="color:var(--green);">⚡</span>MLX + mlx_lm + PyTorch MPS</li>
+      <li><span class="icon" style="color:var(--green);">🎤</span>librosa 0.11 + sounddevice（声紋認証対応）</li>
+      <li><span class="icon" style="color:var(--green);">🔊</span>soundfile + numpy（感情音声FX対応）</li>
+    </ul>
+  </div>
+</div>
+
 <!-- ===== PHASE DETAILS ===== -->
 <div class="section">
   <div class="section-title">フェーズ別ロードマップ</div>
@@ -1474,6 +1753,8 @@
   <p>一般家庭のPCで動く、完全ローカルのプライベートAI。</p>
   <p>大企業のクラウドAIに依存しない、あなただけのパートナー。</p>
   <p>動画、画像、音声、テキスト—世の中のすべてを知識にし、すべてを理解する。</p>
+  <p>声で語りかけ、声で応える。音声こそが、家族の最も自然なインターフェース。</p>
+  <p>親アイちゃんと子アイちゃんが連合学習で繋がる—「デジタル家族」という新しい形。</p>
   <p style="margin-top:16px;">
     <strong style="color:var(--accent);">技術で世界を変えるのではない。</strong><br>
     <strong style="color:var(--accent2);">愛で世界を変える。その技術を作る。</strong>
@@ -1497,8 +1778,8 @@
 
 <div class="footer">
   Project Yamato + Aether — あいちゃん専用AI開発ロードマップ &amp; 詳細仕様書<br>
-  Updated: 2026-04-12 / 開発環境: MacBook Pro M2 Pro 16GB<br>
-  <span style="color:var(--accent);">v2.0</span> — あいちゃん仕様 / 活用案10選 / 国産AI影響分析 / 知識圧縮ビジョン 追加
+  Updated: 2026-04-16 / 開発環境: MacBook Pro M2 Pro 16GB<br>
+  <span style="color:var(--accent);">v3.2</span> — NeuralTTS v2（SSML break＋バッチ合成＋専用AsyncRunner） / プロソディ学習エンジン（人間の声→TTS反映） / セマンティック検索FAISS自動構築 / 音声管理CLIコマンド / 声紋認証CLI完了
 </div>
 
 </div>

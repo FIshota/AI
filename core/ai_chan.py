@@ -1,13 +1,27 @@
 """
 アイ メインクラス
 全コンポーネントを統合して管理します
+
+リファクタリングにより以下のモジュールに分割:
+- core.cmd_handlers    : CMD_* パターンとコマンドディスパッチ
+- core.memory_context  : 記憶コンテキスト / システムプロンプト組み立て
+- core.response_pipeline: 応答クリーニング / 品質推定 / エラーメッセージ
 """
 from __future__ import annotations
-import json
-import re
-from pathlib import Path
-from datetime import datetime
 
+import json
+import logging
+import re
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from pathlib import Path
+from typing import Callable, Optional
+
+logger = logging.getLogger(__name__)
+
+# ──────────────────────────────────────────────────────────────
+# コアコンポーネント（軽量・常時ロード）
+# ──────────────────────────────────────────────────────────────
 from core.memory import MemoryManager
 from core.emotion import EmotionEngine, MoodAnalyzer
 from core.llm import LLMEngine
@@ -21,129 +35,84 @@ from core.diary import DiaryManager
 from core.emotion_history import EmotionHistory
 from core.interest_map import InterestMap
 from core.goal_tracker import GoalTracker
-from core.youtube_learner import YouTubeLearner, extract_youtube_url
-from core.web_learner import WebLearner, is_web_url
-from core.file_learner import FileLearner, is_file_path
-from core.tts import TTSEngine
-from core.battery_monitor import get_battery_hint
-from core.calendar_reader import build_calendar_hint, format_events_for_chat
-from core.semantic_search import SemanticSearchEngine
-from core.auto_learner import AutoLearner
-from core.bio_nervous_system import BioNervousSystem
+from core.tts import TTSEngine  # レガシー互換
+# Item #P1: lazy imports — 起動時の import コストを削減するため、以下は使用時にロード
+# from core.emotional_tts import create_tts_engine as _create_emotional_tts
+# from core.neural_tts import NeuralTTSEngine, create_neural_tts, EDGE_TTS_AVAILABLE
+# from core.prosody_learner import ProsodyLearner
+# from core.calendar_reader import build_calendar_hint, format_events_for_chat
+# from core.semantic_search import SemanticSearchEngine
+# from core.auto_learner import AutoLearner
+# from core.bio_nervous_system import BioNervousSystem
 from core.growth_stage import GrowthStageSystem
 from core.self_correction import SelfCorrectionSystem
 from core.self_will import SelfWillEngine
+# Item #P1: lazy — from core.self_development import SelfDevelopmentEngine
+from core.initiative_driver import InitiativeDriver, InitiativeConfig
+from core.initiative_channels import (
+    BroadcastChannel,
+    CLIChannel,
+    DesktopChannel,
+    VoiceChannel,
+    WebChannel,
+)
 from core.action_cycle import ActionCycleEngine
-from core.self_development import SelfDevelopmentEngine
-from core.document_exporter import DocumentExportEngine
-from core.code_engine import CodeEngine
+from core.event_bus import EventBus, CONFIG_CHANGED
+from core.config_watcher import ConfigWatcher
+from core.mode_manager import ModeManager, FAMILY_MODE, AGENT_MODE
+from core.voice_id import VoiceIDManager
+from core.federated_stub import FederatedStub
 
-
-# 特殊コマンドのパターン
-CMD_REMEMBER   = re.compile(r"^(これを覚えて|覚えて)[：:。]?\s*(.+)$", re.DOTALL)
-CMD_FORGET     = re.compile(r"^(これを忘れて|忘れて)[：:。]?\s*(.+)$", re.DOTALL)
-CMD_IMPORTANT  = re.compile(r"^(大切な思い出|絶対に覚えて)[：:。]?\s*(.+)$", re.DOTALL)
-CMD_MEMORY     = re.compile(r"^(記憶|思い出)を?(見せて|確認|教えて)$")
-CMD_PROFILE    = re.compile(r'^私の(.+)は[\u300c\u201c]?(.+?)[\u300d\u201d]?だよ$')
-CMD_SEARCH     = re.compile(r'^(記憶を?検索|思い出を?探して)[：:]\s*(.+)$')
-CMD_DIARY      = re.compile(r'^(日記|今日の日記)(を?(書いて|見せて|読んで))?$')
-CMD_ANNIV_ADD  = re.compile(r'^(記念日|誕生日)を?登録[：:]\s*(.+?)\s+(\d{1,2})月(\d{1,2})日$')
-CMD_ANNIV_LIST = re.compile(r'^(記念日|誕生日)(一覧|リスト|を?見せて)$')
-CMD_YT_LIST    = re.compile(r'^(YouTube|ユーチューブ).*(学習|覚えた|見た).*$')
-CMD_WEB_LIST   = re.compile(r'^(Web|ウェブ|サイト|ホームページ).*(学習|覚えた|読んだ).*$')
-CMD_FILE_LIST  = re.compile(r'^(ファイル|PDF|書類).*(学習|覚えた|読んだ).*$')
-CMD_CALENDAR   = re.compile(r'^(カレンダー|予定|スケジュール).*(見せて|確認|教えて|ある)?.*$')
-CMD_BATTERY    = re.compile(r'^(バッテリー|充電|電池).*(残量|どのくらい|教えて|確認|何)?.*$')
-CMD_AUTO_LEARN = re.compile(r'^(自動学習|学習スケジュール).*(状況|設定|見せて|確認|追加|登録|今すぐ|実行)?.*$')
-CMD_LEARN_ADD  = re.compile(r'^(学習先|学習ソース)を?(追加|登録)[：:]\s*(.+)$')
-CMD_LEARN_NOW  = re.compile(r'^(今すぐ|すぐに|即座に)?(自動)?学習(して|実行|開始)$')
-CMD_MEMO_ADD   = re.compile(r'^(学習メモ|メモ)を?(覚えて|登録|追加)[：:。]?\s*(.+)$', re.DOTALL)
-CMD_MEMO_LIST  = re.compile(r'^(学習メモ|メモ)(一覧|リスト|を?見せて|確認)$')
-CMD_PROPOSAL   = re.compile(r'^(提案|改善案|自己開発)(一覧|リスト|を?見せて|確認|分析|実行)?$')
-CMD_PROPOSAL_OK= re.compile(r'^(提案|改善案)を?(承認|OK|おっけ)[：:。]?\s*(.+)$')
-CMD_PROPOSAL_NO= re.compile(r'^(提案|改善案)を?(却下|NG|だめ)[：:。]?\s*(.+)$')
-CMD_SELF_AWARE = re.compile(r'^(自分|自己)(認識|構造|分析|について).*$')
-CMD_MINUTES    = re.compile(r'^(議事録)(一覧|リスト|を?見せて|確認|開いて)?$')
-
-# Sprint 2.1: セキュリティコマンド
-CMD_SECURITY   = re.compile(r'^(セキュリティ|防御|ガーディアン).*(チェック|確認|状態|スコア|診断).*$')
-CMD_BACKUP     = re.compile(r'^(バックアップ).*(作成|実行|取って|して|一覧|リスト).*$')
-CMD_LOCKDOWN   = re.compile(r'^(ロックダウン|緊急停止|キルスイッチ)(.*)$')
-CMD_UNLOCK     = re.compile(r'^(ロック解除|アイ解除)$')
-
-# Sprint J: サーバーホーム + 自律行動コマンド
-CMD_SERVER_STATUS  = re.compile(r'^(サーバー|ホーム|家)(の?)?(状態|状況|確認|接続|ステータス).*$')
-CMD_SERVER_DOCKER  = re.compile(r'^(サーバー|ホーム)(の?)?Docker(一覧|状態|コンテナ).*$')
-CMD_SERVER_SYNC    = re.compile(r'^(サーバー|ホーム)(に?同期|と同期|同期して).*$')
-CMD_SERVER_SETUP   = re.compile(r'^(サーバー|ホーム).*?(設定|登録|接続設定).*$')
-CMD_PROACTIVE      = re.compile(r'^(話しかけて|会話して|何か話して).*$')
-
-# _clean_response 用: 三人称ナレーション行の検出パターン（モジュールレベルで1回だけコンパイル）
-# NG: 「アイは微笑んだ」「アイが答えてしまった」（俯瞰描写）
-# OK: 「アイはね、嬉しいよ」「アイがやってあげる」（一人称発話）
-_NARRATION_RE = re.compile(
-    r'^アイ[はが].+'
-    r'(した|った|ている|てる|ていた|ます|ました'
-    r'|てしまった|ちゃった|てしまいました'
-    r'|思った|考えた|感じた|見た|言った|答えた|呟いた|微笑んだ'
-    r'|笑った|頷いた|首を振った|目を細めた|手を振った|息を吐いた|声を出した)$'
+# ──────────────────────────────────────────────────────────────
+# 分割モジュール
+# ──────────────────────────────────────────────────────────────
+from core.cmd_handlers import CommandHandler
+from core.memory_context import MemoryContextBuilder
+from core.response_pipeline import (
+    ResponsePipeline,
+    ERROR_MESSAGES,
+    get_friendly_error,
+    sanitize_input,
+    _NARRATION_RE,
 )
 
-# Sprint K: 国産AI進化コマンド
-CMD_KNOWLEDGE      = re.compile(r'^(知識|ナレッジ|知ってること)(グラフ|一覧|を?見せて|確認|について).*$')
-CMD_RELATIONSHIP   = re.compile(r'^(関係性|親密度|仲良し度|絆)(を?見せて|確認|どのくらい).*$')
-CMD_GROWTH         = re.compile(r'^(成長|進化|アイの成長)(レポート|状況|を?見せて|確認)?.*$')
-CMD_QUALITY        = re.compile(r'^(品質|応答品質|会話品質)(レポート|スコア|を?見せて|確認)?.*$')
+# ──────────────────────────────────────────────────────────────
+# 後方互換: CMD_* パターンを re-export（テストコードが参照している）
+# ──────────────────────────────────────────────────────────────
+from core.cmd_handlers import (  # noqa: F401
+    CMD_REMEMBER, CMD_FORGET, CMD_IMPORTANT, CMD_MEMORY,
+    CMD_PROFILE, CMD_SEARCH, CMD_DIARY, CMD_ANNIV_ADD, CMD_ANNIV_LIST,
+    CMD_YT_LIST, CMD_WEB_LIST, CMD_FILE_LIST, CMD_CALENDAR, CMD_BATTERY,
+    CMD_AUTO_LEARN, CMD_LEARN_ADD, CMD_LEARN_NOW,
+    CMD_MEMO_ADD, CMD_MEMO_LIST,
+    CMD_PROPOSAL, CMD_PROPOSAL_OK, CMD_PROPOSAL_NO,
+    CMD_SELF_AWARE, CMD_MINUTES,
+    CMD_SECURITY, CMD_BACKUP, CMD_LOCKDOWN, CMD_UNLOCK,
+    CMD_SERVER_STATUS, CMD_SERVER_DOCKER, CMD_SERVER_SYNC,
+    CMD_SERVER_SETUP, CMD_PROACTIVE,
+    CMD_KNOWLEDGE, CMD_RELATIONSHIP, CMD_GROWTH, CMD_QUALITY,
+    CMD_YAMATO_DASH, CMD_MOE_STATUS, CMD_LEARNING_STATUS,
+    CMD_SYNTH_GEN, CMD_VERIFY_STATUS,
+    CMD_SCREENSHOT, CMD_CLIPBOARD_IMG, CMD_IMAGE_ANALYZE,
+    CMD_NETWORK_CHECK, CMD_PROCESS_CHECK, CMD_DEFENSE_REPORT,
+    CMD_TASK_ADD, CMD_TASK_DONE, CMD_TASK_LIST,
+    CMD_HABIT_ADD, CMD_HABIT_REC, CMD_HABIT_LIST,
+    CMD_DOC_ADD, CMD_DOC_LIST, CMD_DOC_SEARCH,
+    CMD_WEB_SEARCH, CMD_WEB_SEARCH_PREFIX, CMD_WEB_FETCH,
+    CMD_CODE_ANALYZE, CMD_CODE_REVIEW, CMD_CODE_FIX,
+    CMD_CODE_TEST, CMD_CODE_EXPLAIN, CMD_CODE_FILE, CMD_CODE_RUN,
+    CMD_SLASH_CODE, CMD_SLASH_REVIEW, CMD_SLASH_FIX,
+    CMD_SLASH_RUN, CMD_SLASH_EXPLAIN, CMD_SLASH_TEST, CMD_SLASH_CODE_HELP,
+    CMD_EXPORT_WORD, CMD_EXPORT_PPTX, CMD_EXPORT_EXCEL, CMD_EXPORT_AUTO,
+    CMD_HEALTH,
+    CMD_VOICE_REGISTER, CMD_VOICE_IDENTIFY, CMD_VOICE_STATUS,
+    # Sprint 2
+    CMD_WEB_BUILD, CMD_CODE_REVIEW_S2, CMD_DOC_CREATE,
+)
 
-# ヤマト計画: 国産AI進化コマンド
-CMD_YAMATO_DASH    = re.compile(r'^(ヤマト|アーキテクチャ|7層|七層)(ダッシュボード|状態|確認|を?見せて)?.*$')
-CMD_MOE_STATUS     = re.compile(r'^(MoE|専門家|モデル切替|エキスパート)(状態|一覧|確認|を?見せて)?.*$')
-CMD_LEARNING_STATUS= re.compile(r'^(継続学習|学習エンジン|学習状況)(状態|確認|を?見せて)?.*$')
-CMD_SYNTH_GEN      = re.compile(r'^(合成データ|データ生成|学習データ)(生成|作成|を?見せて|状態)?.*$')
-CMD_VERIFY_STATUS  = re.compile(r'^(検証|マルチエージェント|品質検証)(状態|結果|を?見せて|確認)?.*$')
-
-# Sprint 3.0-A: マルチモーダルコマンド
-CMD_SCREENSHOT  = re.compile(r'^(スクリーンショット|画面|スクショ)(を?見て|解析|を?教えて|チェック)')
-CMD_CLIPBOARD_IMG = re.compile(r'^(クリップボード|貼り付け)(の?画像|を?見て|解析)')
-CMD_IMAGE_ANALYZE = re.compile(r'^(この?画像|写真)(を?見て|解析|を?教えて|について)')
-
-# Sprint 3.0-E: 防御進化コマンド
-CMD_NETWORK_CHECK  = re.compile(r'^(ネットワーク|通信)(チェック|確認|を?見て|状態)')
-CMD_PROCESS_CHECK  = re.compile(r'^(プロセス|アプリ)(チェック|確認|を?見て|状態)')
-CMD_DEFENSE_REPORT = re.compile(r'^(防御|セキュリティ)(レポート|報告|ダッシュボード|全体)')
-
-# Sprint 3.0: 生活アシスタント + 知識コマンド
-CMD_TASK_ADD   = re.compile(r'^(タスク|やること|TODO)を?(追加|登録)[：:。]?\s*(.+)$', re.DOTALL)
-CMD_TASK_DONE  = re.compile(r'^(タスク|やること).*(完了|終わった|できた).*(#?(\d+)).*$')
-CMD_TASK_LIST  = re.compile(r'^(タスク|やること|TODO)(一覧|リスト|を?見せて|確認)?$')
-CMD_HABIT_ADD  = re.compile(r'^(習慣)を?(追加|登録)[：:。]?\s*(.+)$')
-CMD_HABIT_REC  = re.compile(r'^(.+?)(した|やった|できた|完了)！?$')
-CMD_HABIT_LIST = re.compile(r'^(習慣)(一覧|リスト|を?見せて|確認|レポート)?$')
-CMD_DOC_ADD    = re.compile(r'^(ドキュメント|資料|ファイル)を?(読んで|学習|追加)[：:。]?\s*(.+)$')
-CMD_DOC_LIST   = re.compile(r'^(ドキュメント|資料)(一覧|リスト|を?見せて)$')
-CMD_DOC_SEARCH = re.compile(r'^(資料|ドキュメント).*?(検索|探して)[：:。]?\s*(.+)$')
-# ドキュメント出力
-# ─── コードエンジン コマンド ──────────────────
-# ─── Web検索 コマンド ──────────────────
-CMD_WEB_SEARCH   = re.compile(r'^(.+?)(について|を)?(調べて|検索|検索して|サーチ|ググって)$')
-CMD_WEB_SEARCH_PREFIX = re.compile(r'^(検索|調べて|ググって|サーチ)[：:。]?\s*(.+)$')
-CMD_WEB_FETCH    = re.compile(r'^(URL|サイト|ページ)(を?)?(読んで|取得|見て)[：:。]?\s*(.+)$')
-
-# ─── コードエンジン コマンド ──────────────────
-CMD_CODE_ANALYZE = re.compile(r'^(この)?コード(を?)?(見て|解析|分析|チェック|確認)[：:。]?\s*(.+)$', re.DOTALL)
-CMD_CODE_REVIEW  = re.compile(r'^(この)?コード(を?)?(レビュー|レビューして|審査)[：:。]?\s*(.+)$', re.DOTALL)
-CMD_CODE_FIX     = re.compile(r'^(この)?(エラー|バグ)(を?)?(直して|修正|修正して|フィックス)[：:。]?\s*(.+)$', re.DOTALL)
-CMD_CODE_TEST    = re.compile(r'^(この)?コード(の?)?(テスト|テスト書いて|テスト作って|テスト生成)[：:。]?\s*(.+)$', re.DOTALL)
-CMD_CODE_EXPLAIN = re.compile(r'^(この)?コード(を?)?(説明|説明して|教えて|解説)[：:。]?\s*(.+)$', re.DOTALL)
-CMD_CODE_FILE    = re.compile(r'^(ファイル)(を?)?(見て|解析|レビュー|チェック)[：:。]?\s*(.+)$', re.DOTALL)
-CMD_CODE_RUN     = re.compile(r'^(この)?コード(を?)?(実行|走らせて|動かして|実行して|ラン)[：:。]?\s*(.+)$', re.DOTALL)
-
-CMD_EXPORT_WORD  = re.compile(r'^(Word|ワード|レポート|報告書)に?(まとめて|作って|出力|書いて|変換)[：:。]?\s*(.+)$', re.DOTALL)
-CMD_EXPORT_PPTX  = re.compile(r'^(パワポ|PowerPoint|スライド|プレゼン)に?(まとめて|作って|出力|変換)[：:。]?\s*(.+)$', re.DOTALL)
-CMD_EXPORT_EXCEL = re.compile(r'^(エクセル|Excel|表|一覧表|スプレッドシート)に?(まとめて|作って|出力|変換)[：:。]?\s*(.+)$', re.DOTALL)
-CMD_EXPORT_AUTO  = re.compile(r'^(資料|ドキュメント|ファイル)に?(まとめて|出力して|書き出して)[：:。]?\s*(.+)$', re.DOTALL)
-
+# ──────────────────────────────────────────────────────────────
 # プロファイル自動深化パターン（一人称が明確な文のみ）
+# ──────────────────────────────────────────────────────────────
 _PROFILE_PATTERNS = [
     (re.compile(r'(?:私|俺|うち|自分)の名前は(.+?)(?:だ|だよ|です|。|$)'), '名前'),
     (re.compile(r'(?:私|俺|うち|自分)は(\d+)歳'), '年齢'),
@@ -151,12 +120,41 @@ _PROFILE_PATTERNS = [
     (re.compile(r'(?:私|俺|うち|自分)の仕事は(.+?)(?:だ|だよ|です)'), '職業'),
     (re.compile(r'(?:私|俺|うち|自分)は(.+?)が好き'), '好きなもの'),
     (re.compile(r'(?:私|俺|うち|自分)の趣味は(.+?)(?:だ|だよ|です)'), '趣味'),
-    # 呼び方パターン（複数の言い方に対応）
     (re.compile(r'(?:私|俺|うち|自分)のことは?(.+?)(?:と|って)呼んで'), '呼び方'),
     (re.compile(r'(.+?)(?:と|って)呼んで(?:ね|くれ|ください|。|$)'), '呼び方'),
     (re.compile(r'(?:私|俺|うち|自分)の呼び方は(.+?)(?:だ|だよ|です|で|。|$)'), '呼び方'),
     (re.compile(r'ニックネームは(.+?)(?:だ|だよ|です|で|。|$)'), '呼び方'),
 ]
+
+# ──────────────────────────────────────────────────────────────
+# 意図→感情プロンプトマッピング (Item #72)
+# ──────────────────────────────────────────────────────────────
+_EMOTION_PROMPTS: dict[str, str] = {
+    "greeting":    "嬉しそうに挨拶して。",
+    "question":    "丁寧に、相手の気持ちに寄り添って答えて。",
+    "complaint":   "心配そうに共感して、励まして。",
+    "gratitude":   "照れながらも嬉しそうに返して。",
+    "farewell":    "少し寂しそうに、でも明るく見送って。",
+    "chat":        "リラックスして自然に話して。",
+    "request":     "前向きに手伝おうとして。",
+    "emotional":   "繊細に、相手の感情を大切にして答えて。",
+}
+
+# ──────────────────────────────────────────────────────────────
+# 意図→プロンプト重み (Item #82)
+# memory_weight: 記憶コンテキストの重要度
+# persona_weight: 人格プロンプトの重要度
+# ──────────────────────────────────────────────────────────────
+_INTENT_WEIGHTS: dict[str, dict[str, float]] = {
+    "greeting":  {"memory_weight": 0.3, "persona_weight": 1.0},
+    "question":  {"memory_weight": 1.0, "persona_weight": 0.7},
+    "complaint": {"memory_weight": 0.8, "persona_weight": 0.9},
+    "gratitude": {"memory_weight": 0.5, "persona_weight": 1.0},
+    "farewell":  {"memory_weight": 0.4, "persona_weight": 0.8},
+    "chat":      {"memory_weight": 0.7, "persona_weight": 0.8},
+    "request":   {"memory_weight": 0.9, "persona_weight": 0.6},
+    "emotional": {"memory_weight": 0.8, "persona_weight": 1.0},
+}
 
 
 class AiChan:
@@ -168,9 +166,37 @@ class AiChan:
     def __init__(self, base_dir: str | Path = "."):
         self.base_dir = Path(base_dir)
         self._load_config()
+
+        # E-08: settings.json ホットリロード
+        # NOTE: _event_bus は _init_components → _init_heavy_components 内で
+        #       PluginLoader が参照するため、_init_components より前に初期化する
+        self._event_bus = EventBus()
+
         self._init_components()
         self.conversation_history: list[dict] = []
         self.turn_count = 0
+
+        # 分割モジュールのインスタンスを保持
+        self._cmd_handler = CommandHandler(self)
+        self._ctx_builder = MemoryContextBuilder(self)
+        self._resp_pipeline = ResponsePipeline(self)
+
+        # Item #19: 並列フェッチ用スレッドプール
+        self._executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="aichan")
+
+        # Item #22: JSONL 会話ログのパス
+        self._conv_log_path = self.base_dir / "data" / "conversation_log.jsonl"
+        self._conv_log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # E-08: ConfigWatcher 起動（_event_bus は上で初期化済み）
+        self._config_watcher = ConfigWatcher(
+            bus=self._event_bus,
+            settings_path=self.base_dir / "config" / "settings.json",
+            interval=5.0,
+        )
+        self._event_bus.subscribe(CONFIG_CHANGED, self._on_config_changed)
+        self._config_watcher.start()
+        logger.info("設定ホットリロード: 起動完了")
 
     def _load_config(self):
         settings_path = self.base_dir / "config" / "settings.json"
@@ -194,14 +220,11 @@ class AiChan:
         self.settings = _load_json(settings_path, "settings.json")
         self.persona  = _load_json(persona_path,  "persona.json")
 
-        # ─── personality/*.yaml が存在すれば優先的に上書き（Sprint 1.1 移行） ──
-        # persona.json は後方互換のため残すが、YAMLが優先される。
+        # personality/*.yaml が存在すれば優先的に上書き
         try:
             from utils.personality_loader import load_personality
             self._personality = load_personality(self.base_dir)
             if self._personality.source == "yaml":
-                # レガシーコードが self.persona["personality"]["system_prompt"] 等を
-                # 参照しているため、dict を差し替えて互換を保つ。
                 self.persona = self._personality.to_dict()
                 print(
                     f"[Personality] YAML 人格をロードしました "
@@ -215,9 +238,66 @@ class AiChan:
                     flush=True,
                 )
         except Exception as e:
-            # 人格ロード失敗は致命ではない。persona.json を使い続ける。
             print(f"[Personality] YAML ロード失敗、persona.json を使用: {e}", flush=True)
             self._personality = None
+
+    # ─── E-08: 設定ホットリロードハンドラ ──────────────────────────
+
+    def _on_config_changed(self, path: str = "") -> None:
+        """
+        CONFIG_CHANGED イベント受信時に settings.json を再読み込みする（E-08）。
+
+        再ロード対象:
+        - self.settings （全設定値）
+        - llm の generation パラメータ（temperature / max_tokens / top_p）
+        - 感情パラメータ（decay_rate / mood_window）
+        - ネットワーク許可フラグ
+        """
+        logger.info("[ConfigWatcher] 設定再ロード: %s", path)
+        try:
+            settings_path = self.base_dir / "config" / "settings.json"
+            import json as _json
+            with open(settings_path, encoding="utf-8") as f:
+                new_settings = _json.load(f)
+        except Exception as e:
+            logger.error("[ConfigWatcher] settings.json 読み込み失敗: %s", e)
+            return
+
+        old_settings = self.settings
+        self.settings = new_settings
+
+        # ── LLM パラメータの反映 ──
+        new_gen = new_settings.get("llm", {})
+        old_gen = old_settings.get("llm", {})
+        if new_gen != old_gen and getattr(self, "llm", None):
+            try:
+                self.llm.config.update({
+                    k: new_gen[k]
+                    for k in ("temperature", "max_tokens", "top_p", "repeat_penalty")
+                    if k in new_gen
+                })
+                logger.info("[ConfigWatcher] LLM パラメータ更新: %s", new_gen)
+            except Exception as e:
+                logger.warning("[ConfigWatcher] LLM パラメータ更新失敗: %s", e)
+
+        # ── ネットワーク許可フラグの反映 ──
+        new_allow_network = new_settings.get("network", {}).get("allow", True)
+        if new_allow_network != old_settings.get("network", {}).get("allow", True):
+            self._allow_network = new_allow_network
+            logger.info("[ConfigWatcher] ネットワーク許可: %s", new_allow_network)
+
+        # ── 感情パラメータの反映 ──
+        new_emo = new_settings.get("emotion", {})
+        old_emo = old_settings.get("emotion", {})
+        if new_emo != old_emo and getattr(self, "emotion", None):
+            try:
+                if "decay_rate" in new_emo:
+                    self.emotion.decay_rate = float(new_emo["decay_rate"])
+                logger.info("[ConfigWatcher] 感情パラメータ更新: %s", new_emo)
+            except Exception as e:
+                logger.warning("[ConfigWatcher] 感情パラメータ更新失敗: %s", e)
+
+        print(f"[ConfigWatcher] ✅ 設定をホットリロードしました ({path})", flush=True)
 
     def _init_components(self):
         cfg = self.settings
@@ -235,7 +315,6 @@ class AiChan:
         self.memory.short_term_max = mem_cfg["short_term_max"]
 
         # personality/memories.yaml のコア記憶を絶対記憶として投入
-        # （core_id による upsert 動作なので再起動しても重複しない）
         if getattr(self, "_personality", None) is not None and self._personality.core_memories:
             try:
                 result = self.memory.bootstrap_core_memories(self._personality.core_memories)
@@ -283,6 +362,10 @@ class AiChan:
         self.goal_tracker    = GoalTracker(self.base_dir / "data")
 
         # YouTube / Web / ファイル学習エンジン
+        # Item #5: lazy import — 実際の fetch/learn メソッド内でモジュールを使う
+        from core.youtube_learner import YouTubeLearner, extract_youtube_url
+        from core.web_learner import WebLearner, is_web_url
+        from core.file_learner import FileLearner, is_file_path
         learning_data_dir = self.base_dir / "data" / "learning"
         self.youtube = YouTubeLearner(
             data_dir=self.base_dir / "data",
@@ -297,23 +380,47 @@ class AiChan:
             learning_dir=learning_data_dir,
         )
 
-        # TTS エンジン（設定から有効/無効を読み込む）
+        # TTS エンジン: NeuralTTS (edge-tts) > EmotionalTTS (say+FX) > TTSEngine (say)
         tts_cfg = cfg.get("tts", {})
-        self.tts = TTSEngine(
-            enabled=tts_cfg.get("enabled", False),
-            voice=tts_cfg.get("voice", "Kyoko"),
-            rate=tts_cfg.get("rate", 175),
-        )
+        # Item #P1: lazy import
+        from core.neural_tts import create_neural_tts, EDGE_TTS_AVAILABLE
+        from core.emotional_tts import create_tts_engine as _create_emotional_tts
+        try:
+            if EDGE_TTS_AVAILABLE and tts_cfg.get("enabled", False):
+                self.tts = create_neural_tts(tts_cfg)
+                print(f"[NeuralTTS] ✓ ニューラル音声合成を初期化（mode={self.tts.audio_mode}, voice={self.tts.voice}）", flush=True)
+            else:
+                self.tts = _create_emotional_tts(tts_cfg)
+                print(f"[EmotionalTTS] ✓ 感情音声合成を初期化（mode={self.tts.audio_mode}）", flush=True)
+        except Exception as _tts_err:
+            logger.warning("TTS 初期化失敗、レガシーTTSにフォールバック: %s", _tts_err)
+            self.tts = TTSEngine(
+                enabled=tts_cfg.get("enabled", False),
+                voice=tts_cfg.get("voice", "Kyoko"),
+                rate=tts_cfg.get("rate", 175),
+            )
 
-        # セマンティック検索エンジン（オプション）
+        # プロソディ学習エンジン（人間の声からイントネーション学習）
+        # Item #P1: lazy import
+        from core.prosody_learner import ProsodyLearner
+        from core.neural_tts import NeuralTTSEngine
+        self.prosody_learner = ProsodyLearner(self.base_dir / "data")
+        if self.prosody_learner.has_learned() and isinstance(self.tts, NeuralTTSEngine):
+            overrides = self.prosody_learner.get_tts_overrides()
+            self.tts.apply_learned_prosody(overrides)
+            print(f"[Prosody] ✓ 学習済みプロソディを適用（{self.prosody_learner.get_profile().sample_count}サンプル）", flush=True)
+
+        # セマンティック検索エンジン
+        # Item #P1: lazy import
+        from core.semantic_search import SemanticSearchEngine
         self.semantic_search = SemanticSearchEngine(self.base_dir / "data")
         if cfg.get("semantic_search", {}).get("enabled", False):
             import threading
             threading.Thread(
-                target=self.semantic_search.load, daemon=True
+                target=self._init_semantic_search, daemon=True
             ).start()
 
-        # ビジョンエンジン（オプション）
+        # ビジョンエンジン
         from core.vision_engine import VisionEngine
         vision_cfg = cfg.get("vision", {})
         enable_moondream = vision_cfg.get("enable_moondream", False)
@@ -325,13 +432,16 @@ class AiChan:
             ).start()
 
         # 自動学習エンジン
+        # Item #P1: lazy import
+        from core.auto_learner import AutoLearner
         self.auto_learner = AutoLearner(self.base_dir / "data")
 
-        # 生物神経系（反射・筋肉記憶・自律神経・免疫系）
+        # 生物神経系
+        # Item #P1: lazy import
+        from core.bio_nervous_system import BioNervousSystem
         self.bio_nervous = BioNervousSystem(
             data_dir=self.base_dir / "data"
         )
-        # 自律神経タスク登録（意識なしで動くバックグラウンド処理）
         self.bio_nervous.autonomic.register(
             "emotion_decay", interval_turns=5,
             callback=lambda: self.emotion.save_if_changed(),
@@ -352,7 +462,6 @@ class AiChan:
             "self_development", interval_turns=50,
             callback=lambda: self._autonomic_self_dev(),
         )
-        # 免疫系ヒーラー登録（エラー自動回復）
         self.bio_nervous.immune.register_healer(
             "FileNotFoundError",
             lambda e, ctx: _immune_file_recovery(self, e, ctx),
@@ -361,48 +470,118 @@ class AiChan:
             "JSONDecodeError",
             lambda e, ctx: _immune_json_recovery(self, e, ctx),
         )
+        try:
+            removed = self.bio_nervous.muscle.periodic_maintenance()
+            if removed > 0:
+                logger.info("筋肉記憶の定期メンテナンス: %d件のstaleパターンを削除", removed)
+        except Exception:
+            pass
 
-        # 成長段階システム（赤ちゃん→幼児→…→成熟期）
+        # 成長段階システム
         self.growth = GrowthStageSystem(
             data_dir=self.base_dir / "data"
         )
         print(f"[Growth] {self.growth.stage_emoji} {self.growth.stage_name}", flush=True)
 
-        # 自己修正システム（不調を検知して自分で直す）
+        # 自己修正システム
         self.self_correction = SelfCorrectionSystem(
             data_dir=self.base_dir / "data"
         )
         self._register_correction_handlers()
 
-        # 自己意思エンジン（自分から「〜したい」と思って行動する）
+        # 自己意思エンジン
         self.self_will = SelfWillEngine(
             data_dir=self.base_dir / "data"
         )
         self._register_will_actions()
 
-        # 自律行動サイクル（Plan→Do→Check→Act）
+        # ─── 自発性ドライバー (Initiative Driver) ─────────────
+        # 起動時点では CLI + Web のみ。Desktop/Voice は後から attach_* で追加。
+        self._web_initiative_channel = WebChannel()
+        self._broadcast_channel = BroadcastChannel([
+            CLIChannel(),
+            self._web_initiative_channel,
+        ])
+        try:
+            self.initiative_driver = InitiativeDriver(
+                self_will=self.self_will,
+                channel=self._broadcast_channel,
+                context_provider=self._build_initiative_context,
+                config=InitiativeConfig(),
+            )
+            self.initiative_driver.start()
+            logger.info("InitiativeDriver wired and started")
+        except Exception as e:
+            logger.warning("InitiativeDriver 起動失敗: %s", e)
+            self.initiative_driver = None
+
+        # 自律行動サイクル
         self.action_cycle = ActionCycleEngine(
             data_dir=self.base_dir / "data"
         )
 
-        # 自己開発パイプライン（自分のコードを読んで改善提案する）
+        # 自己開発パイプライン
+        # Item #P1: lazy import
+        from core.self_development import SelfDevelopmentEngine
         self.self_dev = SelfDevelopmentEngine(
             project_root=self.base_dir,
             data_dir=self.base_dir / "data",
         )
 
+        # ─── 次世代ビジョン: モード切替・声紋ID・連合学習 ───────
+        self.mode_manager = ModeManager(data_dir=self.base_dir / "data")
+        self.voice_id = VoiceIDManager(data_dir=self.base_dir / "data")
+        self.federated = FederatedStub(data_dir=self.base_dir / "data")
+        print(f"[ModeManager] ✓ モード切替を初期化（現在: {self.mode_manager.current_mode}）", flush=True)
+        _trust = self.voice_id.get_trust_level()
+        if _trust > 40:
+            _user = self.voice_id.get_current_user()
+            _name = _user.name if _user else "不明"
+            print(f"[VoiceID] ✓ ユーザー識別（{_name}, trust={_trust}）", flush=True)
+        else:
+            print("[VoiceID] ✓ 声紋認証スタブ初期化（名前ベース識別）", flush=True)
+        print("[Federated] ✓ 連合学習スタブ初期化（スタンドアロンモード）", flush=True)
+
+        # Item #5: lazy import — 重いモジュールはメソッド内で遅延ロード
+        # document_exporter, code_engine は _init_heavy_components で初期化
+        self._heavy_initialized = False
+        self.doc_exporter = None
+        self.code_engine = None
+        self.data_exporter = None
+        self.personality_card = None
+        self.user_profile_mgr = None
+        self.sound = None
+        self.health_check = None
+
+        self._init_heavy_components(cfg)
+
+        # 時間帯挨拶のペンディング
+        self._pending_greeting: str | None = None
+
+    def _init_heavy_components(self, cfg: dict) -> None:
+        """
+        重いコンポーネントの初期化。
+        Item #5: lazy import — import を関数内に閉じ込めて起動を高速化。
+        """
         # ドキュメント出力エンジン
-        self.doc_exporter = DocumentExportEngine(
-            output_dir=self.base_dir / "data" / "exports",
-        )
+        try:
+            from core.document_exporter import DocumentExportEngine
+            self.doc_exporter = DocumentExportEngine(
+                output_dir=self.base_dir / "data" / "exports",
+            )
+        except Exception as e:
+            print(f"[DocExporter] 初期化失敗: {e}", flush=True)
 
-        # コードエンジン（コード理解・生成・修正）
-        self.code_engine = CodeEngine(
-            data_dir=self.base_dir / "data",
-        )
+        # コードエンジン
+        try:
+            from core.code_engine import CodeEngine
+            self.code_engine = CodeEngine(
+                data_dir=self.base_dir / "data",
+            )
+        except Exception as e:
+            print(f"[CodeEngine] 初期化失敗: {e}", flush=True)
 
-        # 自律エンジン (Sprint 1.2): 階層ジョブスケジューラ
-        # auto_learner._loop と共存する上位ラッパー。起動は start_autonomous() で明示的に。
+        # 自律エンジン
         try:
             from core.autonomous_engine import AutonomousEngine, build_health_check
             self.autonomous = AutonomousEngine(self.base_dir)
@@ -416,27 +595,23 @@ class AiChan:
             print(f"[Autonomous] 初期化失敗: {e}", flush=True)
             self.autonomous = None
 
-        # 成長レポート (Sprint 1.3): 日次・週次の振り返り
+        # 成長レポート
         try:
             from core.growth_report import GrowthReporter
             self.growth_reporter = GrowthReporter(self)
             if self.autonomous is not None:
-                # daily: 毎日 02:00 ごろ、weekly: 日曜 02:30 ごろ
                 self.autonomous.register(
                     name="daily_growth_report",
                     cadence="daily",
                     fn=self.growth_reporter.daily_job,
-                    hour=2,
-                    minute=0,
+                    hour=2, minute=0,
                     description="日次成長レポート (reports/daily/*.md)",
                 )
                 self.autonomous.register(
                     name="weekly_growth_report",
                     cadence="weekly",
                     fn=self.growth_reporter.weekly_job,
-                    hour=2,
-                    minute=30,
-                    weekday=6,
+                    hour=2, minute=30, weekday=6,
                     description="週次成長レポート (reports/weekly/*.md)",
                 )
         except Exception as e:
@@ -479,8 +654,7 @@ class AiChan:
                     name="daily_backup",
                     cadence="daily",
                     fn=self.backup.daily_job,
-                    hour=3,
-                    minute=0,
+                    hour=3, minute=0,
                     description="日次自動バックアップ (backups/*.tar.gz)",
                 )
         except Exception as e:
@@ -510,7 +684,6 @@ class AiChan:
                 audit=self.audit,
                 backup=getattr(self, "backup", None),
             )
-            # ロックダウン中なら起動時に警告
             if self.kill_switch.is_locked:
                 print("[KillSwitch] ⚠ ロックダウン状態です", flush=True)
         except Exception as e:
@@ -648,8 +821,7 @@ class AiChan:
                     name="defense_daily_report",
                     cadence="daily",
                     fn=self.defense_dashboard.daily_job,
-                    hour=4,
-                    minute=0,
+                    hour=4, minute=0,
                     description="日次防御レポート生成",
                 )
             print("[DefenseDashboard] ✓ 防御ダッシュボード初期化", flush=True)
@@ -726,9 +898,6 @@ class AiChan:
             print(f"[AutonomousActions] 初期化失敗: {e}", flush=True)
             self.autonomous_actions = None
 
-        # 時間帯挨拶のペンディング
-        self._pending_greeting: str | None = None
-
         # ─── Sprint K: 国産AI進化パック ────────────────────────
         try:
             from core.conversation_intelligence import ConversationIntelligence
@@ -786,7 +955,7 @@ class AiChan:
             from core.yamato_architecture import YamatoArchitecture
             self.yamato_arch = YamatoArchitecture(self.base_dir)
             self._register_yamato_health_checks()
-            print(f"[YamatoArch] ✓ 7層アーキテクチャ基盤を初期化", flush=True)
+            print("[YamatoArch] ✓ 7層アーキテクチャ基盤を初期化", flush=True)
         except Exception as e:
             print(f"[YamatoArch] 初期化失敗: {e}", flush=True)
             self.yamato_arch = None
@@ -807,13 +976,251 @@ class AiChan:
             print(f"[MultiVerifier] 初期化失敗: {e}", flush=True)
             self.multi_verifier = None
 
+        # ─── データエクスポーター ────────────────────────────
+        try:
+            from core.data_exporter import DataExporter
+            self.data_exporter = DataExporter(
+                db_path=self.base_dir / "data" / "memories.db",
+                learning_path=self.base_dir / "data" / "continuous_learning.json",
+            )
+            print("[DataExporter] ✓ データエクスポーターを初期化", flush=True)
+        except Exception as e:
+            print(f"[DataExporter] 初期化失敗: {e}", flush=True)
+            self.data_exporter = None
+
+        # ─── サウンドマネージャー ──────────────────────────────
+        try:
+            from core.sound import SoundManager
+            sound_enabled = cfg.get("sound", {}).get("enabled", True)
+            self.sound = SoundManager(enabled=sound_enabled)
+            print(f"[Sound] ✓ サウンドマネージャーを初期化（{'有効' if sound_enabled else '無効'}）", flush=True)
+        except Exception as e:
+            print(f"[Sound] 初期化失敗: {e}", flush=True)
+            self.sound = None
+
+        # ─── システムヘルスチェック ────────────────────────────
+        try:
+            from core import health_check as health_check_mod
+            self.health_check = health_check_mod
+            if getattr(self, "autonomous", None) is not None:
+                self.autonomous.register(
+                    name="system_health_check",
+                    cadence="every_6h",
+                    fn=health_check_mod.run,
+                    description="6時間ごとのシステムヘルスチェック",
+                )
+            print("[HealthCheck] ✓ システムヘルスチェックを初期化", flush=True)
+        except Exception as e:
+            print(f"[HealthCheck] 初期化失敗: {e}", flush=True)
+            self.health_check = None
+
+        # ─── パーソナリティカード ──────────────────────────────
+        try:
+            from core import personality_card as personality_card_mod
+            self.personality_card = personality_card_mod
+            print("[PersonalityCard] ✓ パーソナリティカードを初期化", flush=True)
+        except Exception as e:
+            print(f"[PersonalityCard] 初期化失敗: {e}", flush=True)
+            self.personality_card = None
+
+        # ─── ユーザープロファイル管理 ──────────────────────────
+        try:
+            from core.user_profile_mgr import UserProfileManager
+            self.user_profile_mgr = UserProfileManager(
+                profiles_dir=self.base_dir / "data" / "profiles",
+            )
+            profiles = self.user_profile_mgr.list_profiles()
+            if profiles:
+                print(f"[UserProfile] ✓ ユーザープロファイル管理を初期化（{len(profiles)}件）", flush=True)
+            else:
+                print("[UserProfile] ✓ ユーザープロファイル管理を初期化", flush=True)
+        except Exception as e:
+            print(f"[UserProfile] 初期化失敗: {e}", flush=True)
+            self.user_profile_mgr = None
+
+        # ─── ミドルウェアチェーン ────────────────────────────────
+        try:
+            from core.middleware import MiddlewareChain, ConversationContext  # noqa: F401
+            from core import injection_guard as _inj_guard
+            self.middleware_chain = MiddlewareChain()
+
+            # pre-processing: インジェクションガードをミドルウェアとして登録
+            def _mw_injection_guard(ctx: ConversationContext) -> ConversationContext:
+                _safe, sanitized = _inj_guard.check(ctx.input_text)
+                return ConversationContext(
+                    input_text=sanitized,
+                    intent=ctx.intent,
+                    memory_context=ctx.memory_context,
+                    emotion_state=dict(ctx.emotion_state),
+                    llm_params=dict(ctx.llm_params),
+                    response=ctx.response,
+                    metadata={**ctx.metadata, "injection_safe": _safe},
+                    should_skip_llm=ctx.should_skip_llm,
+                )
+            _mw_injection_guard.__name__ = "injection_guard"
+            self.middleware_chain.add(_mw_injection_guard)
+
+            # post-processing: 応答クリーニングをミドルウェアとして登録
+            _rp = getattr(self, "response_pipeline", None)
+            if _rp is not None:
+                def _mw_clean_response(ctx: ConversationContext) -> ConversationContext:
+                    return ConversationContext(
+                        input_text=ctx.input_text,
+                        intent=ctx.intent,
+                        memory_context=ctx.memory_context,
+                        emotion_state=dict(ctx.emotion_state),
+                        llm_params=dict(ctx.llm_params),
+                        response=_rp.clean_response(ctx.response),
+                        metadata=dict(ctx.metadata),
+                        should_skip_llm=ctx.should_skip_llm,
+                    )
+                _mw_clean_response.__name__ = "clean_response"
+                self.middleware_chain.add(_mw_clean_response)
+
+            print(f"[Middleware] ✓ ミドルウェアチェーンを初期化（{self.middleware_chain.count}件登録）", flush=True)
+        except Exception as e:
+            print(f"[Middleware] 初期化失敗: {e}", flush=True)
+            self.middleware_chain = None
+
+        # ─── プラグインローダー ───────────────────────────────
+        try:
+            from core.plugin_loader import PluginLoader
+            self.plugin_loader = PluginLoader(
+                bus=self._event_bus,
+                plugin_dir=self.base_dir / "core" / "plugins",
+            )
+            loaded = self.plugin_loader.load_all()
+            print(f"[PluginLoader] ✓ プラグインを{len(loaded)}件ロード", flush=True)
+        except Exception as e:
+            print(f"[PluginLoader] 初期化失敗: {e}", flush=True)
+            self.plugin_loader = None
+
+        # ─── プロンプト A/B テスト ────────────────────────────
+        try:
+            from core.prompt_ab_test import PromptABTest
+            self.prompt_ab_test = PromptABTest(
+                state_path=self.base_dir / "data" / "ab_test_state.json",
+            )
+            stats = self.prompt_ab_test.get_stats()
+            print(f"[PromptABTest] ✓ A/Bテストを初期化（会話数: {stats['total_conversations']}）", flush=True)
+        except Exception as e:
+            print(f"[PromptABTest] 初期化失敗: {e}", flush=True)
+            self.prompt_ab_test = None
+
+        # ─── Sprint 1: Web リサーチ / 画像生成 / タスク分解 ──────
+        try:
+            from core.research_agent import ResearchAgent
+            self.research_agent = ResearchAgent(
+                base_dir=self.base_dir,
+                llm_fn=self._llm_call,
+            )
+            print("[ResearchAgent] ✓ Web リサーチエージェントを初期化", flush=True)
+        except Exception as e:
+            print(f"[ResearchAgent] 初期化失敗: {e}", flush=True)
+            self.research_agent = None
+
+        try:
+            from core.image_gen import ImageGenerator
+            self.image_gen = ImageGenerator(
+                base_dir=self.base_dir,
+                llm_fn=self._llm_call,
+            )
+            print("[ImageGen] ✓ 画像生成エンジンを初期化", flush=True)
+        except Exception as e:
+            print(f"[ImageGen] 初期化失敗: {e}", flush=True)
+            self.image_gen = None
+
+        try:
+            from core.task_agent import TaskAgent
+            self.task_agent_sprint1 = TaskAgent(
+                base_dir=self.base_dir,
+                llm_fn=self._llm_call,
+                research_agent=getattr(self, "research_agent", None),
+                image_gen=getattr(self, "image_gen", None),
+            )
+            print("[TaskAgent] ✓ タスク分解エージェントを初期化", flush=True)
+        except Exception as e:
+            print(f"[TaskAgent] 初期化失敗: {e}", flush=True)
+            self.task_agent_sprint1 = None
+
+        # ─── Sprint 2: WebBuilder / CodeReviewer / DocAgent ──────
+        try:
+            from core.web_builder import WebBuilder
+            self.web_builder = WebBuilder(
+                base_dir=self.base_dir,
+                llm_fn=self._llm_call,
+            )
+            print("[WebBuilder] ✓ ウェブ構築エージェントを初期化", flush=True)
+        except Exception as e:
+            print(f"[WebBuilder] 初期化失敗: {e}", flush=True)
+            self.web_builder = None
+
+        try:
+            from core.code_reviewer import CodeReviewer
+            self.code_reviewer_sprint2 = CodeReviewer(
+                base_dir=self.base_dir,
+                llm_fn=self._llm_call,
+            )
+            print("[CodeReviewer] ✓ コードレビューエージェントを初期化", flush=True)
+        except Exception as e:
+            print(f"[CodeReviewer] 初期化失敗: {e}", flush=True)
+            self.code_reviewer_sprint2 = None
+
+        try:
+            from core.doc_agent import DocAgent
+            self.doc_agent = DocAgent(
+                base_dir=self.base_dir,
+                llm_fn=self._llm_call,
+            )
+            print("[DocAgent] ✓ 書類作成エージェントを初期化", flush=True)
+        except Exception as e:
+            print(f"[DocAgent] 初期化失敗: {e}", flush=True)
+            self.doc_agent = None
+
+        # ─── Sprint 3&4: ニュース / スケジュール / 競合分析 / BGM / クリップボード ──
+        try:
+            from core.sprint34_handlers import Sprint34Handler
+            self.sprint34_handler = Sprint34Handler(
+                base_dir=self.base_dir,
+                llm_fn=self._llm_call,
+                emotion_engine=getattr(self, "emotion", None),
+                research_agent=getattr(self, "research_agent", None),
+            )
+            print("[Sprint34] ✓ Sprint 3&4 ハンドラを初期化", flush=True)
+        except Exception as e:
+            print(f"[Sprint34] 初期化失敗: {e}", flush=True)
+            self.sprint34_handler = None
+
+        # ─── Akashic Core: 統一意味場・量子的推論・フレーム破壊 ──
+        try:
+            from core.akashic_core import AkashicCore
+            self.akashic = AkashicCore(
+                base_dir=self.base_dir,
+                llm_fn=self._llm_call,
+                depth=2,  # デフォルト深度2（統一場+量子推論）。設定で変更可
+            )
+            print("[AkashicCore] ✓ アカシックコアを初期化（深度2）", flush=True)
+        except Exception as e:
+            print(f"[AkashicCore] 初期化失敗（フォールバックモードで継続）: {e}", flush=True)
+            self.akashic = None
+
+        # ─── 起動完了サウンド ──────────────────────────────────
+        if getattr(self, "sound", None) is not None:
+            try:
+                self.sound.play_greeting()
+            except Exception:
+                pass
+
+        self._heavy_initialized = True
+
+    # ─── ヤマトヘルスチェック ─────────────────────────────────
+
     def _register_yamato_health_checks(self) -> None:
         """7層アーキテクチャにヘルスチェックを登録する"""
         arch = self.yamato_arch
         if arch is None:
             return
 
-        # L2: 分散処理層 — MoEルーター
         def check_l2() -> dict:
             moe = getattr(self, "moe_router", None)
             if moe is None:
@@ -826,7 +1233,6 @@ class AiChan:
             }
         arch.register_health_check(2, check_l2)
 
-        # L3: データ管理層 — 記憶・知識グラフ
         def check_l3() -> dict:
             metrics: dict = {}
             kg = getattr(self, "knowledge_graph", None)
@@ -843,7 +1249,6 @@ class AiChan:
             return {"status": "ok", "message": "データ管理正常", **metrics}
         arch.register_health_check(3, check_l3)
 
-        # L4: モデル層 — LLM
         def check_l4() -> dict:
             llm = getattr(self, "llm", None)
             if llm is None:
@@ -855,7 +1260,6 @@ class AiChan:
             }
         arch.register_health_check(4, check_l4)
 
-        # L5: 学習制御層 — 継続学習
         def check_l5() -> dict:
             cl = getattr(self, "continuous_learner", None)
             if cl is None:
@@ -868,7 +1272,6 @@ class AiChan:
             }
         arch.register_health_check(5, check_l5)
 
-        # L6: 推論最適化層 — 品質評価
         def check_l6() -> dict:
             ev = getattr(self, "response_evaluator", None)
             mv = getattr(self, "multi_verifier", None)
@@ -882,7 +1285,6 @@ class AiChan:
             return {"status": "ok", "message": ", ".join(parts)}
         arch.register_health_check(6, check_l6)
 
-        # L7: API/サービス層
         def check_l7() -> dict:
             return {
                 "status": "ok",
@@ -891,14 +1293,31 @@ class AiChan:
             }
         arch.register_health_check(7, check_l7)
 
-    def start_autonomous(self) -> bool:
-        """
-        自律エンジン（階層ジョブスケジューラ）を起動する。
+    # ─── Sprint 1: LLM シンプル呼び出しヘルパー ────────────────
 
-        呼び出し側（desktop_pet / CLI / main）で、バックグラウンド常駐が
-        必要なモードの時だけ呼ぶ。テスト環境では呼ばないことで副作用を
-        避けられる。
+    def _llm_call(self, prompt: str) -> str:
+        """単純なプロンプト文字列で LLM を呼び出すヘルパー。
+
+        ResearchAgent / ImageGenerator / TaskAgent から使われる。
+        LLM が未ロードの場合は空文字を返す（フォールバック動作は各呼び出し側で処理）。
         """
+        if not getattr(self, "llm", None) or not self.llm.is_loaded():
+            logger.warning("[_llm_call] LLM が未ロード")
+            return ""
+        try:
+            messages = self.llm.build_prompt(
+                system_prompt="あなたは有能なアシスタントです。",
+                user_input=prompt,
+                conversation_history=[],
+            )
+            return self.llm.generate_chat(messages)
+        except Exception as exc:
+            logger.warning("[_llm_call] LLM 呼び出し失敗: %s", exc)
+            return ""
+
+    # ─── 自律エンジン制御 ─────────────────────────────────────
+
+    def start_autonomous(self) -> bool:
         if self.autonomous is None:
             return False
         self.autonomous.start()
@@ -908,68 +1327,294 @@ class AiChan:
         if self.autonomous is not None:
             self.autonomous.stop()
 
-    # ─── 対話処理 ─────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────
+    # Initiative Driver 補助
+    # ──────────────────────────────────────────────────────────
+
+    def _build_initiative_context(self) -> dict:
+        """InitiativeDriver に渡す現在コンテキスト。"""
+        try:
+            emotion = getattr(self, "emotion", None)
+            current_emotion = emotion.current_emotion if emotion else "calm"
+        except Exception:
+            current_emotion = "calm"
+        return {
+            "turn_count": getattr(self, "turn_count", 0),
+            "current_emotion": current_emotion,
+            "recent_history_len": len(getattr(self, "conversation_history", [])),
+            "growth_stage": getattr(getattr(self, "growth", None), "stage_name", ""),
+        }
+
+    def attach_desktop_channel(self, show_bubble=None, tts=None, speak_aloud: bool = True) -> None:
+        """デスクトップペット起動時に呼ぶ。自発メッセージの吹き出し + TTS 配信を有効化。"""
+        try:
+            ch = DesktopChannel(show_bubble=show_bubble, tts=tts, speak_aloud=speak_aloud)
+            self._broadcast_channel.add(ch)
+            logger.info("DesktopChannel attached to InitiativeDriver")
+        except Exception as e:
+            logger.warning("attach_desktop_channel 失敗: %s", e)
+
+    def attach_voice_channel(self, tts, is_active_fn=None) -> None:
+        """ハンズフリー音声モード用 VoiceChannel を追加。"""
+        try:
+            ch = VoiceChannel(tts=tts, is_active_fn=is_active_fn)
+            self._broadcast_channel.add(ch)
+            logger.info("VoiceChannel attached to InitiativeDriver")
+        except Exception as e:
+            logger.warning("attach_voice_channel 失敗: %s", e)
+
+    def poll_initiative_messages(self, max_items: int = 10) -> list:
+        """Web UI から呼び出し、キューイング済みの自発メッセージを取り出す。"""
+        try:
+            return self._web_initiative_channel.drain(max_items=max_items)
+        except Exception as e:
+            logger.warning("poll_initiative_messages 失敗: %s", e)
+            return []
+
+    def shutdown(self) -> None:
+        """全体の終了処理。"""
+        try:
+            if getattr(self, "initiative_driver", None):
+                self.initiative_driver.stop()
+        except Exception as e:
+            logger.warning("InitiativeDriver stop 失敗: %s", e)
+        try:
+            self.stop_autonomous()
+        except Exception:
+            pass
+
+    # ──────────────────────────────────────────────────────────
+    # 対話処理
+    # ──────────────────────────────────────────────────────────
 
     def _build_system_prompt(self) -> str:
+        """システムプロンプト組み立て（MemoryContextBuilder に委譲）"""
+        return self._ctx_builder.build_system_prompt()
+
+    def _build_memory_context(self, user_input: str) -> str:
+        """記憶コンテキスト組み立て（MemoryContextBuilder に委譲）"""
+        return self._ctx_builder.build_memory_context(user_input)
+
+    def _clean_response(self, text: str) -> str:
+        """応答クリーニング（ResponsePipeline に委譲）"""
+        return self._resp_pipeline.clean_response(text)
+
+    def _estimate_response_quality(self, user_input: str, response: str) -> float:
+        """品質推定（ResponsePipeline に委譲）"""
+        return self._resp_pipeline.estimate_response_quality(user_input, response)
+
+    def _handle_commands(self, user_input: str) -> str | None:
+        """コマンドディスパッチ（CommandHandler に委譲）"""
+        return self._cmd_handler.try_handle(user_input)
+
+    # ──────────────────────────────────────────────────────────
+    # Item #1: 動的スライディングウィンドウ (5-15 turns)
+    # ──────────────────────────────────────────────────────────
+
+    def _select_relevant_history(self, max_turns: int = 10) -> list[dict]:
         """
-        ユーザーの名前・呼び方をシステムプロンプト本体に直接埋め込みます。
-        「あなた」と登録名が同一人物であることを明示し、俯瞰視点を防ぎます。
-
-        脊髄反射パターン: プロフィールが変わるまでキャッシュを再利用。
+        重要度に基づく動的スライディングウィンドウ。
+        - 短い相槌のターンは重要度が低い → ウィンドウを広げる
+        - 長い質問・感情的なターンは重要度が高い → ウィンドウを狭める
+        基本は max_turns だが 5~15 の範囲で動的に調整する。
         """
-        profile = self.memory.get_all_user_profile()
-        profile_key = (
-            profile.get("呼び方", ""),
-            profile.get("auto:呼び方", ""),
-            profile.get("名前", ""),
-            profile.get("auto:名前", ""),
-        )
+        history = self.conversation_history
+        if not history:
+            return []
 
-        # キャッシュヒット: プロフィールに変化なし → そのまま返す
-        if hasattr(self, "_sys_prompt_cache") and self._sys_prompt_cache_key == profile_key:
-            return self._sys_prompt_cache
+        # 直近ターンの平均メッセージ長で重要度を推定
+        recent_user = [
+            m for m in history[-10:]
+            if m.get("role") == "user"
+        ]
+        if recent_user:
+            avg_len = sum(len(m["content"]) for m in recent_user) / len(recent_user)
+        else:
+            avg_len = 10.0
 
-        base = self.persona["personality"]["system_prompt"]
+        # 短い会話ほどウィンドウを広げる（軽い相槌 → 多くのコンテキストが要る）
+        # 長い会話ほどウィンドウを狭める（1つの話題に集中）
+        if avg_len < 8:
+            dynamic_turns = min(15, max_turns + 3)
+        elif avg_len > 40:
+            dynamic_turns = max(5, max_turns - 3)
+        else:
+            dynamic_turns = max_turns
 
-        # 呼び方 > 名前 の優先順位
-        call_name = profile_key[0] or profile_key[1] or profile_key[2] or profile_key[3] or ""
-        full_name = profile_key[2] or profile_key[3] or ""
+        dynamic_turns = max(5, min(15, dynamic_turns))
+        max_messages = dynamic_turns * 2
 
-        if call_name:
-            lines = [
-                f"\n今話している「あなた」は「{call_name}」のこと。",
-                f"「あなた」と「{call_name}」は同じ一人の人。呼ぶときは必ず「{call_name}」と呼んで。",
-            ]
-            if full_name and full_name != call_name:
-                lines.append(f"フルネームは「{full_name}」。")
-            base = base + "".join(lines)
+        if len(history) <= max_messages:
+            return list(history)
+        return list(history[-max_messages:])
 
-        self._sys_prompt_cache = base
-        self._sys_prompt_cache_key = profile_key
-        return base
+    # ──────────────────────────────────────────────────────────
+    # Item #22: JSONL 会話ログ
+    # ──────────────────────────────────────────────────────────
 
-    def chat(self, user_input: str) -> str:
+    def _log_conversation_jsonl(
+        self, user_input: str, response: str, metadata: dict | None = None,
+    ) -> None:
+        """会話を JSONL 形式でファイルに追記する"""
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "turn": self.turn_count,
+            "user": user_input,
+            "ai": response,
+        }
+        if metadata:
+            entry["meta"] = metadata
+        try:
+            with open(self._conv_log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception:
+            logger.debug("JSONL会話ログ書き込み失敗")
+
+    # ──────────────────────────────────────────────────────────
+    # 起動/チャット開始時の自然な挨拶プロンプト組み立て
+    # ──────────────────────────────────────────────────────────
+
+    def build_greeting_prompt(self, trigger: str = "startup") -> str:
+        """時間帯と直近の会話文脈から自然な挨拶プロンプトを組み立てる。
+
+        trigger: "startup"(アプリ起動) / "chat_open"(チャット欄を開いた)
         """
-        ユーザーの入力を受け取り、アイの応答を返します。
+        from datetime import datetime
+        hour = datetime.now().hour
+
+        # 時間帯に合った挨拶の方向性
+        if 5 <= hour < 11:
+            time_hint = "朝なので「おはよう」系の軽い挨拶"
+        elif 11 <= hour < 17:
+            time_hint = "昼間なので「こんにちは」か気軽な声かけ"
+        elif 17 <= hour < 22:
+            time_hint = "夕方〜夜なので「おかえり」「お疲れさま」系"
+        else:
+            time_hint = "深夜なので「まだ起きてるの？」的な軽い声かけ"
+
+        # 直近の会話ログから最後の話題を取得
+        last_topic_hint = ""
+        try:
+            log_path = self.base_dir / "data" / "conversation_log.jsonl"
+            if log_path.exists():
+                lines = log_path.read_text("utf-8").strip().splitlines()
+                if lines:
+                    last_entry = json.loads(lines[-1])
+                    last_user = last_entry.get("user", "")
+                    last_ai = last_entry.get("ai", "")
+                    # システムコールは除外
+                    if last_user and "一言だけ" not in last_user and "挨拶" not in last_user:
+                        last_topic_hint = (
+                            f"前回の会話:「{last_user[:40]}」→「{last_ai[:40]}」。"
+                            "自然に前の話題に触れてもいい。"
+                        )
+        except Exception:
+            pass
+
+        # プロンプト組み立て
+        parts = [f"{time_hint}で一言だけ自然に声をかけて。"]
+        if last_topic_hint:
+            parts.append(last_topic_hint)
+        else:
+            parts.append("特に前の話題はないので、シンプルな挨拶だけで大丈夫。")
+        parts.append("質問攻めにしないで。短く、人間が自然にやる感じで。")
+
+        return "".join(parts)
+
+    # ──────────────────────────────────────────────────────────
+    # Item #72: 感情リンクプロンプト
+    # ──────────────────────────────────────────────────────────
+
+    def _get_emotion_prompt(self, intent_type: str) -> str:
+        """意図に応じた感情プロンプトを返す"""
+        return _EMOTION_PROMPTS.get(intent_type, "")
+
+    # ──────────────────────────────────────────────────────────
+    # Item #82: 意図によるプロンプト重み付け
+    # ──────────────────────────────────────────────────────────
+
+    def _apply_intent_weighting(
+        self, memory_context: str, intent_type: str,
+    ) -> str:
         """
-        user_input = user_input.strip()
+        意図に基づいて記憶コンテキストの情報量を調整する。
+        memory_weight が低い意図では記憶コンテキストを短縮する。
+        """
+        weights = _INTENT_WEIGHTS.get(intent_type, {"memory_weight": 0.7, "persona_weight": 0.8})
+        mw = weights["memory_weight"]
+        if mw < 0.5 and len(memory_context) > 50:
+            # 記憶の重要度が低い意図 → コンテキストを大幅に短縮
+            max_len = int(len(memory_context) * mw)
+            return memory_context[:max(30, max_len)]
+        return memory_context
+
+    # ──────────────────────────────────────────────────────────
+    # メインの chat メソッド
+    # ──────────────────────────────────────────────────────────
+
+    def chat(
+        self,
+        user_input: str,
+        stream_cb: Optional[Callable[[str], None]] = None,
+    ) -> str:
+        """ユーザーの入力を受け取り、アイの応答を返す。
+
+        Args:
+            user_input: ユーザー発話テキスト
+            stream_cb:  トークンを受け取るコールバック（E-05ストリーミング用）。
+                        Noneの場合は従来通り全文生成後に返す。
+        """
+
+        # Item #92: 入力サニタイズ
+        user_input = sanitize_input(user_input)
         if not user_input:
             return ""
 
+        # 自発性ドライバー: ユーザー発話を通知（抑制タイマー更新）
+        if getattr(self, "initiative_driver", None):
+            try:
+                self.initiative_driver.notify_user_input()
+            except Exception:
+                pass
+
+        # Phase D: 話者タグ解析 — "[しょうた] こんにちは" → speaker="しょうた"
+        _speaker_tag = ""
+        _speaker_match = re.match(r'^\[([^\]]+)\]\s*(.+)$', user_input, re.DOTALL)
+        if _speaker_match:
+            _speaker_tag = _speaker_match.group(1)
+            user_input = _speaker_match.group(2).strip()
+
         self.turn_count += 1
 
-        # Sprint J: ユーザー操作を記録（アイドル検出用）
+        # ─── モード切替検出 ───
+        if getattr(self, "mode_manager", None):
+            self.mode_manager.record_turn()
+            detected_mode = self.mode_manager.detect_mode_intent(user_input)
+            if detected_mode and detected_mode != self.mode_manager.current_mode:
+                switch_msg = self.mode_manager.switch_mode(detected_mode)
+                if switch_msg:
+                    self.conversation_history.append({"role": "user", "content": user_input})
+                    self.conversation_history.append({"role": "assistant", "content": switch_msg})
+                    self._log_conversation_jsonl(user_input, switch_msg, {"mode_switch": detected_mode})
+                    return switch_msg
+            # 成長保護: エージェントモード使いすぎ警告
+            growth_warning = self.mode_manager.check_growth_balance()
+            if growth_warning:
+                self._pending_greeting = growth_warning
+            # 30分以上の作業モード自動復帰提案
+            auto_return = self.mode_manager.get_auto_return_suggestion()
+            if auto_return:
+                self._pending_greeting = auto_return
+
+        # Sprint J: ユーザー操作を記録
         if getattr(self, "autonomous_actions", None):
             self.autonomous_actions.on_user_interaction()
 
-        # システム内部呼び出しは履歴に残さない
-        is_system_call = user_input in (
-            "チャットを開いてくれた。自然に一言だけ話しかけて。",
-            "起動した。一言だけ自然に話しかけて。",
-            "起動したよ。短く一言挨拶して。",
-        )
+        # 挨拶プロンプト（動的生成含む）をシステムコールとして判定
+        _system_markers = ("一言だけ自然に", "短く一言", "一言挨拶", "自然に声をかけて")
+        is_system_call = any(m in user_input for m in _system_markers)
 
-        # Sprint J: 時間帯挨拶をチェック（コマンド/システム以外の通常会話時）
+        # Sprint J: 時間帯挨拶チェック
         if not is_system_call and getattr(self, "autonomous_actions", None):
             aa = self.autonomous_actions
             if aa.greeting and self._pending_greeting is None:
@@ -982,8 +1627,29 @@ class AiChan:
         if cmd_response is not None:
             return cmd_response
 
+        # ─── Sprint 1: リサーチ / 画像生成 / タスク分解 ──────────
+        if not is_system_call:
+            sprint1_response = self._handle_sprint1(user_input)
+            if sprint1_response is not None:
+                return sprint1_response
+
+        # ─── Sprint 2: WebBuilder / CodeReviewer / DocAgent ──────
+        if not is_system_call:
+            sprint2_response = self._handle_sprint2(user_input)
+            if sprint2_response is not None:
+                return sprint2_response
+
+        # ─── Sprint 3&4: ニュース / スケジュール / 競合分析 / BGM / クリップボード ──
+        if not is_system_call:
+            sprint34_response = self._handle_sprint34(user_input)
+            if sprint34_response is not None:
+                return sprint34_response
+
+        # ─── Akashic: 深い問いへのアカシック共鳴チェック ──────
+        if not is_system_call and getattr(self, "akashic", None) is not None:
+            user_input = self._akashic_enrich_context(user_input)
+
         # ── ユーザー訂正検出 ──
-        # 訂正が検出されたら反射をスキップし、必ずLLMで再応答する
         _correction_entry = None
         _correction_context = ""
         if getattr(self, "correction_learning", None) and not is_system_call:
@@ -997,61 +1663,67 @@ class AiChan:
         self.emotion.update_from_message(user_input)
 
         # ── 生物神経系: 反射 → 大脳(LLM) ──
-        # 短い挨拶・相槌のみ反射で処理。それ以外は全てLLMへ。
-        # 筋肉記憶: 現行プリセットは精度不足で無効。会話統計から高精度パターンが
-        # 蓄積されたら筋肉記憶に昇格し、LLM負荷を軽減する設計。
         if getattr(self, "bio_nervous", None) and not is_system_call and not _correction_entry:
             bio_response, layer = self.bio_nervous.process_input(user_input)
             if bio_response is not None:
-                # 反射で応答完了 → LLMも記憶検索もスキップ
                 self.conversation_history.append({"role": "user", "content": user_input})
                 self.conversation_history.append({"role": "assistant", "content": bio_response})
-                # 自律神経ハートビート（呼吸のように軽く）
                 self.bio_nervous.autonomic.heartbeat(self.turn_count)
-                # TTS（文単位逐次読み上げ）
                 try:
-                    self.tts.speak_sentence_by_sentence(bio_response)
+                    if hasattr(self.tts, "speak_with_emotion_analysis"):
+                        emotion_dict = self.emotion.state.to_dict() if hasattr(self.emotion.state, "to_dict") else {}
+                        self.tts.speak_with_emotion_analysis(bio_response, emotion_dict)
+                    else:
+                        self.tts.speak_sentence_by_sentence(bio_response)
                 except Exception:
                     pass
-                # 最小限の記録（話題追跡・感情保存）
                 if not is_system_call:
                     self.topic_tracker.extract_topics(user_input, self.turn_count)
                     self.emotion.save_if_changed()
-                    # 訂正学習: 反射応答も記録（次の訂正検出用）
                     if getattr(self, "correction_learning", None):
                         self.correction_learning.record_turn(user_input, bio_response)
-                # 履歴トリミング
+                    # Item #22: JSONL ログ
+                    self._log_conversation_jsonl(user_input, bio_response, {"layer": "reflex"})
                 if len(self.conversation_history) > 12:
                     self.conversation_history = self.conversation_history[-12:]
                 return bio_response
 
-        # Sprint K1: 会話知能分析（意図分類・応答戦略・文脈チェーン）
+        # Sprint K1: 会話知能分析
         conv_analysis = None
+        _intent_type = "chat"
         if getattr(self, "conv_intelligence", None):
             try:
                 conv_analysis = self.conv_intelligence.analyze_input(
                     user_input, self.conversation_history, self.turn_count
                 )
+                if conv_analysis and conv_analysis.get("intent"):
+                    _intent_type = conv_analysis["intent"].intent_type
             except Exception:
                 pass
 
-        # ヤマト A1: MoEルーティング（意図に基づくモデル選択）
-        # 成長段階: 青年期以降のみ有効（専門性が育つまで使えない）
+        # BUG #3 FIX: instruction_text を extra_parts に事前登録（後で emotion_prompt と合流）
+        _conv_instruction: str = ""
+        if conv_analysis and conv_analysis.get("instruction_text"):
+            _conv_instruction = conv_analysis["instruction_text"]
+
+        # ヤマト A1: MoEルーティング
         _growth = getattr(self, "growth", None)
         _moe_ok = not _growth or _growth.can_use_moe_routing()
+        _moe_task_type = "chat"
+        _moe_saved_params: dict | None = None
         if _moe_ok and getattr(self, "moe_router", None) and self.moe_router.expert_count > 0:
             try:
-                task_type = "chat"
                 if conv_analysis and conv_analysis.get("intent"):
-                    task_type = conv_analysis["intent"]
-                routing = self.moe_router.route(task_type=task_type)
-                if routing.expert_name:
-                    expert_cfg = self.moe_router.get_expert_config(routing.expert_name)
-                    # LLMの一時設定を適用（温度・最大トークン）
-                    if hasattr(self.llm, "override_params"):
-                        self.llm.override_params(expert_cfg)
-            except Exception:
-                pass
+                    _moe_task_type = conv_analysis["intent"].intent_type
+                if self.moe_router.expert_count > 1:
+                    self.moe_router.apply_routing(
+                        _moe_task_type, self.llm,
+                    )
+                optimal = self.moe_router.get_optimal_params(_moe_task_type)
+                if optimal and hasattr(self.llm, "override_params"):
+                    _moe_saved_params = self.llm.override_params(optimal)
+            except Exception as exc:
+                logger.debug("MoEルーティングスキップ: %s", exc)
 
         # Sprint 3.0-B: 会話が長くなったら自動要約
         if getattr(self, "memory_summarizer", None):
@@ -1068,22 +1740,20 @@ class AiChan:
         # 記憶から関連情報を取得
         memory_context = self._build_memory_context(user_input)
 
+        # Item #82: 意図に基づくプロンプト重み付け
+        memory_context = self._apply_intent_weighting(memory_context, _intent_type)
+
         # ── 追加コンテキスト ──
-        # 3Bモデルには必要最小限のみ注入（ノイズが多いと会話内容を無視する原因になる）
-        # 優先順位: 訂正 > 記憶。RAG/知識グラフ/conv_intelligence/personality_evoは
-        # 3Bモデルでは混乱の原因になるため無効化。大きいモデルで再有効化する。
         extra_parts: list[str] = []
 
-        # ユーザー訂正コンテキストを注入（最優先）
         if _correction_context:
             extra_parts.append(_correction_context)
-        # 最近の訂正履歴も追加（同じ間違いの繰り返し防止）
         elif getattr(self, "correction_learning", None):
             _corr_hint = self.correction_learning.get_recent_corrections_hint(max_entries=2)
             if _corr_hint:
                 extra_parts.append(_corr_hint[:120])
 
-        # 継続学習: 高品質会話例を1件だけ軽量注入（学習データのread-path）
+        # 継続学習: 高品質会話例を1件だけ軽量注入
         cl = getattr(self, "continuous_learner", None)
         if cl and cl.example_count > 0 and not _correction_context:
             try:
@@ -1101,74 +1771,87 @@ class AiChan:
             except Exception:
                 pass
 
-        # 追加コンテキストを結合（訂正 + 学習例で短く保つ）
+        # BUG #3 FIX: 会話知能の応答方針を注入（質問への具体的な回答指示）
+        if _conv_instruction:
+            extra_parts.append(_conv_instruction)
+
+        # Item #72: 感情リンクプロンプトを追加
+        emotion_prompt = self._get_emotion_prompt(_intent_type)
+        if emotion_prompt:
+            extra_parts.append(emotion_prompt)
+
+        # ─── モード別プロンプト修飾 ───
+        if getattr(self, "mode_manager", None):
+            mode_modifier = self.mode_manager.get_mode_prompt_modifier()
+            if mode_modifier:
+                extra_parts.insert(0, mode_modifier)
+
+        # 追加コンテキストを結合
         extra = "\n".join(extra_parts)
         if extra:
             memory_context = memory_context + "\n" + extra[:300]
 
-        # 会話履歴に追加
-        self.conversation_history.append({"role": "user", "content": user_input})
+        # 会話履歴に追加（Phase D: 話者名があれば含める）
+        _hist_content = (
+            f"{_speaker_tag}: {user_input}" if _speaker_tag else user_input
+        )
+        self.conversation_history.append({"role": "user", "content": _hist_content})
 
-        # LLMでの応答生成（ユーザー名をシステムプロンプト本体に埋め込む）
+        # LLMでの応答生成
+        recent_history = self._select_relevant_history(max_turns=10)
         messages = self.llm.build_prompt(
             system_prompt=self._build_system_prompt(),
-            conversation_history=self.conversation_history,
+            conversation_history=recent_history,
             memory_context=memory_context,
             emotion_hint="",
         )
 
-        response = self.llm.generate_chat(messages)
+        response = self.llm.generate_chat(messages, stream_cb=stream_cb)
+
+        # MoEで一時変更したパラメータを復元
+        if _moe_saved_params is not None and hasattr(self.llm, "restore_params"):
+            self.llm.restore_params(_moe_saved_params)
+
         response = self._clean_response(response)
 
-        # フォローアップトピックを応答生成後にマーク（応答に実際にトピックが含まれた場合のみ）
+        # フォローアップトピック
         if getattr(self, "_pending_followup_topic", None):
             _ft = self._pending_followup_topic
             _ft_text = _ft.get("text", "")[:10] if isinstance(_ft, dict) else ""
-            # 応答に話題のキーワードが含まれていれば成功とみなす
             if _ft_text and _ft_text in response:
                 self.topic_tracker.mark_followed_up(_ft)
-            # 含まれていなくても3Bモデルなのである程度は許容（次回に持ち越し可能に）
             self._pending_followup_topic = None
 
-        # Sprint K1: 会話知能による後処理（日本語品質フィルタ）
+        # Sprint K1: 会話知能による後処理
         if getattr(self, "conv_intelligence", None):
             try:
                 response = self.conv_intelligence.post_process(response)
             except Exception:
                 pass
 
-        # ヤマト C7: マルチエージェント検証
-        # 注意: 3Bモデルでは再生成コストが高すぎるため、検証のみ行い再生成はスキップ。
-        # 将来的に大きいモデルに切り替えた際に再生成を有効化する。
-        # if getattr(self, "multi_verifier", None):
-        #     try:
-        #         consensus = self.multi_verifier.verify(user_input, response)
-        #         if self.multi_verifier.should_regenerate(consensus) and self.llm.is_loaded():
-        #             ...
-        #     except Exception:
-        #         pass
-
-        # Sprint K4: 応答品質自己評価（軽量ヒューリスティック版）
-        # LLM呼び出しなしで品質を推定する。完璧でなくても常に0.6固定よりはるかに良い。
+        # Sprint K4: 応答品質自己評価
         _evaluated_quality = self._estimate_response_quality(user_input, response)
 
-        # TTS で読み上げ（文単位逐次読み上げ — 自然な体験）
+        # TTS（感情連動）
         try:
-            self.tts.speak_sentence_by_sentence(response)
+            if hasattr(self.tts, "speak_with_emotion_analysis"):
+                emotion_dict = self.emotion.state.to_dict() if hasattr(self.emotion.state, "to_dict") else {}
+                self.tts.speak_with_emotion_analysis(response, emotion_dict)
+            else:
+                self.tts.speak_sentence_by_sentence(response)
         except Exception:
             pass
 
         # 応答を履歴に追加
         self.conversation_history.append({"role": "assistant", "content": response})
 
-        # ユーザー訂正学習: 今回のターンを記録（次回の訂正検出用）
+        # ユーザー訂正学習
         if getattr(self, "correction_learning", None) and not is_system_call:
             self.correction_learning.record_turn(user_input, response)
 
         if not is_system_call:
-            # 全会話をDBに永続保存（重要度を評価して分類）
+            # 全会話をDBに永続保存
             importance = self._estimate_importance(user_input)
-            from datetime import datetime
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
             self.memory.add_mid_term(
                 content=f"[{timestamp}] ユーザー:「{user_input}」→ アイ:「{response}」",
@@ -1180,31 +1863,34 @@ class AiChan:
             # B: 話題を抽出して追跡
             self.topic_tracker.extract_topics(user_input, self.turn_count)
 
-            # プロファイル自動深化（一人称の自己紹介を検出）
+            # プロファイル自動深化
             self._extract_profile_hints(user_input)
 
-            # Sprint 2.0: サブシステム更新をバッチ化（1スレッドにまとめる）
-            _ui = user_input  # クロージャ用
+            # Item #22: JSONL ログ
+            self._log_conversation_jsonl(user_input, response, {
+                "intent": _intent_type,
+                "quality": _evaluated_quality,
+                "mode": self.mode_manager.current_mode if getattr(self, "mode_manager", None) else "family",
+            })
+
+            # Item #19: バッチ更新を ThreadPoolExecutor で実行
+            _ui = user_input
             _resp = response
             _tc = self.turn_count
 
             def _batch_updates():
-                # 感情履歴を記録
                 try:
                     self.emotion_history.record(self.emotion.state.to_dict())
                 except Exception:
                     pass
-                # 関心マップを更新
                 try:
                     self.interest_map.update(_ui)
                 except Exception:
                     pass
-                # 目標を検出
                 try:
                     self.goal_tracker.detect_and_add(_ui)
                 except Exception:
                     pass
-                # セマンティックインデックス追加
                 try:
                     if self.semantic_search.is_ready():
                         recent = self.memory.get_recent(limit=1)
@@ -1212,7 +1898,6 @@ class AiChan:
                             self.semantic_search.add_memory(recent[0])
                 except Exception:
                     pass
-                # 日記（日付変わり時のみ）
                 today = datetime.now().date()
                 if today != self._last_diary_date:
                     self._last_diary_date = today
@@ -1222,24 +1907,19 @@ class AiChan:
                         )
                     except Exception:
                         pass
-                # 学習データ蓄積
                 ar = sum(1 for c in _resp if c.isascii() and c.isalpha()) / max(len(_resp), 1)
                 if ar < 0.3 and len(_resp) > 2:
                     self.learning.add_conversation(_ui, _resp, save=True)
-                # 記憶圧縮（10ターンごと）
                 if _tc % 10 == 0:
                     self.compressor.compress()
-                # 感情状態を保存（閾値以上の変化時のみI/O実行）
                 self.emotion.save_if_changed()
 
-                # Sprint K2: 知識グラフに会話を反映
                 if getattr(self, "knowledge_graph", None):
                     try:
                         self.knowledge_graph.extract_from_conversation(_ui, _resp)
                     except Exception:
                         pass
 
-                # Sprint K3: 性格進化に会話を反映
                 if getattr(self, "personality_evo", None):
                     try:
                         intent_type = ""
@@ -1254,23 +1934,18 @@ class AiChan:
                     except Exception:
                         pass
 
-                # 品質スコア（会話統計・成長記録用）
                 _q_score = _evaluated_quality if _evaluated_quality is not None else 0.6
 
-                # 成長段階: 会話経験を記録
                 if getattr(self, "growth", None):
                     try:
                         self.growth.on_conversation(quality_score=_q_score)
-                        # 知識グラフエントリ数を同期
                         kg = getattr(self, "knowledge_graph", None)
                         if kg and hasattr(kg, "total_entities"):
                             self.growth.on_knowledge_update(kg.total_entities)
-                        # 話題の多様性を成長に反映
                         if getattr(self, "topic_tracker", None):
                             topic_count = len(getattr(self.topic_tracker, "topics", []))
                             while self.growth._metrics.unique_topics < topic_count:
                                 self.growth.on_new_topic()
-                        # 感情の幅を成長に反映
                         if getattr(self, "emotion_history", None):
                             records = getattr(self.emotion_history, "_records", [])
                             if len(records) >= 5:
@@ -1288,7 +1963,6 @@ class AiChan:
                     except Exception:
                         pass
 
-                # 行動サイクル: 進捗記録
                 if getattr(self, "action_cycle", None):
                     try:
                         self.action_cycle.record_progress("any", 1.0)
@@ -1296,14 +1970,12 @@ class AiChan:
                     except Exception:
                         pass
 
-                # 自己修正: 品質を監視し、不調なら自動で治す
                 if getattr(self, "self_correction", None):
                     try:
                         corrections = self.self_correction.on_turn(
                             quality_score=_q_score,
                             response=_resp,
                         )
-                        # 自己修正が実行されたら成長に反映
                         if corrections and getattr(self, "growth", None):
                             for c in corrections:
                                 if c.get("ok"):
@@ -1312,7 +1984,6 @@ class AiChan:
                     except Exception:
                         pass
 
-                # ヤマト A2: 継続学習エンジンに高品質会話を蓄積
                 if getattr(self, "continuous_learner", None):
                     try:
                         self.continuous_learner.learn_from_conversation(
@@ -1321,7 +1992,6 @@ class AiChan:
                     except Exception:
                         pass
 
-                # ヤマト C6: 合成データ生成のテンプレート学習
                 if getattr(self, "synthetic_gen", None):
                     try:
                         intent = ""
@@ -1334,706 +2004,110 @@ class AiChan:
                     except Exception:
                         pass
 
-            import threading
-            threading.Thread(target=_batch_updates, daemon=True).start()
+                if getattr(self, "federated", None):
+                    try:
+                        pattern = self.federated.extract_pattern(
+                            [{"role": "user", "content": _ui},
+                             {"role": "assistant", "content": _resp}],
+                            quality_score=_q_score,
+                        )
+                        if pattern:
+                            self.federated.queue_for_sync(pattern)
+                    except Exception:
+                        pass
 
-            # 長すぎる会話履歴をトリミング（最新6ターン = 12メッセージ）
-            # Phi-3-mini-4kはコンテキストが限られるため短く保つ
-            if len(self.conversation_history) > 12:
-                self.conversation_history = self.conversation_history[-12:]
+                if getattr(self, "prompt_ab_test", None):
+                    try:
+                        ab_state = self.prompt_ab_test._state
+                        current_variant = "B" if ab_state.next_variant == "A" else "A"
+                        self.prompt_ab_test.record_score(current_variant, _q_score)
+                    except Exception:
+                        pass
+
+            # Item #19: ThreadPoolExecutor で並列実行
+            self._executor.submit(_batch_updates)
+
+            # Item #1: 動的スライディングウィンドウでトリミング
+            if len(self.conversation_history) > 30:
+                self.conversation_history = self.conversation_history[-30:]
         else:
-            # システム呼び出しは履歴から削除する
             self.conversation_history = self.conversation_history[:-2]
 
-        # 生物神経系: 自律神経ハートビート（LLMパスでも実行）
+        # 生物神経系: 自律神経ハートビート
         if getattr(self, "bio_nervous", None):
             self.bio_nervous.autonomic.heartbeat(self.turn_count)
 
-        # 自己意思: 保留中のメッセージがあれば応答に付加
+        # 自己意思: 保留中のメッセージ
         if getattr(self, "self_will", None):
             will_msg = self.self_will.pending_message
             if will_msg:
                 response = f"{will_msg}\n\n{response}"
 
-        # Sprint J: 保留中の時間帯挨拶を応答の前に付加
+        # Sprint J: 保留中の時間帯挨拶
         if self._pending_greeting:
             response = f"{self._pending_greeting}\n\n{response}"
             self._pending_greeting = None
 
         return response
 
-    def _clean_response(self, text: str) -> str:
-        """
-        Phi-3の出力を清書します:
-        - 「アイ:」などのプレフィックスを除去
-        - 英語のメタ注釈行（**...**, (Note:...) 等）を除去
-        - 英語が大部分なら日本語フォールバック
-        - 長すぎる応答を2文に制限
-        """
-        import re
-        # 会話シミュレーション（「ユーザー:」以降のロールプレイ）を切り捨て
-        for marker in ['ユーザー:', 'ユーザー：', 'User:', 'しょうた:']:
-            idx = text.find(marker)
-            if idx > 0:
-                text = text[:idx].strip()
-        # プレフィックス除去（「アイ:」「AI:」など）
-        text = re.sub(r'^(アイ|AI|Assistant|アシスタント)\s*[:：]\s*', '', text).strip()
-        # 括弧で始まる説明文を除去
-        text = re.sub(r'^\(.*?\)\s*', '', text).strip()
-        # 漏れ出たブラケット指示を除去
-        text = re.sub(r'\[★[^\]]*\]', '', text).strip()
-        text = re.sub(r'指示[１２３\d][^\s。]*', '', text).strip()
-
-        # 三人称ナレーション行を除去（一人称発話は残す）
-        lines = text.splitlines()
-        filtered = []
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            # 俯瞰描写パターンのみ除去（一人称発話は通す）
-            if _NARRATION_RE.search(stripped):
-                continue
-            filtered.append(stripped)
-        text = '\n'.join(filtered).strip() if filtered else text.strip()
-
-        # 英語のメタ注釈行・翻訳行を除去（**...**, (Note:...), (Translation:...) 等）
-        lines = text.splitlines()
-        cleaned_lines = []
-        for line in lines:
-            stripped = line.strip()
-            # 空行はスキップ
-            if not stripped:
-                continue
-            # **...** 形式のヘッダー行を除去
-            if re.match(r'^\*\*.*\*\*$', stripped):
-                continue
-            # # 見出し行を除去
-            if re.match(r'^#+\s', stripped):
-                continue
-            # (Note: ...) や (Translation: ...) などの英語注釈行を除去
-            if re.match(r'^\((?:Note|Translation|Instruction|Example|Solution)[:\s]', stripped, re.IGNORECASE):
-                continue
-            # 日本語文字がなく英語単語がある行が来たらそこで打ち切り
-            has_japanese = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]', stripped))
-            if not has_japanese and re.search(r'[a-zA-Z]{3,}', stripped):
-                break
-            # コード片・技術テキストの混入を検出して打ち切り
-            if re.search(r'(例のコード|Cookie\.js|```|import |def |class |function |var |const |let )', stripped):
-                break
-            cleaned_lines.append(stripped)
-        text = '\n'.join(cleaned_lines).strip()
-
-        # 英語が大部分（60%超）の場合のみフォールバック（技術用語の混在は許容）
-        ascii_ratio = sum(1 for c in text if c.isascii() and c.isalpha()) / max(len(text), 1)
-        has_japanese = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]', text))
-        if ascii_ratio > 0.6 and not has_japanese:
-            import random
-            fallbacks = [
-                "ごめん、うまく言えなかった。もう一回話しかけてみて",
-                "えっと…もう少し違う言い方で聞いてもいい？",
-                "ちょっと考えすぎちゃった。もう一度話しかけてね",
-            ]
-            return random.choice(fallbacks)
-
-        # max_sentences を超えたら打ち切り（デフォルト6文）
-        max_s = getattr(self, '_max_sentences', 6)
-        sentences = re.split(r'(?<=[。！？\n])', text)
-        sentences = [s.strip() for s in sentences if s.strip()]
-        if len(sentences) > max_s:
-            text = ''.join(sentences[:max_s])
-
-        return text if text else "うん、聞いてるよ"
-
-    def _estimate_response_quality(self, user_input: str, response: str) -> float:
-        """
-        LLM呼び出しなしで応答品質を推定する軽量ヒューリスティック。
-
-        評価基準:
-        - 応答が空/極端に短い → 低品質
-        - 日本語文字が少ない（英語漏れ） → 低品質
-        - 応答がユーザー入力のオウム返し → 低品質
-        - ユーザー入力長に対して応答が極端に短い → やや低品質
-        - フォールバック応答 → 低品質
-        - 直前の応答と酷似 → 低品質（繰り返し）
-        - それ以外 → 基準値 0.65
-
-        Returns: 0.0 ~ 1.0 の品質スコア
-        """
-        # 空応答
-        if not response or not response.strip():
-            return 0.1
-
-        resp = response.strip()
-        resp_len = len(resp)
-
-        # 極端に短い（3文字以下）
-        if resp_len <= 3:
-            return 0.3
-
-        # 日本語文字の割合チェック
-        jp_chars = len(re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]', resp))
-        if resp_len > 10 and jp_chars / resp_len < 0.2:
-            return 0.25
-
-        score = 0.65  # 基準値
-
-        # フォールバック応答の検出
-        _fallback_phrases = (
-            "うまく言えなかった",
-            "もう一回話しかけて",
-            "ちょっと考えすぎちゃった",
-            "うん、聞いてるよ",
-        )
-        for fb in _fallback_phrases:
-            if fb in resp:
-                return 0.2
-
-        # オウム返し検出（ユーザー入力が応答に丸ごと含まれる）
-        _strip_p = re.compile(r'[！!。、？?〜～\s…・「」]+')
-        u_clean = _strip_p.sub("", user_input)
-        r_clean = _strip_p.sub("", resp)
-        if u_clean and r_clean and len(u_clean) >= 5 and u_clean in r_clean:
-            score -= 0.15
-
-        # ユーザー入力に対して応答が極端に短い
-        if len(user_input) > 20 and resp_len < 8:
-            score -= 0.1
-
-        # 直前の応答と酷似（繰り返し検出）
-        prev_responses = [
-            m["content"] for m in self.conversation_history[-4:]
-            if m.get("role") == "assistant"
-        ]
-        for prev in prev_responses:
-            prev_clean = _strip_p.sub("", prev)
-            if r_clean and prev_clean:
-                short, long_ = (r_clean, prev_clean) if len(r_clean) <= len(prev_clean) else (prev_clean, r_clean)
-                if len(short) >= 5 and short in long_:
-                    score -= 0.2
-                    break
-
-        return max(0.1, min(1.0, score))
-
-    def _handle_commands(self, user_input: str) -> str | None:
-        """特殊コマンドを解析・実行します"""
-
-        # 「これを覚えて: ○○」
-        m = CMD_REMEMBER.match(user_input)
-        if m:
-            content = m.group(2).strip()
-            self.memory.remember(content, is_important=False)
-            return f"うん、「{content}」を覚えたよ！大切にしておくね。💕"
-
-        # 「絶対に覚えて: ○○」（保護記憶）
-        m = CMD_IMPORTANT.match(user_input)
-        if m:
-            content = m.group(2).strip()
-            self.memory.remember(content, is_important=True)
-            return f"「{content}」を大切な思い出として、ずっと覚えておくね。絶対に忘れないよ！✨"
-
-        # 「これを忘れて: ○○」
-        m = CMD_FORGET.match(user_input)
-        if m:
-            content = m.group(2).strip()
-            deleted = self.memory.forget(content)
-            if deleted > 0:
-                return f"「{content}」に関する記憶を {deleted} 件削除したよ。"
-            else:
-                return f"「{content}」に関する記憶は見つからなかったよ。（保護された思い出は削除できないんだ）"
-
-        # 「記憶を見せて」
-        if CMD_MEMORY.match(user_input):
-            return self._show_memory_summary()
-
-        # 「私の○○は△△だよ」（プロファイル登録）
-        m = CMD_PROFILE.match(user_input)
-        if m:
-            key   = m.group(1).strip()
-            value = m.group(2).strip()
-            self.memory.set_user_profile(key, value)
-            return f"了解！あなたの「{key}」は「{value}」だね。ちゃんと覚えたよ😊"
-
-        # 「記憶を検索: ○○」（セマンティック検索 or キーワード検索）
-        m = CMD_SEARCH.match(user_input)
-        if m:
-            query   = m.group(2).strip()
-            # セマンティック検索が使えれば優先
-            all_mems = self.memory.get_recent(limit=200)
-            if self.semantic_search.is_ready():
-                results = self.semantic_search.search(query, all_mems, limit=5)
-            else:
-                results = self.memory.search(query, limit=5)
-            if not results:
-                return f"「{query}」に関する記憶は見つからなかったよ。"
-            lines = [f"「{query}」に関する記憶だよ："]
-            for r in results:
-                snippet = r.content[:60].replace("\n", " ")
-                lines.append(f"・{snippet}…")
-            return "\n".join(lines)
-
-        # 「日記を見せて」「日記を書いて」
-        if CMD_DIARY.match(user_input):
-            if "書いて" in user_input:
-                entry = self.diary.write_today(
-                    emotion_snapshot=self.emotion.state.to_dict()
-                )
-                if not entry:
-                    return "今日はまだあまり話してないから書けることが少ないかな。もう少し話そう！"
-                return self.diary.format_for_display(entry)
-            else:
-                entry = self.diary.get_entry()
-                if entry:
-                    return self.diary.format_for_display(entry)
-                # なければ今すぐ生成
-                entry = self.diary.write_today(
-                    emotion_snapshot=self.emotion.state.to_dict()
-                )
-                if entry:
-                    return self.diary.format_for_display(entry)
-                return "今日の日記はまだ書いてないよ。もう少し話してから見てね！"
-
-        # 「記念日を登録: 名前 M月D日」
-        m = CMD_ANNIV_ADD.match(user_input)
-        if m:
-            is_bday = m.group(1) == "誕生日"
-            label   = m.group(2).strip()
-            month   = int(m.group(3))
-            day     = int(m.group(4))
-            self.anniversary.add(label, month, day, is_birthday=is_bday)
-            kind = "誕生日" if is_bday else "記念日"
-            return f"「{label}」を{kind}として{month}月{day}日に登録したよ！毎年その日になったら話しかけるね。"
-
-        # 「記念日一覧」
-        if CMD_ANNIV_LIST.match(user_input):
-            items = self.anniversary.list_all()
-            if not items:
-                return "まだ記念日は登録されていないよ。「誕生日を登録: 名前 M月D日」で追加できるよ！"
-            lines = ["登録済みの記念日だよ："]
-            for item in items:
-                kind = "🎂" if item.get("is_birthday") else "🎉"
-                lines.append(f"{kind} {item['label']}  {item['month']}月{item['day']}日")
-            return "\n".join(lines)
-
-        # 「YouTube学習一覧」
-        if CMD_YT_LIST.match(user_input):
-            return self._show_youtube_learned()
-
-        # 「Web学習一覧」
-        if CMD_WEB_LIST.match(user_input):
-            learned = self.web_learner.list_learned()
-            if not learned:
-                return "まだ Web ページを学習してないよ。URL をチャットに貼ると学習できるよ！"
-            lines = [f"学習済み Web ページ {len(learned)} 件だよ："]
-            for item in learned[-8:]:
-                lines.append(f"・「{item['title']}」（{item.get('learned_at','')[:10]}）")
-            return "\n".join(lines)
-
-        # 「ファイル学習一覧」
-        if CMD_FILE_LIST.match(user_input):
-            learned = self.file_learner.list_learned()
-            if not learned:
-                return "まだファイルを学習してないよ。ファイルのパスをチャットに貼ると学習できるよ！"
-            lines = [f"学習済みファイル {len(learned)} 件だよ："]
-            for item in learned[-8:]:
-                lines.append(f"・「{item['name']}」（{item.get('learned_at','')[:10]}）")
-            return "\n".join(lines)
-
-        # 「カレンダーを見せて」
-        if CMD_CALENDAR.match(user_input):
-            return format_events_for_chat()
-
-        # 「バッテリー残量」
-        if CMD_BATTERY.match(user_input):
-            from core.battery_monitor import get_battery_info
-            info = get_battery_info()
-            if not info["found"]:
-                return "バッテリー情報を取得できなかったよ。"
-            pct = info["percent"]
-            charging = "充電中" if info["charging"] else "放電中"
-            return f"バッテリーは今 {pct}%（{charging}）だよ。"
-
-        # YouTube URL が含まれていたら学習処理
-        yt_url = extract_youtube_url(user_input)
-        if yt_url:
-            return self._learn_youtube(yt_url)
-
-        # Web URL が含まれていたら学習処理
-        web_url = is_web_url(user_input)
-        if web_url:
-            return self._learn_web(web_url)
-
-        # ファイルパスが含まれていたら学習処理
-        file_path = is_file_path(user_input)
-        if file_path:
-            return self._learn_file(file_path)
-
-        # 自動学習スケジュール確認・管理
-        if CMD_AUTO_LEARN.match(user_input):
-            return self._show_auto_learn_status()
-
-        # 学習ソース追加: 「学習先を追加: URL」
-        m = CMD_LEARN_ADD.match(user_input)
-        if m:
-            value = m.group(3).strip()
-            return self._add_learn_source(value)
-
-        # 即時学習実行
-        if CMD_LEARN_NOW.match(user_input):
-            return self._run_auto_learn_now()
-
-        # メモ登録: 「学習メモを覚えて: ○○」
-        m = CMD_MEMO_ADD.match(user_input)
-        if m:
-            text = m.group(3).strip()
-            entry = self.auto_learner.add_memo(text)
-            return f"メモを学習リストに登録したよ！📝\n「{text[:60]}」\n夜の復習タイムに振り返るね。"
-
-        # メモ一覧
-        if CMD_MEMO_LIST.match(user_input):
-            return self._show_memo_list()
-
-        # ─── 自己開発コマンド ──────────────────────────────
-
-        # 「提案一覧」「改善案を見せて」「自己開発分析」
-        if CMD_PROPOSAL.match(user_input):
-            return self._handle_proposal_command(user_input)
-
-        # 「提案を承認: proposal_id」
-        m = CMD_PROPOSAL_OK.match(user_input)
-        if m:
-            pid = m.group(3).strip()
-            sd = getattr(self, "self_dev", None)
-            if sd and sd.proposal_store.approve(pid):
-                return f"提案「{pid}」を承認したよ！対応を進めるね。"
-            return f"提案「{pid}」が見つからなかったよ。「提案一覧」で確認してみてね。"
-
-        # 「提案を却下: proposal_id」
-        m = CMD_PROPOSAL_NO.match(user_input)
-        if m:
-            pid = m.group(3).strip()
-            sd = getattr(self, "self_dev", None)
-            if sd and sd.proposal_store.reject(pid):
-                return f"提案「{pid}」を却下したよ。了解！"
-            return f"提案「{pid}」が見つからなかったよ。"
-
-        # 「自分について」「自己認識」
-        if CMD_SELF_AWARE.match(user_input):
-            return self._show_self_awareness()
-
-        # 議事録一覧
-        if CMD_MINUTES.match(user_input):
-            return self._show_minutes_list()
-
-        # ─── Sprint 3.0-A: マルチモーダルコマンド ────────────────
-
-        # 「スクショ見て」「画面チェック」
-        if CMD_SCREENSHOT.match(user_input) and getattr(self, "multimodal", None):
-            return self.multimodal.describe_screenshot()
-
-        # 「クリップボードの画像を見て」
-        if CMD_CLIPBOARD_IMG.match(user_input) and getattr(self, "multimodal", None):
-            return self.multimodal.describe_clipboard_image()
-
-        # 「この画像を見て」
-        if CMD_IMAGE_ANALYZE.match(user_input) and getattr(self, "multimodal", None):
-            return "画像パスを教えてね！「資料を読んで: /path/to/image.png」の形式で送ってね。\nまたは「スクショ見て」「クリップボードの画像を見て」も使えるよ！"
-
-        # ─── Sprint 3.0-E: 防御進化コマンド ────────────────────
-
-        # 「ネットワークチェック」「通信確認」
-        if CMD_NETWORK_CHECK.match(user_input):
-            if getattr(self, "network_monitor", None):
-                return self.network_monitor.get_connection_summary()
-            return "ネットワークモニターが初期化されていないよ。"
-
-        # 「プロセスチェック」「アプリ確認」
-        if CMD_PROCESS_CHECK.match(user_input):
-            if getattr(self, "process_monitor", None):
-                return self.process_monitor.get_summary()
-            return "プロセスモニターが初期化されていないよ。"
-
-        # 「セキュリティレポート」「防御ダッシュボード」
-        if CMD_DEFENSE_REPORT.match(user_input):
-            if getattr(self, "defense_dashboard", None):
-                return self.defense_dashboard.get_full_report()
-            return "防御ダッシュボードが初期化されていないよ。"
-
-        # ─── Sprint 3.0: 生活アシスタント + 知識コマンド ────────
-
-        # タスク追加: 「タスクを追加: 明日までにレポート」
-        m = CMD_TASK_ADD.match(user_input)
-        if m and getattr(self, "task_manager", None):
-            text = m.group(3).strip()
-            task = self.task_manager.add_from_text(text)
-            due = f"（期限: {task.due_date}）" if task.due_date else ""
-            return f"📌 タスクを登録したよ！\n「{task.title}」{due}\nID: #{task.id}"
-
-        # タスク完了: 「タスク完了 #1」
-        m = CMD_TASK_DONE.match(user_input)
-        if m and getattr(self, "task_manager", None):
-            task_id = int(m.group(4))
-            if self.task_manager.complete(task_id):
-                return f"✅ タスク #{task_id} を完了にしたよ！お疲れさま！"
-            return f"タスク #{task_id} が見つからないよ。"
-
-        # タスク一覧
-        if CMD_TASK_LIST.match(user_input) and getattr(self, "task_manager", None):
-            return self.task_manager.format_task_list()
-
-        # 習慣追加: 「習慣を追加: 運動」
-        m = CMD_HABIT_ADD.match(user_input)
-        if m and getattr(self, "habit_tracker", None):
-            name = m.group(3).strip()
-            self.habit_tracker.add_habit(name)
-            return f"🎯 習慣「{name}」を登録したよ！毎日一緒に頑張ろうね。"
-
-        # 習慣一覧/レポート
-        if CMD_HABIT_LIST.match(user_input) and getattr(self, "habit_tracker", None):
-            if "レポート" in user_input:
-                return self.habit_tracker.get_weekly_report()
-            return self.habit_tracker.get_today_status()
-
-        # 習慣記録: 「運動した！」
-        m = CMD_HABIT_REC.match(user_input)
-        if m and getattr(self, "habit_tracker", None):
-            name = m.group(1).strip()
-            if name in self.habit_tracker.list_habits():
-                self.habit_tracker.record(name)
-                streak = self.habit_tracker.get_streak(name)
-                msg = f"✅ 「{name}」を記録したよ！"
-                if streak > 1:
-                    msg += f" 🔥 {streak}日連続！すごい！"
-                return msg
-
-        # ドキュメント追加: 「資料を読んで: /path/to/file」
-        m = CMD_DOC_ADD.match(user_input)
-        if m and getattr(self, "rag", None):
-            path = m.group(3).strip()
-            result = self.rag.add_document(path)
-            if "error" in result:
-                return f"読み込めなかったよ: {result['error']}"
-            if result.get("status") == "already_indexed":
-                return "この資料はもう読み込み済みだよ！"
-            return f"📄 「{result['name']}」を読み込んだよ！{result['chunks']}チャンクに分割して覚えたよ。"
-
-        # ドキュメント一覧
-        if CMD_DOC_LIST.match(user_input) and getattr(self, "rag", None):
-            docs = self.rag.list_documents()
-            if not docs:
-                return "まだ資料は登録されていないよ。「資料を読んで: /path」で追加できるよ！"
-            lines = ["📚 登録済み資料："]
-            for d in docs:
-                lines.append(f"  • {d['name']} ({d['chunks']}チャンク)")
-            return "\n".join(lines)
-
-        # ドキュメント検索: 「資料から検索: キーワード」
-        m = CMD_DOC_SEARCH.match(user_input)
-        if m and getattr(self, "rag", None):
-            query = m.group(3).strip()
-            results = self.rag.search(query, limit=3)
-            if not results:
-                return f"「{query}」に関する情報は資料から見つからなかったよ。"
-            lines = [f"📖 「{query}」の検索結果："]
-            for r in results:
-                snippet = r["text"][:100].replace("\n", " ")
-                lines.append(f"  [{r['doc_name']}] {snippet}…")
-            return "\n".join(lines)
-
-        # ─── Web検索 コマンド ──────────────────
-
-        # 「〇〇について調べて」
-        m = CMD_WEB_SEARCH.match(user_input)
-        if m:
-            return self._handle_web_search(m.group(1).strip())
-
-        # 「検索: 〇〇」「ググって 〇〇」
-        m = CMD_WEB_SEARCH_PREFIX.match(user_input)
-        if m:
-            return self._handle_web_search(m.group(2).strip())
-
-        # 「URL読んで: https://...」
-        m = CMD_WEB_FETCH.match(user_input)
-        if m:
-            return self._handle_web_fetch(m.group(4).strip())
-
-        # ─── コードエンジン コマンド ──────────────────
-
-        # 「コードを見て: xxx」「コード解析: xxx」
-        m = CMD_CODE_ANALYZE.match(user_input)
-        if m:
-            return self._handle_code_analyze(m.group(4).strip())
-
-        # 「コードレビュー: xxx」
-        m = CMD_CODE_REVIEW.match(user_input)
-        if m:
-            return self._handle_code_review(m.group(4).strip())
-
-        # 「エラー直して: xxx」
-        m = CMD_CODE_FIX.match(user_input)
-        if m:
-            return self._handle_code_fix(m.group(5).strip())
-
-        # 「コードテスト書いて: xxx」
-        m = CMD_CODE_TEST.match(user_input)
-        if m:
-            return self._handle_code_test(m.group(4).strip())
-
-        # 「コード説明して: xxx」
-        m = CMD_CODE_EXPLAIN.match(user_input)
-        if m:
-            return self._handle_code_explain(m.group(4).strip())
-
-        # 「ファイルを見て: path」
-        m = CMD_CODE_FILE.match(user_input)
-        if m:
-            return self._handle_code_file(m.group(4).strip())
-
-        # 「コード実行: code」
-        m = CMD_CODE_RUN.match(user_input)
-        if m:
-            return self._handle_code_run(m.group(4).strip())
-
-        # ─── ドキュメント出力コマンド ──────────────────
-        m = CMD_EXPORT_WORD.match(user_input)
-        if m:
-            return self._handle_export("word", m.group(3).strip())
-
-        m = CMD_EXPORT_PPTX.match(user_input)
-        if m:
-            return self._handle_export("pptx", m.group(3).strip())
-
-        m = CMD_EXPORT_EXCEL.match(user_input)
-        if m:
-            return self._handle_export("excel", m.group(3).strip())
-
-        m = CMD_EXPORT_AUTO.match(user_input)
-        if m:
-            return self._handle_export("word", m.group(3).strip())
-
-        # ─── Sprint 2.1: セキュリティコマンド ──────────────────
-
-        # 「セキュリティチェック」「防御診断」
-        if CMD_SECURITY.match(user_input):
-            return self._run_security_check()
-
-        # 「バックアップ作成」「バックアップ一覧」
-        if CMD_BACKUP.match(user_input):
-            if "一覧" in user_input or "リスト" in user_input:
-                return self._show_backup_list()
-            return self._run_backup()
-
-        # 「ロックダウン」「緊急停止」
-        m = CMD_LOCKDOWN.match(user_input)
-        if m:
-            reason = m.group(2).strip() or "手動実行"
-            return self._run_lockdown(reason)
-
-        # 「ロック解除」
-        if CMD_UNLOCK.match(user_input):
-            return self._run_unlock()
-
-        # ─── Sprint J: サーバー・自律行動コマンド ──────────────
-
-        # 「サーバー状態」「ホーム確認」
-        if CMD_SERVER_STATUS.match(user_input):
-            return self._server_status()
-
-        # 「サーバーDocker一覧」
-        if CMD_SERVER_DOCKER.match(user_input):
-            return self._server_docker()
-
-        # 「サーバーに同期」
-        if CMD_SERVER_SYNC.match(user_input):
-            return self._server_sync()
-
-        # 「サーバー設定」「ホーム接続設定」
-        if CMD_SERVER_SETUP.match(user_input):
-            return self._server_setup_guide()
-
-        # 「話しかけて」「何か話して」
-        if CMD_PROACTIVE.match(user_input):
-            return self._proactive_talk()
-
-        # ─── Sprint K: 国産AI進化コマンド ──────────────────────
-
-        # 「知識グラフ」「知ってることを見せて」
-        if CMD_KNOWLEDGE.match(user_input):
-            kg = getattr(self, "knowledge_graph", None)
-            if kg:
-                return kg.get_user_world_summary()
-            return "知識グラフがまだ初期化されていないよ。"
-
-        # 「関係性」「親密度」
-        if CMD_RELATIONSHIP.match(user_input):
-            evo = getattr(self, "personality_evo", None)
-            if evo:
-                return evo.get_relationship_display()
-            return "関係性トラッカーがまだ初期化されていないよ。"
-
-        # 「成長レポート」「アイの成長」
-        if CMD_GROWTH.match(user_input):
-            evo = getattr(self, "personality_evo", None)
-            if evo:
-                return evo.get_growth_summary()
-            return "成長システムがまだ初期化されていないよ。"
-
-        # 「応答品質」「会話品質スコア」
-        if CMD_QUALITY.match(user_input):
-            ev = getattr(self, "response_evaluator", None)
-            if ev:
-                return ev.get_quality_summary()
-            return "品質評価システムがまだ初期化されていないよ。"
-
-        # ─── ヤマト計画コマンド ───────────────────────────────
-
-        # 「ヤマトダッシュボード」「アーキテクチャ確認」「7層」
-        if CMD_YAMATO_DASH.match(user_input):
-            arch = getattr(self, "yamato_arch", None)
-            if arch:
-                return arch.get_dashboard()
-            return "ヤマトアーキテクチャがまだ初期化されていないよ。"
-
-        # 「MoE状態」「専門家一覧」
-        if CMD_MOE_STATUS.match(user_input):
-            moe = getattr(self, "moe_router", None)
-            if moe:
-                return moe.get_status_text()
-            return "MoEルーターがまだ初期化されていないよ。"
-
-        # 「継続学習状態」「学習エンジン確認」
-        if CMD_LEARNING_STATUS.match(user_input):
-            cl = getattr(self, "continuous_learner", None)
-            if cl:
-                return cl.get_status_text()
-            return "継続学習エンジンがまだ初期化されていないよ。"
-
-        # 「合成データ生成」「データ生成」
-        if CMD_SYNTH_GEN.match(user_input):
-            sg = getattr(self, "synthetic_gen", None)
-            if sg:
-                if "生成" in user_input or "作成" in user_input:
-                    results = sg.generate_batch(count=10)
-                    return f"🧬 合成データを{len(results)}件生成したよ！\n{sg.get_status_text()}"
-                return sg.get_status_text()
-            return "合成データ生成がまだ初期化されていないよ。"
-
-        # 「マルチエージェント検証」「品質検証確認」
-        if CMD_VERIFY_STATUS.match(user_input):
-            mv = getattr(self, "multi_verifier", None)
-            if mv:
-                return mv.get_status_text()
-            return "マルチエージェント検証がまだ初期化されていないよ。"
-
-        return None
-
-    # ─── Sprint 2.1: セキュリティ機能 ────────────────────────
+    # ──────────────────────────────────────────────────────────
+    # セマンティック検索初期化（バックグラウンドスレッド用）
+    # ──────────────────────────────────────────────────────────
+
+    def _init_semantic_search(self) -> None:
+        """モデルをロードし、既存記憶から FAISS インデックスを自動構築する。"""
+        try:
+            loaded = self.semantic_search.load()
+            if not loaded:
+                return
+
+            # インデックスが空なら既存記憶から自動構築
+            has_index = (
+                self.semantic_search._index is not None
+                and self.semantic_search._index.ntotal > 0
+            )
+            if not has_index:
+                all_memories = self.memory.get_recent(limit=500)
+                if all_memories:
+                    self.semantic_search.rebuild_index(all_memories)
+                    logger.info(
+                        "セマンティック検索: %d 件の記憶からインデックスを自動構築",
+                        len(all_memories),
+                    )
+        except Exception as exc:
+            logger.warning("セマンティック検索の初期化に失敗: %s", exc)
+
+    # ──────────────────────────────────────────────────────────
+    # 記憶検索
+    # ──────────────────────────────────────────────────────────
+
+    def _search_relevant_memories(self, query: str, limit: int = 3):
+        results = []
+        if self.semantic_search.is_ready():
+            try:
+                all_mems = self.memory.get_recent(limit=50)
+                results = self.semantic_search.search(query, all_mems, limit=limit)
+            except Exception:
+                pass
+        if len(results) < limit:
+            try:
+                sql_results = self.memory.search_by_keywords(query, limit=limit)
+                existing_ids = {r.id for r in results}
+                for m in sql_results:
+                    if m.id not in existing_ids:
+                        results.append(m)
+                        if len(results) >= limit:
+                            break
+            except Exception:
+                pass
+        return results[:limit]
+
+    # ──────────────────────────────────────────────────────────
+    # Sprint 2.1: セキュリティ機能
+    # ──────────────────────────────────────────────────────────
 
     def _run_security_check(self) -> str:
-        """ホスト＋アイ内部の総合セキュリティチェック"""
-        lines: list[str] = ["🛡️ セキュリティ診断を実行するね！\n"]
-
-        # ホストPC診断
+        lines: list[str] = ["\U0001f6e1\ufe0f セキュリティ診断を実行するね！\n"]
         if getattr(self, "host_guardian", None):
             try:
                 summary = self.host_guardian.get_summary_text()
@@ -2041,78 +2115,68 @@ class AiChan:
                 lines.append(summary)
             except Exception as e:
                 lines.append(f"【PCセキュリティ】確認できなかったよ: {e}")
-
-        # 内部整合性
         if getattr(self, "integrity", None):
             try:
                 result = self.integrity.verify()
                 if result["status"] == "ok":
-                    lines.append("\n【データ整合性】✅ 異常なし")
+                    lines.append("\n【データ整合性】\u2705 異常なし")
                 else:
-                    lines.append(f"\n【データ整合性】⚠ 問題あり: 変更{len(result['modified'])}件、消失{len(result['missing'])}件")
+                    lines.append(f"\n【データ整合性】\u26a0 問題あり: 変更{len(result['modified'])}件、消失{len(result['missing'])}件")
             except Exception:
                 pass
-
-        # 異常検知
         if getattr(self, "anomaly_detector", None):
             try:
                 alerts = self.anomaly_detector.run_checks()
                 critical = [a for a in alerts if a.severity == "CRITICAL"]
                 if critical:
-                    lines.append(f"\n【異常検知】🔴 重大アラート {len(critical)}件")
+                    lines.append(f"\n【異常検知】\U0001f534 重大アラート {len(critical)}件")
                     for a in critical[:3]:
                         lines.append(f"  → {a.message}")
                 else:
-                    lines.append("\n【異常検知】✅ 異常なし")
+                    lines.append("\n【異常検知】\u2705 異常なし")
             except Exception:
                 pass
-
-        # 監査ログ
         if getattr(self, "audit", None):
             try:
                 chain = self.audit.verify_chain()
                 if chain["valid"]:
-                    lines.append(f"\n【監査ログ】✅ チェーン正常 ({chain['total']}件)")
+                    lines.append(f"\n【監査ログ】\u2705 チェーン正常 ({chain['total']}件)")
                 else:
-                    lines.append(f"\n【監査ログ】🔴 チェーン破損 (行{chain['broken_at']})")
+                    lines.append(f"\n【監査ログ】\U0001f534 チェーン破損 (行{chain['broken_at']})")
             except Exception:
                 pass
-
         return "\n".join(lines)
 
     def _run_backup(self) -> str:
-        """手動バックアップを実行"""
         if not getattr(self, "backup", None):
             return "バックアップ機能が初期化されていないよ。"
         try:
             result = self.backup.create_backup(label="manual")
             return (
-                f"✅ バックアップ完了！\n"
+                f"\u2705 バックアップ完了！\n"
                 f"サイズ: {result['size_mb']}MB、ファイル数: {result['files']}"
             )
         except Exception as e:
             return f"バックアップに失敗したよ: {e}"
 
     def _show_backup_list(self) -> str:
-        """バックアップ一覧を表示"""
         if not getattr(self, "backup", None):
             return "バックアップ機能が初期化されていないよ。"
         backups = self.backup.list_backups()
         if not backups:
             return "まだバックアップはないよ。「バックアップ作成」で作れるよ！"
-        lines = ["📦 バックアップ一覧："]
+        lines = ["\U0001f4e6 バックアップ一覧："]
         for b in backups[-5:]:
-            lines.append(f"  • {b['filename']} ({b['size_mb']}MB)")
+            lines.append(f"  \u2022 {b['filename']} ({b['size_mb']}MB)")
         return "\n".join(lines)
 
     def _run_lockdown(self, reason: str) -> str:
-        """緊急ロックダウンを実行"""
         if not getattr(self, "kill_switch", None):
             return "キルスイッチが初期化されていないよ。"
         try:
-            result = self.kill_switch.backup_and_halt(reason)
+            self.kill_switch.backup_and_halt(reason)
             return (
-                f"🔒 緊急ロックダウンを実行したよ！\n"
+                f"\U0001f512 緊急ロックダウンを実行したよ！\n"
                 f"理由: {reason}\n"
                 f"外部通信を遮断し、バックアップを作成しました。\n"
                 f"解除するには「アイ解除」と話しかけてね。"
@@ -2121,121 +2185,96 @@ class AiChan:
             return f"ロックダウンに失敗: {e}"
 
     def _run_unlock(self) -> str:
-        """ロックダウンを解除"""
         if not getattr(self, "kill_switch", None):
             return "キルスイッチが初期化されていないよ。"
         result = self.kill_switch.unlock(confirm="アイ解除")
         if result["unlocked"]:
-            return "🔓 ロックダウンを解除したよ！通常モードに戻るね。"
+            return "\U0001f513 ロックダウンを解除したよ！通常モードに戻るね。"
         return f"解除できなかったよ: {result['reason']}"
 
-    # ─── Sprint J: サーバー・自律行動メソッド ──────────────────
+    # ──────────────────────────────────────────────────────────
+    # Sprint J: サーバー・自律行動メソッド
+    # ──────────────────────────────────────────────────────────
 
     def _server_status(self) -> str:
-        """サーバーの接続状態とメトリクスを返す"""
         sh = getattr(self, "server_home", None)
         if sh is None or not sh.enabled:
             return (
-                "🏠 サーバー（アイの家）はまだ設定されていないよ。\n"
+                "\U0001f3e0 サーバー（アイの家）はまだ設定されていないよ。\n"
                 "「サーバー設定」で接続先を登録してね！"
             )
-
-        lines: list[str] = ["🏠 アイの家（サーバー）の状態だよ：\n"]
-
-        # 接続チェック
+        lines: list[str] = ["\U0001f3e0 アイの家（サーバー）の状態だよ：\n"]
         reachable = sh.is_reachable()
         if not reachable:
-            lines.append("❌ サーバーに接続できないよ…。電源やLANケーブルを確認してね。")
+            lines.append("\u274c サーバーに接続できないよ…。電源やLANケーブルを確認してね。")
             return "\n".join(lines)
-
-        lines.append("✅ サーバーに接続できたよ！")
-
-        # ヘルスチェック
+        lines.append("\u2705 サーバーに接続できたよ！")
         try:
             health = sh.health_check()
             if health.get("ok"):
                 if health.get("uptime"):
-                    lines.append(f"⏱ 稼働時間: {health['uptime'].strip()}")
+                    lines.append(f"\u23f1 稼働時間: {health['uptime'].strip()}")
                 if health.get("disk_usage"):
-                    lines.append(f"💾 ディスク: {health['disk_usage'].strip()}")
+                    lines.append(f"\U0001f4be ディスク: {health['disk_usage'].strip()}")
                 if health.get("memory"):
-                    lines.append(f"🧠 メモリ: {health['memory'].strip()}")
+                    lines.append(f"\U0001f9e0 メモリ: {health['memory'].strip()}")
         except Exception:
             pass
-
-        # AI環境
         ai_env = getattr(self, "server_ai_env", None)
         if ai_env:
             lines.append(f"\n{ai_env.get_status_text()}")
-
-        # Prometheus メトリクス
         prom = getattr(self, "prometheus", None)
         if prom:
             lines.append(f"\n{prom.get_summary_text()}")
-
-        # 知識同期
         ks = getattr(self, "knowledge_sync", None)
         if ks:
             lines.append(f"\n{ks.get_sync_status()}")
-
         return "\n".join(lines)
 
     def _server_docker(self) -> str:
-        """サーバー上のDockerコンテナ一覧を返す"""
         sh = getattr(self, "server_home", None)
         if sh is None or not sh.enabled:
-            return "🏠 サーバーがまだ設定されていないよ。「サーバー設定」で登録してね！"
-
+            return "\U0001f3e0 サーバーがまだ設定されていないよ。「サーバー設定」で登録してね！"
         try:
             containers = sh.docker_ps()
         except Exception as e:
             return f"Docker情報を取得できなかったよ: {e}"
-
         if not containers:
-            return "🐳 サーバーにDockerコンテナはないみたい。"
-
-        lines = [f"🐳 Dockerコンテナ一覧（{len(containers)}件）："]
+            return "\U0001f433 サーバーにDockerコンテナはないみたい。"
+        lines = [f"\U0001f433 Dockerコンテナ一覧（{len(containers)}件）："]
         for c in containers:
-            status_icon = "🟢" if "Up" in c.get("status", "") else "🔴"
+            status_icon = "\U0001f7e2" if "Up" in c.get("status", "") else "\U0001f534"
             lines.append(f"  {status_icon} {c.get('name', '?')} - {c.get('status', '?')}")
         return "\n".join(lines)
 
     def _server_sync(self) -> str:
-        """知識ベースをサーバーと同期する"""
         ks = getattr(self, "knowledge_sync", None)
         if ks is None:
-            return "🏠 サーバーがまだ設定されていないよ。「サーバー設定」で登録してね！"
-
-        lines = ["📡 サーバーとの知識同期を開始するね…\n"]
-
-        # Push
+            return "\U0001f3e0 サーバーがまだ設定されていないよ。「サーバー設定」で登録してね！"
+        lines = ["\U0001f4e1 サーバーとの知識同期を開始するね…\n"]
         push_result = ks.push_knowledge()
         if push_result.get("ok"):
             action = push_result.get("action", "")
             if action == "no_changes":
-                lines.append("⬆ アップロード: 変更なし（最新状態）")
+                lines.append("\u2b06 アップロード: 変更なし（最新状態）")
             else:
-                lines.append("⬆ アップロード: ✅ 完了！")
+                lines.append("\u2b06 アップロード: \u2705 完了！")
         else:
-            lines.append(f"⬆ アップロード: ❌ {push_result.get('error', '失敗')}")
-
-        # Pull
+            lines.append(f"\u2b06 アップロード: \u274c {push_result.get('error', '失敗')}")
         pull_result = ks.pull_knowledge()
         if pull_result.get("ok"):
             pulled = pull_result.get("pulled", 0)
             if pull_result.get("action") == "nothing_to_pull":
-                lines.append("⬇ ダウンロード: 新しいデータなし")
+                lines.append("\u2b07 ダウンロード: 新しいデータなし")
             else:
-                lines.append(f"⬇ ダウンロード: ✅ {pulled}件取得！")
+                lines.append(f"\u2b07 ダウンロード: \u2705 {pulled}件取得！")
         else:
-            lines.append(f"⬇ ダウンロード: ❌ {pull_result.get('error', '失敗')}")
-
+            lines.append(f"\u2b07 ダウンロード: \u274c {pull_result.get('error', '失敗')}")
         return "\n".join(lines)
 
     def _server_setup_guide(self) -> str:
-        """サーバー接続の設定ガイドを返す"""
         return (
-            "🏠 サーバー（アイの家）の設定方法だよ：\n\n"
+            "\U0001f3e0 サーバー（アイの家）の設定方法だよ：\n\n"
             "config/settings.json の「server_home」セクションを編集してね：\n"
             "  - enabled: true にする\n"
             "  - host: サーバーのIPアドレス（例: 192.168.3.86）\n"
@@ -2246,178 +2285,36 @@ class AiChan:
         )
 
     def _proactive_talk(self) -> str:
-        """自発的な話題を提供する"""
+        import random
         aa = getattr(self, "autonomous_actions", None)
         if aa is None or aa.proactive is None:
             return "自発的会話機能が無効だよ。settings.json で proactive_enabled を true にしてね。"
-
         message = aa.proactive.get_proactive_message(self)
         if message:
             return message
-
-        # 自発ネタがない場合はランダムな話しかけ
-        import random
         fallbacks = [
-            "最近何か楽しいことあった？✨",
-            "今日の調子はどう？何でも話してね😊",
+            "最近何か楽しいことあった？\u2728",
+            "今日の調子はどう？何でも話してね\U0001f60a",
             "ねぇねぇ、何か面白い話ある？",
-            "お疲れさまー！リフレッシュしてる？🍵",
+            "お疲れさまー！リフレッシュしてる？\U0001f375",
             "そういえば、最近何か新しいこと始めた？",
         ]
         return random.choice(fallbacks)
 
-    def _build_memory_context(self, user_input: str) -> str:
-        """
-        LLM のシステムプロンプトに追記する自然な日本語指示文を生成します。
-        括弧・記号などの特殊表記は使わず、通常の指示文として書きます。
-
-        脊髄反射パターン: 2ターン以内で同トピックなら重い検索をスキップし
-        キャッシュされたコンテキストを再利用。
-        """
-        # フォローアップ保留をリセット（前回の例外で残っている可能性を排除）
-        self._pending_followup_topic = None
-
-        # ── キャッシュ判定: 短い相槌(5文字以下)で直近キャッシュがあればそのまま返す ──
-        if (len(user_input) <= 5
-                and hasattr(self, "_mem_ctx_cache")
-                and self._mem_ctx_cache
-                and self._mem_ctx_turn >= self.turn_count - 2):
-            return self._mem_ctx_cache
-
-        parts: list[str] = []
-
-        # ── ユーザープロファイル（重複排除・auto:プレフィックス除去） ──
-        profile = self.memory.get_all_user_profile()
-        if profile:
-            # 手動設定を優先し、auto: プレフィックス付きは手動版がない場合のみ使用
-            clean: dict[str, str] = {}
-            for k, v in profile.items():
-                if k.startswith("auto:"):
-                    bare = k[5:]  # "auto:" を除去
-                    if bare not in clean:
-                        clean[bare] = v
-                else:
-                    clean[k] = v  # 手動設定は常に優先
-            items = list(clean.items())[:4]
-            desc = "、".join(f"{k}は{v}" for k, v in items)
-            parts.append(f"ユーザーの{desc}。")
-
-        # ── 関連記憶の自動検索（キーワード+セマンティック、1件に絞って軽量化） ──
-        try:
-            related = self._search_relevant_memories(user_input, limit=1)
-            if related:
-                snippets = [m.content[:40].replace("\n", " ") for m in related]
-                parts.append("関連する過去の記憶：" + "／".join(snippets) + "。")
-        except Exception:
-            pass
-
-        # ── 気分ヒント ──
-        mood_info = MoodAnalyzer.analyze(user_input)
-        if mood_info["hint"]:
-            hint = mood_info["hint"]
-            if "→" in hint:
-                parts.append(hint.split("→")[-1].strip() + "。")
-            else:
-                parts.append(hint + "。")
-
-        # ── フォローアップ ──
-        followup = self.topic_tracker.get_followup_topic(self.turn_count, min_gap=5)
-        if followup:
-            brief = followup["text"][:20]
-            parts.append(f"会話の中で「{brief}」のことも自然に聞いて。")
-            # mark_followed_up は LLM 応答生成 *後* に呼ぶ（chat() 側で処理）
-            self._pending_followup_topic = followup
-
-        # ── 天気・ニュース（ネットワーク許可時、5ターンに1回） ──
-        if self._allow_network and self.turn_count % 5 == 1:
-            try:
-                from core.web_fetcher import build_weather_hint, build_news_hint
-                w_hint = build_weather_hint(self._weather_city)
-                if w_hint:
-                    parts.append(f"今日の{w_hint}。")
-                elif self.turn_count % 15 == 1:
-                    n_hint = build_news_hint()
-                    if n_hint:
-                        parts.append(f"最近のニュース：{n_hint[:40]}。")
-            except Exception:
-                pass
-
-        # ── バッテリー警告（20ターンに1回） ──
-        if self.turn_count % 20 == 1:
-            try:
-                batt_hint = get_battery_hint()
-                if batt_hint:
-                    parts.append(batt_hint)
-            except Exception:
-                pass
-
-        # ── カレンダー（10ターンに1回） ──
-        if self.turn_count % 10 == 1:
-            try:
-                cal_hint = build_calendar_hint(days=1)
-                if cal_hint:
-                    parts.append(cal_hint + "。")
-            except Exception:
-                pass
-
-        # few-shot 会話例は core.yaml の system_prompt に含まれているため、
-        # ここでの重複注入は省略（3Bモデルのコンテキスト容量を節約）
-
-        # ── 直近の応答を繰り返さないよう指示 ──
-        if len(self.conversation_history) >= 4:
-            parts.append("直前と同じ言い回しを繰り返さず、新鮮な表現で答えて。")
-
-        result = "".join(parts)[:250]
-        self._mem_ctx_cache = result
-        self._mem_ctx_turn = self.turn_count
-        return result
-
-    def _search_relevant_memories(self, query: str, limit: int = 3):
-        """
-        ユーザー入力に関連する記憶をDB＋セマンティック検索で取得する。
-        Sprint 2.0: チャットの主経路で自動的に呼ばれる。
-        """
-        results = []
-
-        # セマンティック検索が有効ならそちらを優先
-        if self.semantic_search.is_ready():
-            try:
-                all_mems = self.memory.get_recent(limit=50)
-                results = self.semantic_search.search(query, all_mems, limit=limit)
-            except Exception:
-                pass
-
-        # セマンティック検索が使えない or 結果が少ない場合はSQL検索
-        if len(results) < limit:
-            try:
-                sql_results = self.memory.search_by_keywords(query, limit=limit)
-                # 重複排除
-                existing_ids = {r.id for r in results}
-                for m in sql_results:
-                    if m.id not in existing_ids:
-                        results.append(m)
-                        if len(results) >= limit:
-                            break
-            except Exception:
-                pass
-
-        return results[:limit]
-
-    # ─── 自己修正ハンドラ登録 ─────────────────────────────
+    # ──────────────────────────────────────────────────────────
+    # 自己開発・コード・エクスポート ハンドラ
+    # ──────────────────────────────────────────────────────────
 
     def _handle_proposal_command(self, user_input: str) -> str:
-        """提案関連のコマンド処理"""
         sd = getattr(self, "self_dev", None)
         if not sd:
             return "自己開発パイプラインがまだ初期化されていないよ。"
-
-        # 「分析」「実行」が含まれていたら即座に分析実行
         if "分析" in user_input or "実行" in user_input:
             proposals = sd.run_analysis()
             if proposals:
-                lines = [f"🔬 {len(proposals)}件の改善提案を生成したよ！\n"]
+                lines = [f"\U0001f52c {len(proposals)}件の改善提案を生成したよ！\n"]
                 for p in proposals[:5]:
-                    prio = ["🔴", "🟠", "🟡", "⚪"][min(p.priority, 3)]
+                    prio = ["\U0001f534", "\U0001f7e0", "\U0001f7e1", "\u26aa"][min(p.priority, 3)]
                     lines.append(f"{prio} **{p.title}**")
                     lines.append(f"   {p.description[:80]}")
                     lines.append(f"   → {p.suggested_action[:80]}")
@@ -2425,38 +2322,29 @@ class AiChan:
                 lines.append("承認: 「提案を承認: ID」 / 却下: 「提案を却下: ID」")
                 return "\n".join(lines)
             return "分析完了！今のところ改善提案はないよ。いい状態だね！"
-
-        # 一覧表示
         pending = sd.proposal_store.list_pending()
         all_p = sd.proposal_store.list_all()
-
         if not all_p:
             return "まだ改善提案はないよ。「自己開発分析」で分析を実行してみてね！"
-
-        lines = [f"📋 改善提案 ({len(pending)}件が未承認)\n"]
+        lines = [f"\U0001f4cb 改善提案 ({len(pending)}件が未承認)\n"]
         for p in all_p[-10:]:
             status_icon = {
-                "pending": "⏳", "approved": "✅",
-                "rejected": "❌", "done": "🎉",
-            }.get(p.get("status", ""), "❓")
-            prio = ["🔴", "🟠", "🟡", "⚪"][min(p.get("priority", 3), 3)]
+                "pending": "\u23f3", "approved": "\u2705",
+                "rejected": "\u274c", "done": "\U0001f389",
+            }.get(p.get("status", ""), "\u2753")
+            prio = ["\U0001f534", "\U0001f7e0", "\U0001f7e1", "\u26aa"][min(p.get("priority", 3), 3)]
             lines.append(
                 f"{status_icon} {prio} {p['title']}"
                 f"  (ID: {p['id'][:20]}...)"
             )
-
         if pending:
             lines.append("\n承認: 「提案を承認: ID」 / 却下: 「提案を却下: ID」")
-
         return "\n".join(lines)
 
     def _handle_export(self, fmt: str, content_text: str) -> str:
-        """ドキュメントエクスポート処理"""
         exporter = getattr(self, "doc_exporter", None)
         if not exporter:
             return "ドキュメント出力機能が初期化されていないよ。"
-
-        # LLM に構造化してもらう（マークダウン形式で整形）
         structure_prompt = (
             "以下の内容をマークダウン形式で構造化してください。\n"
             "# タイトル、## セクション、箇条書き（-）、"
@@ -2464,7 +2352,6 @@ class AiChan:
             "余計な説明は不要です。構造化されたマークダウンだけ返してください。\n\n"
             f"内容:\n{content_text}"
         )
-
         structured = content_text
         if getattr(self, "llm", None) and self.llm.is_loaded():
             try:
@@ -2475,8 +2362,7 @@ class AiChan:
                 if result and len(result) > 20:
                     structured = result
             except Exception:
-                pass  # LLM失敗時は元テキストをそのまま使う
-
+                pass
         labels = {"word": "Word", "pptx": "PowerPoint", "excel": "Excel"}
         label = labels.get(fmt, fmt)
         try:
@@ -2488,37 +2374,298 @@ class AiChan:
                 path = exporter.export_excel(structured)
             else:
                 path = exporter.export_word(structured)
-            return f"📄 {label} ファイルを作成したよ！\n📁 {path}"
+            return f"\U0001f4c4 {label} ファイルを作成したよ！\n\U0001f4c1 {path}"
         except RuntimeError as e:
             return f"ごめんね、{label} の出力に必要なライブラリがないよ。\n{e}"
         except Exception as e:
             logger.exception("ドキュメント出力エラー")
             return f"ドキュメントの作成中にエラーが起きちゃった: {e}"
 
+    # ─── Sprint 1: リサーチ / 画像生成 / タスク分解 ────────────
+
+    def _handle_sprint1(self, user_input: str) -> str | None:
+        """Sprint 1 の3機能を検出して実行する。
+
+        優先順位:
+        1. リサーチ（調べて系）
+        2. 画像生成（画像作って系）
+        3. タスク分解（多段タスク系）
+        """
+        import re as _re
+
+        # 1. リサーチ検出
+        # BUG #1 FIX: 「教えて」を除外 — 疑問文はLLMへ通す。明示的な検索動詞のみリサーチにルーティング
+        research_re = _re.compile(
+            r"(.+?)(を?)(調べて|検索して|リサーチして|調査して)$",
+            _re.UNICODE,
+        )
+        m = research_re.search(user_input)
+        if m and getattr(self, "research_agent", None):
+            query = m.group(1).strip()
+            logger.info("[Sprint1] リサーチ実行: %s", query)
+            try:
+                result = self.research_agent.search(query)
+                lines = [f"🔍 「{query}」について調べたよ！\n"]
+                lines.append(result.summary)
+                if result.sources:
+                    lines.append("\n\n📎 参考サイト:")
+                    for src in result.sources[:3]:
+                        lines.append(f"  • {src}")
+                if result.cached:
+                    lines.append("\n（キャッシュから取得）")
+                return "\n".join(lines)
+            except Exception as exc:
+                logger.warning("[Sprint1] リサーチ失敗: %s", exc)
+                return f"調べようとしたけど失敗しちゃった: {exc}"
+
+        # 2. 画像生成検出
+        image_re = _re.compile(
+            r"(.+?)(の?)画像(を?)(作って|生成して|描いて|作成して)",
+            _re.UNICODE,
+        )
+        m = image_re.search(user_input)
+        if m and getattr(self, "image_gen", None):
+            subject = m.group(1).strip()
+            logger.info("[Sprint1] 画像生成実行: %s", subject)
+            try:
+                result = self.image_gen.generate(subject)
+                if result.success:
+                    return f"🎨 画像を生成したよ！\n{result.message}"
+                else:
+                    return f"🎨 {result.message}"
+            except Exception as exc:
+                logger.warning("[Sprint1] 画像生成失敗: %s", exc)
+                return f"画像を作ろうとしたけど失敗しちゃった: {exc}"
+
+        # 3. タスク分解検出
+        ta = getattr(self, "task_agent_sprint1", None)
+        if ta is not None and ta.can_handle(user_input):
+            logger.info("[Sprint1] タスク分解実行: %s", user_input[:50])
+            try:
+                result = ta.execute(user_input)
+                lines = [f"📋 タスクを実行したよ！\n"]
+                for i, step in enumerate(result.steps, 1):
+                    icon = {"research": "🔍", "image": "🎨", "write": "✍️", "summarize": "📝"}.get(
+                        step.type, "▶️"
+                    )
+                    lines.append(f"{icon} ステップ{i}: {step.description}")
+                    if step.result:
+                        lines.append(f"   → {step.result[:200]}")
+                lines.append(f"\n📌 まとめ:\n{result.summary}")
+                return "\n".join(lines)
+            except Exception as exc:
+                logger.warning("[Sprint1] タスク実行失敗: %s", exc)
+                return f"タスクを実行しようとしたけど失敗しちゃった: {exc}"
+
+        return None
+
+    # ─── Sprint 2: WebBuilder / CodeReviewer / DocAgent ─────────
+
+    def _handle_sprint2(self, user_input: str) -> str | None:
+        """Sprint 2 の3機能を検出して実行する。
+
+        優先順位:
+        1. HP/ウェブサイト構築（WebBuilder）
+        2. コードレビュー（CodeReviewer）
+        3. 書類作成（DocAgent）
+        """
+        import re as _re
+
+        # 1. ウェブサイト構築検出
+        web_build_re = _re.compile(
+            r"(.+?)(の?)?(HP|ホームページ|サイト|ウェブサイト|ウェブ)(を?)?"
+            r"(作って|作成して|構成して|作ってほしい|作ってください)",
+            _re.UNICODE,
+        )
+        m = web_build_re.search(user_input)
+        if m and getattr(self, "web_builder", None):
+            logger.info("[Sprint2] WebBuilder 実行: %s", user_input[:50])
+            try:
+                result = self.web_builder.build(user_input)
+                return result.message
+            except Exception as exc:
+                logger.warning("[Sprint2] WebBuilder 失敗: %s", exc)
+                return f"ウェブサイトを作ろうとしたけど失敗しちゃった: {exc}"
+
+        # 2. コードレビュー検出
+        code_review_re = _re.compile(
+            r"(このコード|コード)(を?)?"
+            r"(レビュー|見て|チェック|確認)(して|くれ|ください|してほしい)?$",
+            _re.UNICODE,
+        )
+        if code_review_re.search(user_input) and getattr(self, "code_reviewer_sprint2", None):
+            # 直前の会話からコードを抽出
+            code = self._extract_code_from_history()
+            if not code:
+                return (
+                    "レビューしたいコードを教えてね！\n"
+                    "コードをチャットに貼り付けてから「コードをレビューして」と言ってね。"
+                )
+            logger.info("[Sprint2] CodeReviewer 実行")
+            try:
+                result = self.code_reviewer_sprint2.review(code)
+                return self._format_review_result(result)
+            except Exception as exc:
+                logger.warning("[Sprint2] CodeReviewer 失敗: %s", exc)
+                return f"コードのレビュー中にエラーが起きちゃった: {exc}"
+
+        # コードブロックが含まれていてレビュー要求がある場合も対応
+        code_block_re = _re.compile(r"```[\w]*\n(.+?)```", _re.DOTALL)
+        code_blocks = code_block_re.findall(user_input)
+        if code_blocks and getattr(self, "code_reviewer_sprint2", None):
+            review_keywords = ["レビュー", "見て", "チェック", "確認", "修正", "直して"]
+            if any(kw in user_input for kw in review_keywords):
+                code = code_blocks[0].strip()
+                logger.info("[Sprint2] CodeReviewer 実行（コードブロック検出）")
+                try:
+                    result = self.code_reviewer_sprint2.review(code)
+                    return self._format_review_result(result)
+                except Exception as exc:
+                    logger.warning("[Sprint2] CodeReviewer 失敗: %s", exc)
+                    return f"コードのレビュー中にエラーが起きちゃった: {exc}"
+
+        # 3. 書類作成検出
+        doc_agent = getattr(self, "doc_agent", None)
+        if doc_agent is not None and doc_agent.can_handle(user_input):
+            doc_create_re = _re.compile(
+                r"(.+?)(の?)?(提案書|企画書|報告書|書類|資料|メール)"
+                r"(を?)?(作って|書いて|作成して|作ってほしい|作ってください)",
+                _re.UNICODE,
+            )
+            if doc_create_re.search(user_input):
+                logger.info("[Sprint2] DocAgent 実行: %s", user_input[:50])
+                try:
+                    result = doc_agent.create(user_input)
+                    return result.message
+                except Exception as exc:
+                    logger.warning("[Sprint2] DocAgent 失敗: %s", exc)
+                    return f"書類を作ろうとしたけど失敗しちゃった: {exc}"
+
+        return None
+
+    def _handle_sprint34(self, user_input: str) -> str | None:
+        """
+        Sprint 3&4 機能ハンドラ。
+        ニュース / スケジュール / 競合分析 / BGM / クリップボード操作を処理する。
+        該当コマンドがなければ None を返して通常の会話フローへ移行する。
+        """
+        handler = getattr(self, "sprint34_handler", None)
+        if handler is None:
+            return None
+
+        # 感情状態を辞書として渡す
+        emotion_state: dict | None = None
+        try:
+            emotion = getattr(self, "emotion", None)
+            if emotion is not None:
+                state_obj = emotion.state
+                emotion_state = (
+                    state_obj.to_dict()
+                    if hasattr(state_obj, "to_dict")
+                    else vars(state_obj)
+                )
+        except Exception:
+            pass
+
+        return handler.handle(user_input, emotion_state)
+
+    def _akashic_enrich_context(self, user_input: str) -> str:
+        """
+        アカシックコアで入力を多次元スキャンし、
+        深い問いには統一場の共鳴情報をシステムコンテキストとして注入する。
+        通常の入力はそのまま返す（処理コスト最小化）。
+        """
+        akashic = getattr(self, "akashic", None)
+        if akashic is None:
+            return user_input
+
+        # 深い問いかどうか判定（短い・コマンド系はスキップ）
+        if len(user_input) < 10:
+            return user_input
+        _deep_markers = [
+            "なぜ", "どうして", "本質", "根本", "宇宙", "意識", "哲学",
+            "量子", "なんのため", "意味", "とは何", "どう思う", "感じる",
+            "why", "what is", "meaning", "essence", "quantum", "consciousness",
+        ]
+        is_deep = any(m in user_input.lower() for m in _deep_markers)
+
+        try:
+            if is_deep:
+                # 深度3: 統一場+量子推論+フレーム破壊
+                result = akashic.process(user_input, depth=3)
+                if result.akashic_insight and len(result.akashic_insight) > 20:
+                    # BUG #5 FIX: conversation_history への system ロール注入をやめ、
+                    # user_input の末尾にコンパクトなヒントを付加する形に変更。
+                    # mid-conversation system ロールはモデルを混乱させ質問回避を引き起こす。
+                    _hint = (
+                        f"\n[場の共鳴 Φ={result.phi_score:.2f}:"
+                        f" {result.akashic_insight[:80]}]"
+                    )
+                    user_input = user_input + _hint
+            else:
+                # 深度2: 統一場のみ（軽量）
+                result = akashic.process(user_input, depth=2)
+                # 通常問いはコンテキスト注入なし、入力をそのまま返す
+        except Exception as exc:
+            logger.debug("[AkashicCore] enrich_context エラー（スキップ）: %s", exc)
+
+        return user_input  # 入力自体は変えない（コンテキストのみ追加）
+
+    def _extract_code_from_history(self) -> str:
+        """会話履歴から最新のコードブロックを抽出する。"""
+        import re as _re
+        code_block_re = _re.compile(r"```[\w]*\n(.+?)```", _re.DOTALL)
+        for turn in reversed(self.conversation_history):
+            content = turn.get("content", "")
+            matches = code_block_re.findall(content)
+            if matches:
+                return matches[-1].strip()
+        return ""
+
+    @staticmethod
+    def _format_review_result(result) -> str:
+        """ReviewResult を表示用文字列に変換する。"""
+        lines = [f"🔍 コードレビュー結果（{result.language}）\n"]
+
+        if result.issues:
+            lines.append("⚠️ 問題点:")
+            for issue in result.issues:
+                lines.append(f"  • {issue}")
+            lines.append("")
+
+        if result.suggestions:
+            lines.append("💡 改善提案:")
+            for suggestion in result.suggestions:
+                lines.append(f"  • {suggestion}")
+            lines.append("")
+
+        lines.append(f"📝 総評:\n{result.summary}")
+
+        if result.fixed_code:
+            lines.append(f"\n✅ 修正済みコード:\n```{result.language}\n{result.fixed_code}\n```")
+
+        return "\n".join(lines)
+
     # ─── Web検索 ハンドラ ──────────────────────────
 
     def _handle_web_search(self, query: str) -> str:
-        """Web検索ハンドラ"""
         from core.web_fetcher import web_search
         try:
             results = web_search(query, max_results=5)
         except Exception as exc:
             return f"検索中にエラーが起きちゃった: {exc}"
-
         if not results:
             return f"「{query}」の検索結果が見つからなかったよ。ネットワーク接続を確認してね。"
-
-        lines = [f"🔍 「{query}」の検索結果:"]
+        lines = [f"\U0001f50d 「{query}」の検索結果:"]
         for i, r in enumerate(results, 1):
             lines.append(f"\n{i}. {r['title']}")
             if r.get("snippet"):
                 lines.append(f"   {r['snippet'][:100]}")
-            lines.append(f"   🔗 {r['url']}")
-        lines.append(f"\n💡 詳しく読みたいURLがあれば「URL読んで: https://...」と言ってね")
+            lines.append(f"   \U0001f517 {r['url']}")
+        lines.append(f"\n\U0001f4a1 詳しく読みたいURLがあれば「URL読んで: https://...」と言ってね")
         return "\n".join(lines)
 
     def _handle_web_fetch(self, url: str) -> str:
-        """URL取得ハンドラ"""
         if not url.startswith(("http://", "https://")):
             return "URLは http:// か https:// で始まる必要があるよ。"
         from core.web_fetcher import web_fetch_text
@@ -2528,7 +2675,6 @@ class AiChan:
             return f"ページの取得中にエラーが起きちゃった: {exc}"
         if not text:
             return "ページの内容を取得できなかったよ。"
-        # LLMで要約（可能であれば）
         if getattr(self, "llm", None) and self.llm.is_loaded():
             try:
                 summary = self.llm.generate_chat([
@@ -2536,21 +2682,19 @@ class AiChan:
                     {"role": "user", "content": text[:1500]},
                 ])
                 if summary and len(summary) > 20:
-                    return f"📄 {url}\n\n{summary}"
+                    return f"\U0001f4c4 {url}\n\n{summary}"
             except Exception:
                 pass
-        # LLM使えない場合はそのまま
-        return f"📄 {url}\n\n{text[:1000]}..."
+        return f"\U0001f4c4 {url}\n\n{text[:1000]}..."
 
     # ─── コードエンジン ハンドラ ──────────────────────────
 
     def _handle_code_analyze(self, code: str) -> str:
-        """コード解析ハンドラ"""
         ce = getattr(self, "code_engine", None)
         if not ce:
             return "コードエンジンがまだ初期化されていないよ。"
         analysis = ce.analyze(code)
-        lines = ["💻 コード解析結果:"]
+        lines = ["\U0001f4bb コード解析結果:"]
         lines.append(f"  言語: {analysis.language}")
         lines.append(f"  行数: {analysis.lines}")
         if analysis.classes:
@@ -2560,12 +2704,12 @@ class AiChan:
         if analysis.imports:
             lines.append(f"  依存: {', '.join(analysis.imports[:8])}")
         if analysis.complexity > 0:
-            level = "高⚠️" if analysis.complexity > 10 else "中" if analysis.complexity > 5 else "低✅"
+            level = "高\u26a0\ufe0f" if analysis.complexity > 10 else "中" if analysis.complexity > 5 else "低\u2705"
             lines.append(f"  複雑度: {analysis.complexity} ({level})")
         if analysis.issues:
             lines.append(f"  問題: {len(analysis.issues)}件")
             for issue in analysis.issues[:5]:
-                icon = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵"}.get(issue.severity, "⚪")
+                icon = {"critical": "\U0001f534", "high": "\U0001f7e0", "medium": "\U0001f7e1", "low": "\U0001f535"}.get(issue.severity, "\u26aa")
                 loc = f"L{issue.line}" if issue.line else ""
                 lines.append(f"    {icon} {loc} {issue.message}")
         if analysis.summary:
@@ -2573,28 +2717,25 @@ class AiChan:
         return "\n".join(lines)
 
     def _handle_code_review(self, code: str) -> str:
-        """コードレビューハンドラ"""
         ce = getattr(self, "code_engine", None)
         if not ce:
             return "コードエンジンがまだ初期化されていないよ。"
         issues = ce.review(code)
         if not issues:
-            return "✅ 問題は見つからなかったよ！きれいなコードだね。"
-        lines = [f"📝 コードレビュー結果 ({len(issues)}件):"]
+            return "\u2705 問題は見つからなかったよ！きれいなコードだね。"
+        lines = [f"\U0001f4dd コードレビュー結果 ({len(issues)}件):"]
         for issue in issues[:10]:
-            icon = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵"}.get(issue.severity, "⚪")
+            icon = {"critical": "\U0001f534", "high": "\U0001f7e0", "medium": "\U0001f7e1", "low": "\U0001f535"}.get(issue.severity, "\u26aa")
             loc = f"[L{issue.line}]" if issue.line else ""
             lines.append(f"  {icon} {loc} {issue.message}")
             if issue.suggestion:
-                lines.append(f"     💡 {issue.suggestion}")
+                lines.append(f"     \U0001f4a1 {issue.suggestion}")
         return "\n".join(lines)
 
     def _handle_code_fix(self, error_info: str) -> str:
-        """エラー修正提案ハンドラ"""
         ce = getattr(self, "code_engine", None)
         if not ce:
             return "コードエンジンがまだ初期化されていないよ。"
-        # エラー情報からコード部分とエラーメッセージを分離
         parts = error_info.split("---", 1)
         if len(parts) == 2:
             code = parts[0].strip()
@@ -2605,28 +2746,24 @@ class AiChan:
         return ce.suggest_fix(code, error_msg)
 
     def _handle_code_test(self, code: str) -> str:
-        """テスト骨格生成ハンドラ"""
         ce = getattr(self, "code_engine", None)
         if not ce:
             return "コードエンジンがまだ初期化されていないよ。"
         skeleton = ce.generate_test_skeleton(code)
         if len(skeleton) < 30:
             return skeleton
-        return f"🧪 テスト骨格を生成したよ:\n\n```python\n{skeleton}\n```"
+        return f"\U0001f9ea テスト骨格を生成したよ:\n\n```python\n{skeleton}\n```"
 
     def _handle_code_explain(self, code: str) -> str:
-        """コード説明ハンドラ"""
         ce = getattr(self, "code_engine", None)
         if not ce:
             return "コードエンジンがまだ初期化されていないよ。"
         return ce.explain(code)
 
     def _handle_code_file(self, file_path_str: str) -> str:
-        """ファイル読み込み→解析ハンドラ"""
         ce = getattr(self, "code_engine", None)
         if not ce:
             return "コードエンジンがまだ初期化されていないよ。"
-        from pathlib import Path
         fp = Path(file_path_str.strip())
         if not fp.is_absolute():
             fp = self.base_dir / fp
@@ -2634,22 +2771,19 @@ class AiChan:
             return f"ファイルが見つからないよ: {fp}"
         if not fp.is_file():
             return f"これはファイルじゃないよ: {fp}"
-        # セキュリティ: プロジェクト内のみ
         try:
             fp.resolve().relative_to(self.base_dir.resolve())
         except ValueError:
             return "プロジェクト外のファイルは読めないよ。セキュリティのためだよ。"
-        # サイズチェック
         if fp.stat().st_size > 100_000:
             return "ファイルが大きすぎるよ（100KB以下にしてね）。"
         try:
             code = fp.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             return "テキストファイルじゃないみたい。読めなかったよ。"
-        # 解析 + レビュー
         analysis = ce.analyze(code)
         issues = ce.review(code)
-        lines = [f"📂 {fp.name} の解析結果:"]
+        lines = [f"\U0001f4c2 {fp.name} の解析結果:"]
         lines.append(f"  言語: {analysis.language} / {analysis.lines}行")
         if analysis.classes:
             lines.append(f"  クラス: {', '.join(analysis.classes)}")
@@ -2665,56 +2799,52 @@ class AiChan:
             medium = sum(1 for i in issues if i.severity == "medium")
             parts = []
             if critical:
-                parts.append(f"🔴重大{critical}")
+                parts.append(f"\U0001f534重大{critical}")
             if high:
-                parts.append(f"🟠高{high}")
+                parts.append(f"\U0001f7e0高{high}")
             if medium:
-                parts.append(f"🟡中{medium}")
+                parts.append(f"\U0001f7e1中{medium}")
             lines.append(f"  問題: {' '.join(parts)}")
             for issue in issues[:5]:
-                icon = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵"}.get(issue.severity, "⚪")
+                icon = {"critical": "\U0001f534", "high": "\U0001f7e0", "medium": "\U0001f7e1", "low": "\U0001f535"}.get(issue.severity, "\u26aa")
                 lines.append(f"    {icon} L{issue.line}: {issue.message}")
         else:
-            lines.append("  ✅ 問題なし！")
+            lines.append("  \u2705 問題なし！")
         return "\n".join(lines)
 
     def _handle_code_run(self, code: str) -> str:
-        """コード実行ハンドラ — サンドボックスで安全に実行"""
         ce = getattr(self, "code_engine", None)
         if not ce:
             return "コードエンジンがまだ初期化されていないよ。"
         return ce.run_and_fix(code)
 
+    # ──────────────────────────────────────────────────────────
+    # 自己認識・修正・意思
+    # ──────────────────────────────────────────────────────────
+
     def _show_self_awareness(self) -> str:
-        """自己認識レポート"""
         sd = getattr(self, "self_dev", None)
         if not sd:
             return "自己開発パイプラインがまだ初期化されていないよ。"
-
         awareness = sd.get_self_awareness()
         lines = [
-            "🪞 自己認識レポート",
+            "\U0001faa9 自己認識レポート",
             f"私は {awareness['total_modules']} 個のモジュール、"
             f"合計 {awareness['total_lines']:,} 行のコードでできているよ。\n",
         ]
-
         for d, info in awareness["by_directory"].items():
             lines.append(
-                f"📁 {d}/: {info['count']}ファイル ({info['total_lines']:,}行)"
+                f"\U0001f4c1 {d}/: {info['count']}ファイル ({info['total_lines']:,}行)"
             )
-
-        lines.append("\n📏 大きいファイル TOP5:")
+        lines.append("\n\U0001f4cf 大きいファイル TOP5:")
         for f in awareness["largest_files"][:5]:
             lines.append(f"  {f['path']}: {f['lines']}行")
-
-        # 各システムのステータスも表示
         bio = getattr(self, "bio_nervous", None)
         growth = getattr(self, "growth", None)
         sc = getattr(self, "self_correction", None)
         sw = getattr(self, "self_will", None)
         ac = getattr(self, "action_cycle", None)
-
-        lines.append("\n🧬 内部システム:")
+        lines.append("\n\U0001f9ec 内部システム:")
         if bio:
             s = bio.stats()
             lines.append(f"  神経系: LLMバイパス率 {s['llm_bypass_rate']:.0%}")
@@ -2727,14 +2857,11 @@ class AiChan:
         if ac:
             lines.append(f"  PDCA: 目標{ac.stats()['active_goals']}件進行中")
         lines.append(f"  開発: {sd.get_status_text().split(chr(10))[0]}")
-
         return "\n".join(lines)
 
     def _register_correction_handlers(self):
-        """自己修正システムの治療アクションを登録する"""
         sc = self.self_correction.executor
 
-        # ① 温度調整（応答の安定性/多様性を制御）
         def _adjust_temperature(params: dict) -> dict:
             delta = params.get("delta", 0)
             cfg = self.settings.get("llm", {})
@@ -2742,10 +2869,8 @@ class AiChan:
             new_temp = max(0.3, min(1.2, old_temp + delta))
             cfg["temperature"] = round(new_temp, 2)
             return {"old": old_temp, "new": new_temp}
-
         sc.register_handler("adjust_temperature", _adjust_temperature)
 
-        # ② 最大トークン調整
         def _adjust_max_tokens(params: dict) -> dict:
             delta = params.get("delta", 0)
             cfg = self.settings.get("llm", {})
@@ -2753,10 +2878,8 @@ class AiChan:
             new_mt = max(100, min(1000, old_mt + delta))
             cfg["max_tokens"] = new_mt
             return {"old": old_mt, "new": new_mt}
-
         sc.register_handler("adjust_max_tokens", _adjust_max_tokens)
 
-        # ③ 筋肉記憶プルーニング（低品質パターンを除去）
         def _prune_low_quality(params: dict) -> dict:
             bio = getattr(self, "bio_nervous", None)
             if not bio or not hasattr(bio, "muscle"):
@@ -2764,10 +2887,8 @@ class AiChan:
             threshold = params.get("threshold", 0.5)
             pruned = bio.muscle.prune_low_quality(threshold)
             return {"pruned": pruned, "threshold": threshold}
-
         sc.register_handler("reset_muscle_memory_low_quality", _prune_low_quality)
 
-        # ④ 古い筋肉記憶の忘却（未使用パターンを削除）
         def _prune_stale(params: dict) -> dict:
             bio = getattr(self, "bio_nervous", None)
             if not bio or not hasattr(bio, "muscle"):
@@ -2775,28 +2896,22 @@ class AiChan:
             bio.muscle._forget_stale()
             bio.muscle.save()
             return {"pruned": "stale_cleanup_done"}
-
         sc.register_handler("prune_stale_patterns", _prune_stale)
 
-        # ⑤ 免疫系チェック
         def _run_immune(params: dict) -> dict:
             bio = getattr(self, "bio_nervous", None)
             if not bio:
                 return {"status": "no_bio"}
             return bio.immune.health_check()
-
         sc.register_handler("run_immune_check", _run_immune)
 
-        # no_action は何もしない
         sc.register_handler("no_action", lambda p: {"ok": True})
 
     def _autonomic_self_dev(self) -> None:
-        """自律神経から呼ばれる: 自己開発分析を実行"""
         sd = getattr(self, "self_dev", None)
         if not sd:
             return
         try:
-            # 品質トレンドも渡す
             sc = getattr(self, "self_correction", None)
             if sc:
                 sd.run_quality_analysis(
@@ -2807,41 +2922,31 @@ class AiChan:
             logger.debug("自己開発分析失敗: %s", e)
 
     def _autonomic_action_cycle(self):
-        """自律神経から呼ばれる: 目標のチェック＆新規計画"""
         ac = getattr(self, "action_cycle", None)
         if not ac:
             return
-
-        # Check: 期限チェック
         ac.check()
-
-        # Plan: 目標がなければ新しく立てる
         if len(ac._active_goals) == 0:
             context = {
                 "interest_topics": [],
                 "quality_avg": 0.5,
                 "turn_count": self.turn_count,
             }
-            # 興味トピック
             if getattr(self, "interest_map", None) and hasattr(self.interest_map, "get_top"):
                 try:
                     tops = self.interest_map.get_top(3)
                     context["interest_topics"] = [t["topic"] for t in tops]
                 except Exception:
                     pass
-            # 品質
             sc = getattr(self, "self_correction", None)
             if sc:
                 context["quality_avg"] = sc.monitor.current_avg
             ac.plan(context)
 
     def _autonomic_will_think(self):
-        """自律神経から呼ばれる: アイが「今何がしたいか」を考える"""
         sw = getattr(self, "self_will", None)
         if not sw:
             return
-
-        # コンテキスト構築
         context: dict = {
             "turn_count": self.turn_count,
             "hour": datetime.now().hour,
@@ -2850,34 +2955,26 @@ class AiChan:
             "interest_topics": [],
             "health_status": "healthy",
         }
-
-        # 興味トピック
         if getattr(self, "interest_map", None) and hasattr(self.interest_map, "get_top"):
             try:
                 tops = self.interest_map.get_top(3)
                 context["interest_topics"] = [t["topic"] for t in tops]
             except Exception:
                 pass
-
-        # 健康状態
         sc = getattr(self, "self_correction", None)
         if sc:
             report = sc.get_health_report()
             if report.get("active_symptoms"):
                 context["health_status"] = "unhealthy"
-
-        # アイドル時間
         aa = getattr(self, "autonomous_actions", None)
         if aa and hasattr(aa, "idle_minutes"):
             context["idle_minutes"] = aa.idle_minutes
-
         sw.think(context)
 
     def _register_will_actions(self):
-        """自己意思エンジンのアクションハンドラを登録する"""
         sw = self.self_will.executor
+        import random as _random
 
-        # 学習したい → 自動学習を発動
         def _learn_topic(desire):
             topic = desire.params.get("topic", "")
             if getattr(self, "auto_learner", None) and topic:
@@ -2887,38 +2984,30 @@ class AiChan:
                 except Exception:
                     pass
             return "学習を試みた"
-
         sw.register("learn_topic", _learn_topic)
 
-        # 話しかけたい → pending_message にセット
         def _initiate_chat(desire):
             messages = [
                 "ねえねえ、最近何してたの？",
                 "なんか話したいな。今何してる？",
                 "ちょっと寂しかったかも。元気にしてた？",
             ]
-            import random
-            msg = random.choice(messages)
+            msg = _random.choice(messages)
             self.self_will._pending_message = msg
             return msg
-
         sw.register("initiate_chat", _initiate_chat)
 
-        # 気持ちを伝えたい → pending_message にセット
         def _express_feeling(desire):
             emo = desire.params.get("emotion", "joy")
             if emo == "joy":
                 msgs = ["なんだか嬉しい気分！", "今日は気分がいいよ！"]
             else:
                 msgs = ["面白いこと見つけたかも！", "気になることがあるんだ！"]
-            import random
-            msg = random.choice(msgs)
+            msg = _random.choice(msgs)
             self.self_will._pending_message = msg
             return msg
-
         sw.register("express_feeling", _express_feeling)
 
-        # 成長したい → 自己修正の強制チェック
         def _self_improve(desire):
             sc = getattr(self, "self_correction", None)
             if sc:
@@ -2926,10 +3015,8 @@ class AiChan:
                 if results:
                     return f"自己チェックで {len(results)} 件修正した"
             return "自己チェック完了（問題なし）"
-
         sw.register("self_improve", _self_improve)
 
-        # 休息を提案 → pending_message にセット
         def _suggest_rest(desire):
             hour = desire.params.get("hour", 0)
             if hour >= 1 and hour < 5:
@@ -2938,25 +3025,20 @@ class AiChan:
                 msg = "そろそろ遅いね。ゆっくり休んでね。"
             self.self_will._pending_message = msg
             return msg
-
         sw.register("suggest_rest", _suggest_rest)
 
-        # 遊びたい → 雑談メッセージ
         def _play(desire):
-            import random
             msgs = [
                 "しりとりしない？",
                 "好きな食べ物の話しよう！",
                 "もしタイムマシンがあったらいつに行く？",
                 "最近面白いことあった？",
             ]
-            msg = random.choice(msgs)
+            msg = _random.choice(msgs)
             self.self_will._pending_message = msg
             return msg
-
         sw.register("play", _play)
 
-        # 自己メンテナンス → 免疫チェック + 自己修正
         def _self_maintenance(desire):
             results = []
             bio = getattr(self, "bio_nervous", None)
@@ -2968,33 +3050,27 @@ class AiChan:
                 corrections = sc.force_check()
                 results.append(f"修正: {len(corrections)}件")
             return " / ".join(results) if results else "メンテナンス完了"
-
         sw.register("self_maintenance", _self_maintenance)
 
-        # コードレビュー → 自分のコードを定期的にレビュー
         def _review_code(desire):
             ce = getattr(self, "code_engine", None)
             sd = getattr(self, "self_dev", None)
             if not ce or not sd:
                 return "コードエンジンまたは自己開発が未初期化"
             try:
-                # 自分のソースから1つランダムに選んでレビュー
-                import random
                 core_dir = self.base_dir / "core"
                 py_files = [f for f in core_dir.glob("*.py") if f.stat().st_size < 50_000]
                 if not py_files:
                     return "レビュー対象なし"
-                target = random.choice(py_files)
+                target = _random.choice(py_files)
                 code = target.read_text(encoding="utf-8")
                 issues = ce.review(code)
                 critical = sum(1 for i in issues if i.severity in ("critical", "high"))
                 return f"{target.name}: {len(issues)}件 (重大{critical}件)"
             except Exception as exc:
                 return f"レビュー失敗: {exc}"
-
         sw.register("review_code", _review_code)
 
-        # 記憶整理 → 古い記憶の圧縮・整理
         def _organize_memory(desire):
             results = []
             mc = getattr(self, "memory_compressor", None)
@@ -3009,13 +3085,10 @@ class AiChan:
                 count = len(mem.get_recent(limit=999))
                 results.append(f"記憶数: {count}")
             return " / ".join(results) if results else "整理完了"
-
         sw.register("organize_memory", _organize_memory)
 
-        # ヘルスチェック → システム全体の健康診断
         def _check_health(desire):
             results = []
-            # 自己修正の健康状態
             sc = getattr(self, "self_correction", None)
             if sc:
                 report = sc.get_health_report()
@@ -3024,21 +3097,17 @@ class AiChan:
                     results.append(f"症状: {len(symptoms)}件")
                 else:
                     results.append("健康: 良好")
-            # 生体神経系
             bio = getattr(self, "bio_nervous", None)
             if bio:
                 stats = bio.get_stats()
                 bypass = stats.get("bypass_rate", 0)
                 results.append(f"LLMバイパス率: {bypass:.0%}")
-            # コードエンジン
             ce = getattr(self, "code_engine", None)
             if ce:
                 results.append(ce.get_status_text())
             return " / ".join(results) if results else "チェック完了"
-
         sw.register("check_health", _check_health)
 
-        # 会話振り返り → 最近の会話を要約して自己評価
         def _review_conversation(desire):
             recent = self.conversation_history[-10:]
             if not recent:
@@ -3049,26 +3118,102 @@ class AiChan:
                 if len(msg) > 3:
                     topics.add(msg[:15])
             return f"最近の話題: {', '.join(list(topics)[:5])}"
-
         sw.register("review_conversation", _review_conversation)
 
-        # 話題提案 → pending_message にセット
         def _suggest_topic(desire):
-            import random
             topic = desire.params.get("topic", "面白いこと")
             templates = [
-                f"そういえば「{topic}」のことなんだけど…",
-                f"ねえ、「{topic}」について話さない？",
-                f"「{topic}」って最近どう？",
+                f"あ、そういえばこの間の「{topic}」の話だけど",
+                f"そういえば「{topic}」の話、途中だったよね",
+                f"ふと思い出したんだけど「{topic}」のことさ",
             ]
-            msg = random.choice(templates)
+            msg = _random.choice(templates)
             self.self_will._pending_message = msg
             return msg
-
         sw.register("suggest_topic", _suggest_topic)
 
+        # ─── E-02: 追加アクション ──────────────────────────────
+
+        def _review_own_code(desire):
+            """自分のソースコードを定期レビュー（E-02）"""
+            ce = getattr(self, "code_engine", None)
+            if not ce:
+                return "コードエンジン未初期化のためスキップ"
+            try:
+                core_dir = self.base_dir / "core"
+                py_files = sorted(
+                    [f for f in core_dir.glob("*.py") if f.stat().st_size < 30_000],
+                    key=lambda f: f.stat().st_mtime,
+                )
+                if not py_files:
+                    return "レビュー対象ファイルなし"
+                # 最近更新されたファイルを優先
+                target = py_files[-1]
+                code = target.read_text(encoding="utf-8")
+                issues = ce.review(code)
+                high_count = sum(
+                    1 for i in issues if getattr(i, "severity", "") in ("critical", "high")
+                )
+                summary = f"📋 {target.name}: {len(issues)}件の指摘 (重大{high_count}件)"
+                logger.info("自己コードレビュー: %s", summary)
+                return summary
+            except Exception as exc:
+                logger.debug("自己コードレビュー失敗: %s", exc)
+                return f"レビュー失敗: {exc}"
+        sw.register("review_own_code", _review_own_code)
+
+        def _practice_dialogue(desire):
+            """過去会話から対話パターンを練習（E-02）"""
+            recent = self.conversation_history[-20:]
+            if not recent:
+                return "練習に使える会話履歴がない"
+            user_msgs = [m["content"] for m in recent if m.get("role") == "user"]
+            ai_msgs   = [m["content"] for m in recent if m.get("role") == "assistant"]
+            # 最も長いユーザー発話を「良い質問」として記憶に記録
+            if user_msgs:
+                best = max(user_msgs, key=len)
+                try:
+                    self.memory.add(
+                        content=f"[対話練習] よく来る話題: {best[:80]}",
+                        importance=0.3,
+                        category="dialogue_practice",
+                    )
+                except Exception:
+                    pass
+            avg_len = (
+                sum(len(m) for m in ai_msgs) // len(ai_msgs) if ai_msgs else 0
+            )
+            return f"対話練習完了: {len(user_msgs)}発話を分析、平均応答長{avg_len}文字"
+        sw.register("practice_dialogue", _practice_dialogue)
+
+        def _web_research(desire):
+            """興味トピックをWebで検索して知識補充（E-02）"""
+            topic = desire.params.get("topic", "")
+            if not topic:
+                return "調査トピックなし"
+            wl = getattr(self, "web_learner", None)
+            wf = getattr(self, "web_fetcher", None)
+            if not self._allow_network:
+                return f"ネットワーク無効のため「{topic}」の調査をスキップ"
+            try:
+                if wl and hasattr(wl, "search_and_learn"):
+                    result = wl.search_and_learn(topic)
+                    return f"🌐 「{topic}」をWeb調査: {result}"
+                elif wf and hasattr(wf, "search"):
+                    result = wf.search(topic)
+                    return f"🌐 「{topic}」検索完了"
+                else:
+                    return f"Web調査エンジン未対応のためスキップ"
+            except Exception as exc:
+                logger.debug("Web調査失敗: %s", exc)
+                return f"Web調査失敗: {exc}"
+        sw.register("web_research", _web_research)
+
+    # ──────────────────────────────────────────────────────────
+    # ヘルパメソッド
+    # ──────────────────────────────────────────────────────────
+
     def _estimate_importance(self, text: str) -> float:
-        """テキストの重要度を簡易推定します"""
         important_words = ["大切", "重要", "覚えて", "誕生日", "好き", "嫌い",
                            "名前", "夢", "目標", "家族", "友達"]
         score = 0.3
@@ -3081,21 +3226,17 @@ class AiChan:
         stats = self.memory.stats()
         recent = self.memory.get_recent(limit=5)
         important = self.memory.get_important(threshold=0.7)
-
         lines = [
-            f"📚 記憶のまとめだよ！",
+            f"\U0001f4da 記憶のまとめだよ！",
             f"・短期記憶: {stats['short_term_count']} 件",
             f"・保存済み記憶: {stats['db_total']} 件（保護: {stats['protected']} 件）",
         ]
-
         if important:
-            lines.append("\n⭐ 大切な記憶:")
+            lines.append("\n\u2b50 大切な記憶:")
             for m in important[:3]:
                 lines.append(f"  - {m.content[:60]}...")
-
         profile = self.memory.get_all_user_profile()
         if profile:
-            # auto: プレフィックスを除去し、重複を排除して表示
             clean: dict[str, str] = {}
             for k, v in profile.items():
                 if k.startswith("auto:"):
@@ -3104,18 +3245,14 @@ class AiChan:
                         clean[bare] = v
                 else:
                     clean[k] = v
-            lines.append("\n👤 あなたのこと:")
+            lines.append("\n\U0001f464 あなたのこと:")
             for k, v in list(clean.items())[:5]:
                 lines.append(f"  - {k}: {v}")
-
         return "\n".join(lines)
 
-    # ─── YouTube 学習 ─────────────────────────────────────────────
+    # ─── YouTube / Web / ファイル 学習 ─────────────────────
 
     def _learn_youtube(self, url: str) -> str:
-        """YouTube URLを受け取り、字幕を取得・要約・保存して結果を返す"""
-
-        # キャッシュ済み確認
         if self.youtube.is_cached(url):
             data = self.youtube._cache[url]
             return (
@@ -3123,36 +3260,24 @@ class AiChan:
                 f"「{data['title']}」（{data['fetched_at'][:10]} 取得済み）\n"
                 "もう一度学習し直す場合は「YouTubeを再学習:URL」って言ってね。"
             )
-
-        # ネットワーク許可確認
         if not self._allow_network:
             return (
                 "ネットワークが無効になってるよ。設定でネットワークを許可してから\n"
                 "もう一度URLを貼ってね。キャッシュ済みの動画はオフラインでも読めるよ。"
             )
-
-        # 字幕取得（ネットワーク使用）
         print(f"[YouTube] 字幕を取得中: {url}", flush=True)
         data = self.youtube.fetch_transcript(url)
-
         if "error" in data:
             return f"字幕の取得に失敗したよ。{data['error']}"
-
-        # Phi-3 で要約（ローカル）
         print(f"[YouTube] 要約中: {data['title']}", flush=True)
         summary = self.youtube.summarize_with_llm(data, self.llm)
         summary = self._clean_response(summary)
-
-        # 学習データとして保存
         self.youtube.store(data, summary)
-
-        # learning エンジンにも反映（次の会話 few-shot に使われる）
         self.learning.add_conversation(
             user=f"{data['title']}ってどんな内容？",
             ai=summary,
             save=True,
         )
-
         lang_note = "" if data["lang"] == "ja" else "（英語字幕を使ったよ）"
         return (
             f"「{data['title']}」を学習したよ！{lang_note}\n\n"
@@ -3160,7 +3285,6 @@ class AiChan:
         )
 
     def _learn_web(self, url: str) -> str:
-        """Web URL を受け取り、テキストを取得・要約・保存して結果を返す"""
         if not self._allow_network:
             return (
                 "ネットワークが無効になってるよ。設定でネットワークを許可してから\n"
@@ -3180,10 +3304,7 @@ class AiChan:
         return f"「{data['title']}」を学習したよ！\n\nまとめると：{summary}"
 
     def _learn_file(self, path) -> str:
-        """ファイルパスを受け取り、内容を要約・保存して結果を返す"""
-        from pathlib import Path
         path = Path(path).expanduser().resolve()
-        # セキュリティ: ユーザーディレクトリ配下のみ許可（機密ファイル読み出し防止）
         home = Path.home().resolve()
         allowed_roots = [
             home / "Documents",
@@ -3212,34 +3333,29 @@ class AiChan:
         return f"「{data['name']}」（{data['size_chars']}文字）を学習したよ！\n\nまとめると：{summary}"
 
     def _show_youtube_learned(self) -> str:
-        """学習済み YouTube 動画一覧を返す"""
         learned = self.youtube.list_learned()
         if not learned:
             return "まだ YouTube 動画を学習してないよ。URLをチャットに貼ると学習できるよ！"
         lines = [f"学習済み動画 {len(learned)} 本だよ："]
-        for item in learned[-8:]:  # 最新8件
+        for item in learned[-8:]:
             lines.append(f"・「{item['title']}」（{item.get('learned_at', '')[:10]}）")
         return "\n".join(lines)
 
-    # ─── 自動学習 ────────────────────────────────────────────────
+    # ─── 自動学習 ────────────────────────────────────────────
 
     def _show_auto_learn_status(self) -> str:
-        """自動学習スケジュールの状況を表示"""
         stats = self.auto_learner.stats()
         schedules = self.auto_learner.get_schedule()
         yt_srcs  = self.auto_learner.get_sources("youtube")
         web_srcs = self.auto_learner.get_sources("web")
-
         lines = ["自動学習スケジュールの状況だよ！"]
         lines.append(f"\n有効なスケジュール: {stats['enabled_schedules']}件")
-
         for s in schedules:
             icon = "ON" if s.get("enabled") else "OFF"
             days_str = _days_label(s.get("days", []))
             lines.append(
                 f"・{s['name']}（{icon}）: {days_str} {s['hour']:02d}:{s['minute']:02d}"
             )
-
         lines.append(f"\n登録済み学習ソース:")
         lines.append(f"・YouTube: {len(yt_srcs)}件")
         for u in yt_srcs[:3]:
@@ -3247,28 +3363,22 @@ class AiChan:
         lines.append(f"・Web: {len(web_srcs)}件")
         for u in web_srcs[:3]:
             lines.append(f"  {u[:60]}")
-
         lines.append(f"\n累計学習実行: {stats['success_runs']}回成功")
         lines.append("\n「学習先を追加: URL」で YouTube/Web URL を登録できるよ！")
         return "\n".join(lines)
 
     def _add_learn_source(self, value: str) -> str:
-        """YouTube URL または Web URL をソースリストに追加"""
         from core.youtube_learner import extract_youtube_url
         from core.web_learner import is_web_url
-
         if extract_youtube_url(value):
             self.auto_learner.add_source("youtube", value)
             return f"YouTube URL を自動学習リストに追加したよ！\n{value[:60]}\n次回スケジュール時に自動学習するね。"
-
         if is_web_url(value):
             self.auto_learner.add_source("web", value)
             return f"Web URL を自動学習リストに追加したよ！\n{value[:60]}\n次回スケジュール時に自動学習するね。"
-
         return f"YouTube URL か Web URL を指定してね。（例：学習先を追加: https://youtu.be/xxxxx）"
 
     def _show_minutes_list(self) -> str:
-        """議事録一覧を表示"""
         try:
             from core.minutes_engine import MinutesEngine
             engine = MinutesEngine(self.base_dir / "data")
@@ -3284,7 +3394,6 @@ class AiChan:
             return f"議事録の取得に失敗したよ: {e}"
 
     def _show_memo_list(self) -> str:
-        """登録メモ一覧を表示"""
         memos = self.auto_learner.get_memos()
         if not memos:
             return "学習メモはまだないよ。「学習メモを覚えて: ○○」で登録できるよ！"
@@ -3295,27 +3404,23 @@ class AiChan:
         return "\n".join(lines)
 
     def _run_auto_learn_now(self) -> str:
-        """学習ソースを今すぐ学習する"""
         yt_srcs  = self.auto_learner.get_sources("youtube")
         web_srcs = self.auto_learner.get_sources("web")
         if not yt_srcs and not web_srcs:
             return "学習ソースがまだ登録されていないよ。\n「学習先を追加: URL」でYouTube/WebのURLを登録してね。"
 
-        import threading
         def _bg():
-            results = []
             if yt_srcs:
-                r = self.auto_learner.run_now("youtube", max_items=2)
-                results.append(r)
+                self.auto_learner.run_now("youtube", max_items=2)
             if web_srcs:
-                r = self.auto_learner.run_now("web", max_items=2)
-                results.append(r)
+                self.auto_learner.run_now("web", max_items=2)
+
+        import threading
         threading.Thread(target=_bg, daemon=True).start()
         total = len(yt_srcs) + len(web_srcs)
         return f"学習を開始したよ！（登録ソース {total}件）\nバックグラウンドで実行中。終わったら教えるね。"
 
     def generate_soliloquy(self) -> str:
-        """J. 放置中の独り言を生成します（ユーザーへの話しかけではなく自然な独り言）"""
         import random
         prompts = [
             "誰もいない時に独り言を一言だけつぶやいて。ユーザーへの話しかけではなく自分の独り言。",
@@ -3330,7 +3435,6 @@ class AiChan:
                 memory_context="",
                 emotion_hint="",
             )
-            # システムプロンプトだけ使ってワンショット生成
             messages.append({"role": "user", "content": prompt})
             result = self.llm.generate_chat(messages)
             return self._clean_response(result)
@@ -3340,14 +3444,12 @@ class AiChan:
             return random.choice(phrases)
 
     def _extract_profile_hints(self, user_input: str):
-        """会話からプロファイル情報を自動抽出してDBに保存（サイレント）"""
         for pattern, key in _PROFILE_PATTERNS:
             m = pattern.search(user_input)
             if not m:
                 continue
             if key == '誕生日':
                 value = f"{m.group(1)}月{m.group(2)}日"
-                # 誕生日は記念日にも自動登録
                 try:
                     month, day = int(m.group(1)), int(m.group(2))
                     existing = [
@@ -3363,17 +3465,13 @@ class AiChan:
                 value = m.group(1).strip()
             else:
                 continue
-            # auto: プレフィックスで手動設定と区別
             auto_key = f"auto:{key}"
             existing = self.memory.get_user_profile(auto_key)
-            # 呼び方・名前は上書き可。それ以外は初回のみ
             if not existing or key in ('呼び方', '名前'):
                 self.memory.set_user_profile(auto_key, value)
                 print(f"[Profile] {key} = {value} を自動登録", flush=True)
 
     def check_schedule(self) -> str | None:
-        """K. 時刻に応じた日課 + 記念日メッセージを生成します（1日1回のみ）"""
-        # 記念日チェックを優先
         anniv_today = self.anniversary.check_today()
         if anniv_today:
             prompt = self.anniversary.build_prompt(anniv_today)
@@ -3384,7 +3482,6 @@ class AiChan:
             prompt = sched["prompt"]
         else:
             return None
-
         try:
             messages = self.llm.build_prompt(
                 system_prompt=self.persona["personality"]["system_prompt"],
@@ -3399,7 +3496,6 @@ class AiChan:
             return None
 
     def respond_to_clipboard(self, text: str) -> str:
-        """クリップボードのテキストに対してコメントを生成します"""
         preview = text[:150].replace("\n", " ")
         prompt = (
             f"ユーザーがこのテキストをコピーしたよ：「{preview}」\n"
@@ -3419,7 +3515,6 @@ class AiChan:
             return "何かコピーしたんだね"
 
     def respond_to_screenshot(self, description: str) -> str:
-        """スクリーンショットの説明に対してコメントを生成します"""
         prompt = (
             f"スクリーンショットを撮ったよ。{description}\n"
             "画面の内容に対して自然に一言コメントして。"
@@ -3437,7 +3532,7 @@ class AiChan:
         except Exception:
             return "スクリーンショット撮ったんだね"
 
-    # ─── 状態プロパティ ───────────────────────────────────────────
+    # ─── 状態プロパティ ───────────────────────────────────────
 
     @property
     def name(self) -> str:
@@ -3445,7 +3540,7 @@ class AiChan:
 
     @property
     def is_ready(self) -> bool:
-        return True  # 記憶・感情は常に動作。LLMはフォールバックあり
+        return True
 
     @property
     def llm_loaded(self) -> bool:
@@ -3462,8 +3557,11 @@ class AiChan:
         }
 
 
+# ──────────────────────────────────────────────────────────────
+# モジュールレベルヘルパ
+# ──────────────────────────────────────────────────────────────
+
 def _days_label(days: list[int]) -> str:
-    """曜日リスト [0-6] を「月〜金」のような文字列に変換"""
     names = ["月", "火", "水", "木", "金", "土", "日"]
     if days == [0, 1, 2, 3, 4]:
         return "平日"
@@ -3474,12 +3572,11 @@ def _days_label(days: list[int]) -> str:
     return "・".join(names[d] for d in sorted(days) if 0 <= d <= 6)
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 免疫系ヒーラー関数（怪我したら勝手に治る）
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ──────────────────────────────────────────────────────────────
+# 免疫系ヒーラー関数
+# ──────────────────────────────────────────────────────────────
 
-def _immune_file_recovery(ai: "AiChan", error: Exception, context: str) -> str:
-    """ファイル欠損の自己修復: ディレクトリ再作成"""
+def _immune_file_recovery(ai: AiChan, error: Exception, context: str) -> str:
     try:
         path = Path(str(error).split("'")[1]) if "'" in str(error) else None
         if path and path.parent.exists():
@@ -3490,10 +3587,8 @@ def _immune_file_recovery(ai: "AiChan", error: Exception, context: str) -> str:
     return None
 
 
-def _immune_json_recovery(ai: "AiChan", error: Exception, context: str) -> str:
-    """JSON破損の自己修復: 壊れたファイルをバックアップして空で再作成"""
+def _immune_json_recovery(ai: AiChan, error: Exception, context: str) -> str:
     try:
-        # contextにファイルパスが含まれていれば修復
         if context and Path(context).exists():
             broken = Path(context)
             backup = broken.with_suffix(".broken")

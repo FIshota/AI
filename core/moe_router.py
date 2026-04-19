@@ -250,6 +250,76 @@ class MoERouter:
 
         return "\n".join(lines)
 
+    # ─── タスク別最適パラメータ (#86) ─────────────────────────────
+
+    # タスク種別→推論パラメータのマッピング（トピック特化チューニング）
+    _TASK_PARAMS: dict[str, dict[str, float]] = {
+        "casual": {"temperature": 0.8, "top_p": 0.9, "repeat_penalty": 1.05},
+        "chat": {"temperature": 0.8, "top_p": 0.9, "repeat_penalty": 1.05},
+        "consultation": {"temperature": 0.5, "top_p": 0.95, "repeat_penalty": 1.15},
+        "technical": {"temperature": 0.3, "top_p": 0.85, "repeat_penalty": 1.2},
+        "coding": {"temperature": 0.3, "top_p": 0.85, "repeat_penalty": 1.2},
+        "analysis": {"temperature": 0.3, "top_p": 0.85, "repeat_penalty": 1.2},
+        "greeting": {"temperature": 0.7, "top_p": 0.9, "repeat_penalty": 1.0},
+        "emotional": {"temperature": 0.6, "top_p": 0.9, "repeat_penalty": 1.1},
+        "emotion": {"temperature": 0.6, "top_p": 0.9, "repeat_penalty": 1.1},
+        "question": {"temperature": 0.5, "top_p": 0.95, "repeat_penalty": 1.15},
+        "creative": {"temperature": 0.9, "top_p": 0.95, "repeat_penalty": 1.0},
+    }
+
+    def get_optimal_params(self, task_type: str) -> dict:
+        """
+        タスク種別に応じた最適な推論パラメータを返す (#86)。
+
+        温度、top_p、repeat_penalty をトピック別にチューニング。
+        マッピングに存在しないタスク種別の場合は casual のデフォルト値を返す。
+        """
+        if task_type in self._TASK_PARAMS:
+            return dict(self._TASK_PARAMS[task_type])
+        # デフォルト: casual と同等
+        return {
+            "temperature": self._config.get("temperature", 0.8),
+            "top_p": self._config.get("top_p", 0.9),
+            "repeat_penalty": self._config.get("repeat_penalty", 1.05),
+        }
+
+    def apply_routing(self, task_type: str, llm_engine: Any) -> RoutingDecision:
+        """
+        タスク種別に基づいてルーティングを実行し、必要ならモデルをホットスワップする。
+
+        - 専門家が1つしかない場合はルーティングをスキップ（性能最適化）
+        - 選択された専門家のmodel_pathが現在のモデルと異なる場合、
+          llm_engine.hot_swap(expert_config) を呼び出してモデルを切り替える
+
+        Returns:
+            RoutingDecision — 選択された専門家とその理由
+        """
+        # 専門家が1つだけならスキップ
+        if len(self._experts) <= 1:
+            name = next(iter(self._experts), "")
+            return RoutingDecision(
+                expert_name=name,
+                reason="単一モデル — ルーティングスキップ",
+                confidence=1.0,
+            )
+
+        decision = self.route(task_type)
+        if not decision.expert_name:
+            return decision
+
+        expert = self._experts.get(decision.expert_name)
+        if expert is None:
+            return decision
+
+        # 現在ロード中のモデルと異なる場合にホットスワップ
+        current_path = getattr(llm_engine, "model_path", None)
+        if current_path is not None and str(current_path) != expert.model_path:
+            expert_cfg = self.get_expert_config(decision.expert_name)
+            if hasattr(llm_engine, "hot_swap"):
+                llm_engine.hot_swap(expert_cfg)
+
+        return decision
+
     @property
     def expert_count(self) -> int:
         return len(self._experts)

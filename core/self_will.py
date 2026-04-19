@@ -227,12 +227,12 @@ class DesireGenerator:
                 params={},
             ))
 
-        # ⑩ 話題提案欲: 興味があるとき15%の確率で話題を提案
-        if interests and random.random() < 0.15:
+        # ⑩ 話題提案欲: 興味があるとき10%の確率で前の話題を再開
+        if interests and random.random() < 0.10:
             topic = random.choice(interests)
             desires.append(Desire(
                 desire_type=DesireType.EXPRESSION,
-                intensity=0.5,
+                intensity=0.3,
                 description=f"「{topic}」について話したい",
                 trigger="topic_interest",
                 action_key="suggest_topic",
@@ -249,6 +249,41 @@ class DesireGenerator:
                 action_key="check_health",
                 params={},
             ))
+
+        # ⑫ 自己コードレビュー欲: 150ターンごとに自分のソースを読み直す（E-02）
+        if turn_count > 0 and turn_count % 150 == 0:
+            desires.append(Desire(
+                desire_type=DesireType.GROWTH,
+                intensity=0.55,
+                description="自分のコードをレビューして改善点を探したい",
+                trigger="self_code_review",
+                action_key="review_own_code",
+                params={},
+            ))
+
+        # ⑬ 対話練習欲: 70ターンごとに過去の会話パターンを練習（E-02）
+        if turn_count > 70 and turn_count % 70 == 0:
+            desires.append(Desire(
+                desire_type=DesireType.GROWTH,
+                intensity=0.45,
+                description="過去の会話から対話パターンを練習したい",
+                trigger="dialogue_practice",
+                action_key="practice_dialogue",
+                params={},
+            ))
+
+        # ⑭ Web調査欲: 興味トピックがあるとき10%の確率でWeb検索（E-02）
+        if interests and random.random() < 0.10:
+            topic = interests[0] if interests else ""
+            if topic:
+                desires.append(Desire(
+                    desire_type=DesireType.CURIOSITY,
+                    intensity=0.5,
+                    description=f"「{topic}」についてWebで調べたい",
+                    trigger="web_curiosity",
+                    action_key="web_research",
+                    params={"topic": topic},
+                ))
 
         return desires
 
@@ -509,6 +544,26 @@ class SelfWillEngine:
         self._state_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), "utf-8"
         )
+
+    def measure_will_strength(self, desire_text: str) -> float:
+        """
+        場の共鳴強度を意思の強さとして計測 (0.0-1.0)。
+        UnifiedField の Φスコア: 多次元に共鳴する欲求ほど強い意思を持つ。
+        「宇宙論・哲学・意識」ドメインに共鳴する欲求 = 根源的な意思。
+        """
+        try:
+            from core.akashic.unified_field import UnifiedField
+            sig = UnifiedField().resonate(desire_text)
+            # 意識・哲学・宇宙論の深いドメインに重み付け
+            deep_score = (
+                sig.resonances.get("consciousness", 0.0) * 0.35
+                + sig.resonances.get("philosophy", 0.0) * 0.25
+                + sig.resonances.get("cosmology", 0.0) * 0.20
+                + sig.phi_score * 0.20
+            )
+            return round(min(deep_score, 1.0), 3)
+        except Exception:
+            return 0.5  # デフォルト: 中程度の意思
 
     def _load(self):
         if not self._state_path or not self._state_path.exists():

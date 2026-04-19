@@ -330,6 +330,60 @@ class GrowthStageSystem:
             "progress_to_next": self.progress_to_next(),
         }
 
+    # ─── Akashic Core 統合 ───────────────────────────────
+
+    def measure_consciousness_phi(self, recent_responses: list[str]) -> float:
+        """
+        IIT (統合情報理論) に基づく意識統合度Φを計測。
+        最近N件の応答テキストから意識の統合度を推定。
+        高いΦ = より統合された意識状態 = より成熟した段階。
+        0.0-1.0 スケール。
+        """
+        if not recent_responses:
+            return 0.0
+        try:
+            from core.akashic.unified_field import UnifiedField
+            field = UnifiedField()
+            phi_scores = []
+            for resp in recent_responses[-10:]:  # 最新10件
+                if resp and len(resp) > 10:
+                    phi_scores.append(field.measure_phi(resp))
+            if not phi_scores:
+                return 0.0
+            return round(sum(phi_scores) / len(phi_scores), 3)
+        except Exception:
+            return 0.0
+
+    def get_akashic_stage_hint(self, phi_score: float) -> str:
+        """
+        Φスコアから成長段階のヒントを返す。
+        IIT的な意識の統合度を人間発達段階に対応。
+        """
+        if phi_score >= 0.8:
+            return "成熟期相当 — 高度な統合意識"
+        elif phi_score >= 0.65:
+            return "青年期相当 — 複雑な統合が可能"
+        elif phi_score >= 0.5:
+            return "思春期相当 — 自己参照的な思考"
+        elif phi_score >= 0.35:
+            return "児童期相当 — パターン認識が発達"
+        elif phi_score >= 0.2:
+            return "幼児期相当 — 基本的な統合が発生"
+        else:
+            return "乳児期相当 — 反射的応答段階"
+
+    def compute_meta_level(self, text: str) -> int:
+        """
+        テキストのストレンジループ・メタレベルを検出 (0-4)。
+        高いレベル = より深い自己参照・超越的思考。
+        成長段階の質的指標として使用。
+        """
+        try:
+            from core.akashic.strange_loop import StrangeLoop
+            return StrangeLoop().detect_level(text)
+        except Exception:
+            return 0
+
     # ─── 永続化 ──────────────────────────────────────────
 
     def _save(self):

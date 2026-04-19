@@ -13,18 +13,18 @@ import sys
 BASE_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
-# ─── カラーパレット ──────────────────────────────────────────────
-COLOR_BG      = "#1A0F2E"
-COLOR_PANEL   = "#2D1B3D"
-COLOR_CARD    = "#3D2255"
-COLOR_INPUT   = "#150B25"
-COLOR_ACCENT  = "#E8A5C8"
-COLOR_ACCENT2 = "#B57BDC"
-COLOR_GREEN   = "#7FD4B0"
-COLOR_RED     = "#FF8080"
-COLOR_TEXT    = "#F5E6FF"
-COLOR_SUBTEXT = "#C9A8E8"
-COLOR_LINE    = "#4A2870"
+# ─── カラーパレット（Clean × Soft） ─────────────────────────────
+COLOR_BG      = "#FFFFFF"
+COLOR_PANEL   = "#F5F3F8"
+COLOR_CARD    = "#EDE9FE"
+COLOR_INPUT   = "#FFFFFF"
+COLOR_ACCENT  = "#6C5CE7"
+COLOR_ACCENT2 = "#A29BFE"
+COLOR_GREEN   = "#34C759"
+COLOR_RED     = "#FF3B30"
+COLOR_TEXT    = "#2D2D3F"
+COLOR_SUBTEXT = "#8E8EA0"
+COLOR_LINE    = "#E5E5EA"
 
 FONT_H1    = ("Hiragino Sans", 14, "bold")
 FONT_H2    = ("Hiragino Sans", 12, "bold")
@@ -299,7 +299,7 @@ class MinutesWindow(tk.Toplevel):
 
         self._notion_btn = tk.Button(
             export_f, text="N  Notionへ送る",
-            bg="#2F2F2F", fg="#FFFFFF",
+            bg="#2F2F2F", fg=COLOR_TEXT,
             font=FONT_SMALL, relief="flat",
             command=self._do_push_notion, padx=10, pady=5,
             state="disabled", cursor="hand2"
@@ -308,7 +308,7 @@ class MinutesWindow(tk.Toplevel):
 
         self._gcal_btn = tk.Button(
             export_f, text="📅  カレンダーへ",
-            bg="#1A73E8", fg="#FFFFFF",
+            bg="#1A73E8", fg=COLOR_TEXT,
             font=FONT_SMALL, relief="flat",
             command=self._do_push_gcal, padx=10, pady=5,
             state="disabled", cursor="hand2"
@@ -400,7 +400,7 @@ class MinutesWindow(tk.Toplevel):
 
         self._hist_notion_btn = tk.Button(
             hist_btn_f, text="N Notion",
-            bg="#2F2F2F", fg="#FFFFFF",
+            bg="#2F2F2F", fg=COLOR_TEXT,
             font=FONT_SMALL, relief="flat",
             command=self._hist_push_notion, padx=8, pady=4,
             state="disabled"
@@ -409,7 +409,7 @@ class MinutesWindow(tk.Toplevel):
 
         self._hist_gcal_btn = tk.Button(
             hist_btn_f, text="📅 GCal",
-            bg="#1A73E8", fg="#FFFFFF",
+            bg="#1A73E8", fg=COLOR_TEXT,
             font=FONT_SMALL, relief="flat",
             command=self._hist_push_gcal, padx=8, pady=4,
             state="disabled"

@@ -16,9 +16,12 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 import re
 import threading
+
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,13 +30,14 @@ from typing import TYPE_CHECKING, Any
 try:
     import paramiko
     PARAMIKO_OK = True
-except ImportError:
+except (ImportError, OSError):
+    # cffi アーキテクチャ不整合など、ImportError 以外の OSError も捕捉
     PARAMIKO_OK = False
 
 try:
     from cryptography.fernet import Fernet
     FERNET_OK = True
-except ImportError:
+except (ImportError, OSError):
     FERNET_OK = False
 
 # 実行を許可するコマンドのプレフィックス
@@ -133,6 +137,46 @@ class ServerHome:
         )
         self._lock = threading.Lock()
         self._state_path = self._base / "data" / ".server_state.json"
+
+        # Security migration: if settings.json still holds a plaintext password,
+        # move it into the encrypted CredentialStore and wipe the plaintext.
+        self._migrate_plaintext_credentials(settings)
+
+    def _migrate_plaintext_credentials(self, settings: dict | None) -> None:
+        """Move any plaintext password from settings.json into the encrypted store."""
+        if not settings or not FERNET_OK:
+            return
+        sh = settings.get("server_home", {})
+        pwd = sh.get("password", "")
+        if not pwd or pwd in ("", "***", "REDACTED"):
+            return
+        try:
+            creds = ServerCredentials(
+                host=sh.get("host", ""),
+                port=sh.get("port", 22),
+                username=sh.get("username", ""),
+                password=pwd,
+                key_path=sh.get("key_path", ""),
+            )
+            if self._cred_store.save(creds):
+                # Wipe plaintext from on-disk settings.json
+                settings_path = self._base / "config" / "settings.json"
+                try:
+                    data = json.loads(settings_path.read_text(encoding="utf-8"))
+                    if data.get("server_home", {}).get("password"):
+                        data["server_home"]["password"] = ""
+                        settings_path.write_text(
+                            json.dumps(data, ensure_ascii=False, indent=2),
+                            encoding="utf-8",
+                        )
+                        logger.warning(
+                            "[server_home] plaintext password migrated to encrypted store; "
+                            "settings.json scrubbed"
+                        )
+                except OSError as e:
+                    logger.warning("[server_home] could not scrub settings.json: %s", e)
+        except Exception as e:
+            logger.warning("[server_home] credential migration failed: %s", e)
 
     @property
     def enabled(self) -> bool:
@@ -358,7 +402,20 @@ class ServerHome:
             raise RuntimeError("サーバー認証情報が設定されていません")
 
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # Security: load known_hosts first (default ~/.ssh/known_hosts).
+        # Reject unknown hosts unless the user explicitly opts into TOFU mode
+        # via settings.ssh_trust_on_first_use = true. This closes B507.
+        try:
+            client.load_system_host_keys()
+        except Exception as e:
+            logger.warning("load_system_host_keys failed: %s", e)
+        tofu = bool(self._settings.get("ssh_trust_on_first_use", False))
+        if tofu:
+            # TOFU: add on first connect, but still verify on subsequent ones.
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # nosec B507 — opt-in TOFU
+        else:
+            # Default: refuse unknown host keys
+            client.set_missing_host_key_policy(paramiko.RejectPolicy())
         client.connect(
             hostname=creds.host,
             port=creds.port,

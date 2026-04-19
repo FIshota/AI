@@ -24,10 +24,13 @@ Sprint 1.3 の目玉機能。日次・週次で、アイ自身が「昨日の自
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 # ─── データモデル ─────────────────────────────────────────────
@@ -434,6 +437,177 @@ class GrowthReporter:
             "summary": f"weekly report -> {path.name}",
             "path": str(path),
         }
+
+    # ── #41: 構造化された週次レポート ──────────────────────
+
+    def generate_weekly_report(
+        self,
+        iso_year: Optional[int] = None,
+        iso_week: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """KPI 用の構造化された週次レポートを生成する。
+
+        Returns:
+            {
+                "period": {...},
+                "total_conversations": int,
+                "active_days": int,
+                "new_memories": int,
+                "learning_sessions": int,
+                "quality_score_trend": [...],
+                "emotion_trend": {...},
+                "top_interests": [...],
+                "new_interests": [...],
+                "graph_data_points": [...],
+            }
+        """
+        snap: WeeklySnapshot = self.collect_weekly(iso_year, iso_week)
+
+        # 記憶統計の差分を取る試み
+        new_memories: int = 0
+        try:
+            stats: dict = dict(self.ai.memory.stats())
+            new_memories = int(stats.get("total", 0))
+        except Exception:
+            pass
+
+        # 学習セッション数
+        learning_sessions: int = 0
+        try:
+            learning_sessions = int(
+                self.ai.learning.stats().get("total_examples", 0)
+            )
+        except Exception:
+            pass
+
+        # 品質スコアトレンド（日次スコアファイルから取得を試みる）
+        quality_trend: List[Dict[str, Any]] = []
+        scores_path: Path = self.base_dir / "data" / "daily_scores.jsonl"
+        if scores_path.exists():
+            try:
+                with open(scores_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        stripped: str = line.strip()
+                        if stripped:
+                            entry: Dict[str, Any] = __import__("json").loads(stripped)
+                            d: str = entry.get("date", "")
+                            if d in snap.daily_dates:
+                                quality_trend.append({
+                                    "date": d,
+                                    "score": entry.get("score", 0.0),
+                                })
+            except Exception:
+                pass
+
+        # グラフ用データポイント（日別やりとり数）
+        graph_data_points: List[Dict[str, Any]] = []
+        for d_str in snap.daily_dates:
+            exchanges: int = 0
+            try:
+                entry_data: Optional[dict] = self.ai.diary.get_entry(d_str)
+                if entry_data:
+                    exchanges = int(entry_data.get("exchange_count", 0))
+            except Exception:
+                pass
+            graph_data_points.append({
+                "date": d_str,
+                "conversations": exchanges,
+            })
+
+        return {
+            "period": {
+                "iso_year": snap.iso_year,
+                "iso_week": snap.iso_week,
+                "start_date": snap.start_date,
+                "end_date": snap.end_date,
+            },
+            "total_conversations": snap.total_exchanges,
+            "active_days": snap.active_days,
+            "new_memories": new_memories,
+            "learning_sessions": learning_sessions,
+            "quality_score_trend": quality_trend,
+            "emotion_trend": dict(snap.emotion_trend),
+            "top_interests": list(snap.top_interests),
+            "new_interests": list(snap.new_interests),
+            "graph_data_points": graph_data_points,
+        }
+
+    @staticmethod
+    def format_report_text(report: Dict[str, Any]) -> str:
+        """generate_weekly_report() の出力を人間が読みやすいテキストにする。
+
+        Args:
+            report: generate_weekly_report() の戻り値。
+
+        Returns:
+            整形済みテキスト。
+        """
+        period: Dict[str, Any] = report.get("period", {})
+        lines: List[str] = []
+
+        lines.append("=" * 50)
+        lines.append(
+            f"  週次成長レポート  {period.get('iso_year', '?')}"
+            f" W{period.get('iso_week', '?'):02d}"
+        )
+        lines.append(f"  期間: {period.get('start_date', '?')} - {period.get('end_date', '?')}")
+        lines.append("=" * 50)
+        lines.append("")
+
+        lines.append("■ アクティビティ")
+        lines.append("-" * 30)
+        lines.append(f"  総会話数: {report.get('total_conversations', 0)}")
+        lines.append(f"  アクティブ日数: {report.get('active_days', 0)} / 7")
+        lines.append(f"  新規記憶数: {report.get('new_memories', 0)}")
+        lines.append(f"  学習セッション: {report.get('learning_sessions', 0)}")
+        lines.append("")
+
+        # 品質スコアトレンド
+        trend: List[Dict[str, Any]] = report.get("quality_score_trend", [])
+        if trend:
+            lines.append("■ 品質スコア推移")
+            lines.append("-" * 30)
+            for point in trend:
+                lines.append(f"  {point.get('date', '?')}: {point.get('score', 0.0):.1f}")
+            lines.append("")
+
+        # 感情トレンド
+        emotion: Dict[str, float] = report.get("emotion_trend", {})
+        if emotion:
+            lines.append("■ 感情トレンド（週平均）")
+            lines.append("-" * 30)
+            for k, v in emotion.items():
+                bar: str = "█" * max(0, int(v * 10))
+                lines.append(f"  {k}: {v:.2f}  {bar}")
+            lines.append("")
+
+        # 興味
+        top: List[str] = report.get("top_interests", [])
+        if top:
+            lines.append("■ よく話した話題")
+            lines.append("  " + " / ".join(top))
+            lines.append("")
+
+        new: List[str] = report.get("new_interests", [])
+        if new:
+            lines.append("■ 新しい興味")
+            for item in new:
+                lines.append(f"  - {item}")
+            lines.append("")
+
+        # 日別グラフ
+        graph: List[Dict[str, Any]] = report.get("graph_data_points", [])
+        if graph:
+            lines.append("■ 日別会話数")
+            lines.append("-" * 30)
+            for dp in graph:
+                count: int = dp.get("conversations", 0)
+                bar = "▓" * min(count, 40)
+                lines.append(f"  {dp.get('date', '?')}: {bar} ({count})")
+            lines.append("")
+
+        lines.append("=" * 50)
+        return "\n".join(lines)
 
 
 __all__ = [

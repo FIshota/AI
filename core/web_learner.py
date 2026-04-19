@@ -79,7 +79,8 @@ class WebLearner:
         )
 
     def _cache_key(self, url: str) -> str:
-        return hashlib.md5(url.encode()).hexdigest()
+        # MD5 is used only as a URL-to-filename hash, not for security
+        return hashlib.md5(url.encode(), usedforsecurity=False).hexdigest()
 
     def is_cached(self, url: str) -> bool:
         return self._cache_key(url) in self._cache

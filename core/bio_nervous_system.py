@@ -259,18 +259,9 @@ _REFLEX_RULES: list[ReflexRule] = [
     ),
 
     # ── 教えて系 ──
-    ReflexRule(
-        _short(r"^(教えて|おしえて)[ー！!。ほしい]*$", 12),
-        (
-            "もちろん！何について？",
-            "いいよ！何が知りたい？",
-            "任せて！何でも聞いて。",
-            "うん！何を教えればいい？",
-            "オッケー、何について知りたい？",
-            "もちろんだよ。詳しく聞かせて！",
-        ),
-        "teach_me",
-    ),
+    # BUG #2 FIX: 「教えて」単体の反射応答を削除。LLMに渡して具体的な回答をさせる。
+    # 「何について？」と聞き返すことが質問回避のように見える原因だった。
+
 
     # ── 疲れた系 ──
     ReflexRule(
@@ -489,6 +480,92 @@ class ReflexLayer:
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 相槌エンリッチメント (#75)
+#    「うん」→「うん、大変だったね」のように文脈に応じて相槌を豊かにする
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# 文脈キーワード→エンリッチメント候補のマッピング
+_AIZUCHI_ENRICHMENTS: dict[str, list[tuple[re.Pattern, list[str]]]] = {
+    "troubles": [
+        (re.compile(r"(大変|辛い|つらい|しんどい|疲れ|困っ|悩|心配|不安)"),
+         [
+             "うん、大変だったね",
+             "うん、それは辛かったよね",
+             "うん、頑張ったんだね",
+             "うん、無理しなくていいからね",
+         ]),
+    ],
+    "exciting": [
+        (re.compile(r"(嬉しい|楽しい|やった|すごい|最高|面白い|ワクワク)"),
+         [
+             "うん、それいいね！",
+             "うん、楽しそう！",
+             "うん、すごいね！",
+             "うん、ワクワクするね！",
+         ]),
+    ],
+    "sad": [
+        (re.compile(r"(悲しい|泣|寂しい|さみしい|別れ|失|亡)"),
+         [
+             "うん、辛いよね…",
+             "うん、気持ちわかるよ",
+             "うん、そばにいるからね",
+             "うん、泣いてもいいんだよ",
+         ]),
+    ],
+    "angry": [
+        (re.compile(r"(むかつく|イライラ|怒|ひどい|最悪|うざい|理不尽)"),
+         [
+             "うん、それは腹立つよね",
+             "うん、怒って当然だよ",
+             "うん、ひどいね",
+             "うん、それは許せないよね",
+         ]),
+    ],
+    "achievement": [
+        (re.compile(r"(できた|合格|成功|終わった|完成|クリア|受かった)"),
+         [
+             "うん、おめでとう！",
+             "うん、よく頑張ったね！",
+             "うん、すごい！やったね！",
+             "うん、努力が実ったね！",
+         ]),
+    ],
+}
+
+# エンリッチ対象の短い相槌パターン
+_SHORT_AIZUCHI = re.compile(r"^(うん|そっか|そうだね|なるほど)[。、ー]*$")
+
+
+def _enrich_aizuchi(base_response: str, context: str) -> str:
+    """
+    短い相槌を文脈に応じてエンリッチする (#75)。
+
+    base_response が短い相槌（「うん」「そっか」等）の場合、
+    context（直前のユーザー発話）の内容に応じて豊かな相槌に変換する。
+
+    Args:
+        base_response: 元の応答
+        context: 直前のユーザー発話（文脈）
+
+    Returns:
+        エンリッチされた応答、またはエンリッチ不要なら元の応答
+    """
+    if not _SHORT_AIZUCHI.match(base_response.strip()):
+        return base_response
+
+    if not context:
+        return base_response
+
+    for _category, patterns in _AIZUCHI_ENRICHMENTS.items():
+        for regex, enriched_options in patterns:
+            if regex.search(context):
+                return random.choice(enriched_options)
+
+    return base_response
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # ② 筋肉記憶層 (Muscle Memory Layer)
 #    体で覚えたパターン。経験から学習し、考えずに応答できるもの。
 #    自転車に乗るとき「右足を踏んで左足を...」と考えない。
@@ -521,18 +598,26 @@ class MuscleMemoryLayer:
     MAX_PATTERNS = 300        # 記憶パターン上限（多いほどLLMバイパス率向上）
     STALENESS_DAYS = 45       # この日数使われないパターンは忘れる（余裕を持たせる）
 
-    SKIP_PROBABILITY = 0.3    # この確率でLLMに回す（応答の多様性確保）
+    SKIP_PROBABILITY = 0.15   # この確率でLLMに回す（多様性維持しつつバイパス率80%+）
     CONSECUTIVE_LIMIT = 2     # 同じ応答がこの回数連続したらスキップ
 
     def __init__(self, storage_path: Path | None = None):
         self._patterns: dict[str, MusclePattern] = {}
         self._storage = storage_path
         self._last_responses: list[str] = []  # 直近の応答履歴（連続防止）
+        self._learn_count: int = 0  # learn()呼び出しカウンタ（定期メンテナンス用）
+        self._lock = threading.Lock()  # スレッドセーフティ
         self._load()
+
+    @staticmethod
+    def _normalize_for_match(text: str) -> str:
+        """句読点・感嘆符を全て除去して表記揺れを吸収する。
+        例: 'おはよう！元気？' と 'おはよう元気' が同一パターンにマッチする。"""
+        return re.sub(r'[！？!?。、〜～ー…♪・]+', '', text.strip())
 
     def _hash(self, text: str) -> str:
         """入力テキストの正規化ハッシュ（blake2b: 高速・衝突耐性）"""
-        normalized = text.strip().lower()
+        normalized = self._normalize_for_match(text).lower()
         return hashlib.blake2b(normalized.encode(), digest_size=16).hexdigest()
 
     def try_recall(self, user_input: str) -> str | None:
@@ -541,38 +626,39 @@ class MuscleMemoryLayer:
         品質が高く、最近も使っている（錆びていない）パターンのみ返す。
         多様性のため一定確率でスキップし、LLM（大脳）に考えさせる。
         """
-        h = self._hash(user_input)
-        pattern = self._patterns.get(h)
+        with self._lock:
+            h = self._hash(user_input)
+            pattern = self._patterns.get(h)
 
-        if pattern is None:
-            return None
+            if pattern is None:
+                return None
 
-        # 品質チェック
-        if pattern.quality_score < self.QUALITY_THRESHOLD:
-            return None
+            # 品質チェック
+            if pattern.quality_score < self.QUALITY_THRESHOLD:
+                return None
 
-        # 鮮度チェック: 古すぎるパターンは使わない（忘却）
-        age_days = (time.time() - pattern.last_used) / 86400
-        if age_days > self.STALENESS_DAYS:
-            return None
+            # 鮮度チェック: 古すぎるパターンは使わない（忘却）
+            age_days = (time.time() - pattern.last_used) / 86400
+            if age_days > self.STALENESS_DAYS:
+                return None
 
-        # 多様性: 一定確率でLLMに回す（同じ返事ばかりにならないように）
-        if random.random() < self.SKIP_PROBABILITY:
-            return None
+            # 多様性: 一定確率でLLMに回す（同じ返事ばかりにならないように）
+            if random.random() < self.SKIP_PROBABILITY:
+                return None
 
-        # 連続同一応答の防止
-        if (len(self._last_responses) >= self.CONSECUTIVE_LIMIT
-                and all(r == pattern.response for r in self._last_responses[-self.CONSECUTIVE_LIMIT:])):
-            return None  # 同じ返事が続いている → LLMに回す
+            # 連続同一応答の防止
+            if (len(self._last_responses) >= self.CONSECUTIVE_LIMIT
+                    and all(r == pattern.response for r in self._last_responses[-self.CONSECUTIVE_LIMIT:])):
+                return None  # 同じ返事が続いている → LLMに回す
 
-        # 使用記録を更新（不変: 新オブジェクトに置換）
-        self._patterns[h] = replace(
-            pattern, use_count=pattern.use_count + 1, last_used=time.time()
-        )
-        self._last_responses.append(pattern.response)
-        if len(self._last_responses) > 10:
-            self._last_responses = self._last_responses[-10:]
-        return pattern.response
+            # 使用記録を更新（不変: 新オブジェクトに置換）
+            self._patterns[h] = replace(
+                pattern, use_count=pattern.use_count + 1, last_used=time.time()
+            )
+            self._last_responses.append(pattern.response)
+            if len(self._last_responses) > 10:
+                self._last_responses = self._last_responses[-10:]
+            return pattern.response
 
     def learn(self, user_input: str, response: str, quality_score: float):
         """
@@ -582,24 +668,30 @@ class MuscleMemoryLayer:
         if quality_score < self.QUALITY_THRESHOLD:
             return  # 品質不足 → 記憶しない
 
-        h = self._hash(user_input)
-        existing = self._patterns.get(h)
+        with self._lock:
+            h = self._hash(user_input)
+            existing = self._patterns.get(h)
 
-        if existing and existing.quality_score >= quality_score:
-            return  # 既存のほうが良い → 上書きしない
+            if existing and existing.quality_score >= quality_score:
+                return  # 既存のほうが良い → 上書きしない
 
-        self._patterns[h] = MusclePattern(
-            input_hash=h,
-            input_text=user_input[:50],
-            response=response,
-            quality_score=quality_score,
-            use_count=0,
-            last_used=time.time(),
-        )
+            self._patterns[h] = MusclePattern(
+                input_hash=h,
+                input_text=user_input[:50],
+                response=response,
+                quality_score=quality_score,
+                use_count=0,
+                last_used=time.time(),
+            )
 
-        # パターン上限チェック（古い・使われないものを忘れる）
-        if len(self._patterns) > self.MAX_PATTERNS:
-            self._forget_stale()
+            # パターン上限チェック（古い・使われないものを忘れる）
+            if len(self._patterns) > self.MAX_PATTERNS:
+                self._forget_stale()
+
+        # 50回learnごとに定期メンテナンス（ロック外で実行、中で再取得）
+        self._learn_count += 1
+        if self._learn_count % 50 == 0:
+            self.periodic_maintenance()
 
     def _forget_stale(self):
         """古いパターンを忘却（人間も使わない記憶は薄れる）"""
@@ -611,6 +703,30 @@ class MuscleMemoryLayer:
         remove_count = len(sorted_patterns) // 4
         for p in sorted_patterns[:remove_count]:
             del self._patterns[p.input_hash]
+
+    def periodic_maintenance(self) -> int:
+        """定期メンテナンス: staleおよび低品質パターンを削除する。
+        Returns: 削除されたパターン数。
+        """
+        with self._lock:
+            now = time.time()
+            stale_threshold = self.STALENESS_DAYS * 86400
+            to_remove: list[str] = []
+
+            for h, p in list(self._patterns.items()):
+                age_seconds = now - p.last_used
+                # 古くて使用回数が少ないパターンを削除
+                if age_seconds > stale_threshold and p.use_count < 3:
+                    to_remove.append(h)
+                # 明らかに低品質なパターンを削除
+                elif p.quality_score < 0.4:
+                    to_remove.append(h)
+
+            for h in to_remove:
+                del self._patterns[h]
+            if to_remove:
+                self.save()
+            return len(to_remove)
 
     def prune_low_quality(self, threshold: float = 0.5) -> int:
         """低品質パターンを削除する（SelfCorrectionから呼ばれる）"""
@@ -834,6 +950,9 @@ class BioNervousSystem:
         self.autonomic = AutonomicLayer()
         self.immune = ImmuneSystem()
 
+        # Akashic Bio Integrator
+        self._akashic_bio = AkashicBioIntegrator()
+
         # 処理統計（スレッドセーフ）
         self._lock = threading.Lock()
         self._stats = {
@@ -913,3 +1032,64 @@ class BioNervousSystem:
                 1 - (stats_snapshot["cerebral_responses"] / total), 3
             ),
         }
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# アカシック生体統合 (Akashic Bio Integration)
+# プリゴジン散逸系 × 統一場生物学ドメイン
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class AkashicBioIntegrator:
+    """
+    生物神経系のアカシックコア統合レイヤー。
+
+    UnifiedField の生物学ドメイン共鳴 +
+    プリゴジン散逸構造理論 (EntropyEngine) を用いて、
+    神経系処理の生物学的妥当性を測定・最適化する。
+    """
+
+    def measure_bio_resonance(self, stimulus: str) -> float:
+        """
+        刺激テキストの生物学的ドメイン共鳴強度を返す (0.0-1.0)。
+        高い値 = 生命的・有機的な応答を促す刺激。
+        """
+        try:
+            from core.akashic.unified_field import UnifiedField
+            sig = UnifiedField().resonate(stimulus)
+            return round(sig.resonances.get("biology", 0.0), 3)
+        except Exception:
+            return 0.0
+
+    def find_neural_edge_of_chaos(self, response_history: list[str]) -> float:
+        """
+        カウフマン「カオスの縁」: 神経系が最も豊かに機能する最適点を計測。
+        直近の応答群から情報エントロピーを計測し、最適ゾーン [0.6, 0.8] との距離を返す。
+        0 = 最適ゾーン内、>0 = ズレ量。
+        """
+        if not response_history:
+            return 0.0
+        try:
+            from core.akashic.entropy_engine import EntropyEngine
+            eng = EntropyEngine()
+            combined = " ".join(response_history[-5:])
+            edge = eng.find_edge_of_chaos(combined)
+            # 最適ゾーン [0.6, 0.8] からの距離
+            if 0.6 <= edge <= 0.8:
+                return 0.0
+            elif edge < 0.6:
+                return round(0.6 - edge, 3)  # 硬直化 (too ordered)
+            else:
+                return round(edge - 0.8, 3)  # 過カオス (too chaotic)
+        except Exception:
+            return 0.0
+
+    def prigogine_recrystallize(self, stale_pattern: str, llm_fn=None) -> str:
+        """
+        プリゴジン散逸構造: 古い筋肉記憶パターンを解体→再結晶化。
+        劣化した習慣パターンを新しい創造的形態に変容させる。
+        """
+        try:
+            from core.akashic.entropy_engine import EntropyEngine
+            return EntropyEngine().dissipate_and_recrystallize(stale_pattern, llm_fn=llm_fn)
+        except Exception:
+            return stale_pattern  # フォールバック: 変更なし

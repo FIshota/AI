@@ -724,3 +724,62 @@ class SelfDevelopmentEngine:
             "turn_count": self._turn_count,
             "last_check": self._last_check,
         }
+
+    # ─── Akashic Core 統合 ───────────────────────────────
+
+    def meta_observe(self, observation_text: str, llm_fn=None) -> dict:
+        """
+        ストレンジループ: 自己の観察プロセス自体を観察する。
+        ホフスタッター的自己参照 — レベルジャンプで盲点を超える。
+        """
+        result = {
+            "level": 0,
+            "blind_spots": [],
+            "elevated_perspective": "",
+            "koan": "",
+            "akashic_available": False,
+        }
+        try:
+            from core.akashic.strange_loop import StrangeLoop
+            loop = StrangeLoop(llm_fn=llm_fn)
+            result["level"] = loop.detect_level(observation_text)
+            result["blind_spots"] = loop.find_blind_spots(observation_text, llm_fn=llm_fn)
+            if result["level"] < 3:
+                result["elevated_perspective"] = loop.level_jump(
+                    observation_text, result["level"], llm_fn=llm_fn
+                )
+            result["koan"] = loop.create_koan(observation_text, llm_fn=llm_fn)
+            result["akashic_available"] = True
+        except Exception as _e:
+            import logging
+            logging.getLogger(__name__).debug("[SelfDev/Akashic] meta_observe エラー: %s", _e)
+        return result
+
+    def deconstruct_growth_assumptions(self, proposal_text: str, llm_fn=None) -> dict:
+        """
+        成長提案の前提を解体する。
+        「この改善案はどんな仮定に立脚しているか？」を暴く。
+        ゲーデル的: 自分の改善ロジック自体の不完全性を検出。
+        """
+        result = {
+            "assumptions": [],
+            "inverted": [],
+            "orthogonal_framings": [],
+            "akashic_available": False,
+        }
+        try:
+            from core.akashic.frame_destructor import FrameDestructor
+            destructor = FrameDestructor(llm_fn=llm_fn)
+            assumptions = destructor.mine_assumptions(proposal_text, llm_fn=llm_fn)
+            result["assumptions"] = [
+                {"content": a.content, "type": a.type, "shakeable": a.shakeable}
+                for a in assumptions
+            ]
+            if assumptions:
+                result["inverted"] = destructor.invert(assumptions)
+            result["orthogonal_framings"] = destructor.orthogonalize(proposal_text, llm_fn=llm_fn)
+            result["akashic_available"] = True
+        except Exception as _e:
+            import logging
+            logging.getLogger(__name__).debug("[SelfDev/Akashic] deconstruct エラー: %s", _e)
+        return result

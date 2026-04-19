@@ -1,0 +1,13 @@
+# ai-chan Bandit 設定
+# B101: assert — テストで使用のため OK
+# B404: subprocess 必要 (server_home, tts fallback)
+# B603/B607: subprocess.Popen — 明示的許可コマンドのみ通しているため OK
+skips: [B101, B404, B603, B607]
+exclude_dirs:
+  - tests
+  - .venv
+  - venv
+  - /tmp
+  - models
+  - data
+  - logs

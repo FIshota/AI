@@ -505,6 +505,124 @@ class SelfCorrectionSystem:
 
         return results
 
+    # ─── ネガティブプロンプト (#83) ──────────────────────
+
+    def get_negative_prompts(self) -> list[str]:
+        """
+        頻出する失敗パターンから「やってはいけないこと」のプロンプトリストを生成する。
+
+        治療履歴から繰り返し発生している症状を特定し、
+        LLM に注入する否定的指示（「〜しないこと」）に変換する。
+
+        Returns:
+            最大5件のネガティブプロンプト
+        """
+        # 症状の発生頻度をカウント
+        symptom_counts: dict[str, int] = {}
+        for record in self._treatment_history:
+            action = record.prescription.action
+            symptom_counts[action] = symptom_counts.get(action, 0) + 1
+
+        # 頻度順にソート
+        sorted_symptoms = sorted(
+            symptom_counts.items(), key=lambda x: -x[1]
+        )
+
+        # アクション→ネガティブプロンプトの変換テーブル
+        action_to_prompt: dict[str, str] = {
+            "reset_muscle_memory_low_quality": "低品質な応答パターンを繰り返さないこと",
+            "adjust_temperature": "同じトーンの応答を続けないこと。変化をつける",
+            "adjust_max_tokens": "応答の長さが極端にならないこと（短すぎず長すぎず）",
+            "run_immune_check": "エラーが頻発する操作を繰り返さないこと",
+            "prune_stale_patterns": "古くて使い物にならないパターンに頼らないこと",
+        }
+
+        prompts: list[str] = []
+        for action, count in sorted_symptoms[:5]:
+            if count >= 2:  # 2回以上発生したもの
+                prompt = action_to_prompt.get(
+                    action,
+                    f"'{action}' に関連する問題を繰り返さないこと",
+                )
+                prompts.append(prompt)
+
+        # 現在の症状からも追加
+        current_symptoms = self.monitor.check_symptoms()
+        symptom_prompts: dict[str, str] = {
+            Symptom.REPETITIVE.value: "同じ言い回しや表現の繰り返しを避けること",
+            Symptom.TOO_SHORT.value: "応答が短すぎないようにすること。内容のある返答をする",
+            Symptom.TOO_LONG.value: "応答が長すぎないようにすること。簡潔に",
+            Symptom.QUALITY_DROP.value: "応答品質の低下に注意。丁寧に考えて返答すること",
+            Symptom.EMOTION_FLAT.value: "感情表現が平坦にならないようにすること",
+        }
+        for symptom in current_symptoms:
+            prompt = symptom_prompts.get(symptom.symptom.value)
+            if prompt and prompt not in prompts and len(prompts) < 5:
+                prompts.append(prompt)
+
+        return prompts[:5]
+
+    # ─── Akashic Core 統合 ──────────────────────────────
+
+    def quantum_diagnose(self, response_text: str, context: str = "", llm_fn=None) -> dict:
+        """
+        量子多状態診断: 単一の応答を複数の視点から同時評価。
+        「この応答は正しいか？」という問いを多世界的に展開し、
+        不確実性の高い箇所（量子不確定性が高い部分）を特定する。
+        """
+        result = {
+            "perspectives": [],
+            "quantum_uncertainty": "",   # str: CollapsedResponse.quantum_uncertainty は文字列
+            "quantum_uncertainty_level": 0.0,  # float: 独自計算 (worldline confidence 分散)
+            "blind_spots": [],
+            "consensus": "",
+            "akashic_available": False,
+        }
+        try:
+            from core.akashic.superposition import QuantumReasoner
+            reasoner = QuantumReasoner(llm_fn=llm_fn)
+            question = f"この応答の品質・正確性・自然さを評価せよ: {response_text[:200]}"
+            state = reasoner.superpose(question)
+            collapsed = reasoner.collapse(state, context)
+            result["perspectives"] = [
+                {"perspective": wl.perspective, "confidence": wl.confidence}
+                for wl in state.worldlines
+            ]
+            result["quantum_uncertainty"] = collapsed.quantum_uncertainty  # str
+            result["consensus"] = collapsed.response
+            result["akashic_available"] = True
+            # confidence 分散 → 不確実度の float 指標 (0=全員一致, 1=最大分散)
+            confidences = [wl.confidence for wl in state.worldlines]
+            if confidences:
+                mean_c = sum(confidences) / len(confidences)
+                variance = sum((c - mean_c) ** 2 for c in confidences) / len(confidences)
+                result["quantum_uncertainty_level"] = round(min(1.0, variance * 4), 3)
+        except Exception as _e:
+            import logging
+            logging.getLogger(__name__).debug("[SelfCorr/Akashic] quantum_diagnose エラー: %s", _e)
+
+        try:
+            from core.akashic.strange_loop import StrangeLoop
+            result["blind_spots"] = StrangeLoop(llm_fn=llm_fn).find_blind_spots(
+                response_text, llm_fn=llm_fn
+            )
+        except Exception:
+            pass
+
+        return result
+
+    def is_quantum_anomaly(self, response_text: str, threshold: float = 0.7) -> bool:
+        """
+        量子不確実性レベルが閾値を超える場合、この応答は「量子異常」として扱う。
+        高い不確実性 = 複数の世界線が強く衝突 = 要修正の可能性が高い。
+        quantum_uncertainty_level (float 0-1) を使用。
+        """
+        try:
+            diagnosis = self.quantum_diagnose(response_text)
+            return diagnosis["quantum_uncertainty_level"] > threshold
+        except Exception:
+            return False
+
     # ─── ステータス ─────────────────────────────────────
 
     def get_health_report(self) -> dict[str, Any]:

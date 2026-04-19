@@ -19,6 +19,17 @@ IS_MAC = platform.system() == "Darwin"
 VOICES_JA_DEFAULT = ["Kyoko", "Otoya"]
 
 
+# 感情→読み上げ速度調整マッピング (#31)
+_EMOTION_RATE_OFFSETS: dict[str, int] = {
+    "happy": 10,
+    "sad": -20,
+    "excited": 20,
+    "calm": -10,
+    "angry": 15,
+    "anxious": 5,
+}
+
+
 class TTSEngine:
     """
     macOS say コマンドラッパー。
@@ -29,8 +40,19 @@ class TTSEngine:
         self.enabled = enabled
         self.voice   = voice
         self.rate    = rate        # 読み上げ速度 (words per minute)
+        self._current_emotion: str = ""
         self._proc: subprocess.Popen | None = None
         self._lock   = threading.Lock()
+
+    def set_emotion(self, emotion: str) -> None:
+        """現在の感情を設定する。speak 時に読み上げ速度が調整される。"""
+        self._current_emotion = emotion
+
+    def _effective_rate(self) -> int:
+        """感情に基づく実効読み上げ速度を返す"""
+        offset = _EMOTION_RATE_OFFSETS.get(self._current_emotion, 0)
+        # 最低 80、最高 300 に制限
+        return max(80, min(300, self.rate + offset))
 
     # ─── 公開 API ────────────────────────────────────────────────
 
@@ -108,8 +130,9 @@ class TTSEngine:
             if self._proc and self._proc.poll() is None:
                 self._proc.terminate()
             try:
+                effective_rate = self._effective_rate()
                 self._proc = subprocess.Popen(
-                    ["say", "-v", self.voice, "-r", str(self.rate), text],
+                    ["say", "-v", self.voice, "-r", str(effective_rate), text],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )

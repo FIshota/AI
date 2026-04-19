@@ -500,6 +500,48 @@ class CodeEngine:
 
         return issues
 
+    # ─── LLM自動修正 ─────────────────────────────────────
+
+    def auto_fix_code(self, code: str, error_message: str) -> str | None:
+        """
+        LLMを使ってエラーのあるコードを自動修正する。
+
+        Args:
+            code: エラーが発生したコード
+            error_message: エラーメッセージ
+
+        Returns:
+            修正済みコード。LLM未設定の場合は None。
+        """
+        if self._llm_fn is None:
+            return None
+
+        prompt = (
+            "以下のPythonコードにエラーがあります。修正してください。\n"
+            f"エラー: {error_message}\n"
+            f"コード:\n{code}\n"
+            "修正後のコードのみを返してください。"
+        )
+
+        try:
+            response: str = self._llm_fn(prompt)
+        except Exception as exc:
+            logger.warning("LLM自動修正に失敗: %s", exc)
+            return None
+
+        # マークダウンのコードフェンスを除去
+        fixed = response.strip()
+        if fixed.startswith("```"):
+            # 先頭行（```python 等）を除去
+            lines = fixed.splitlines()
+            lines = lines[1:]
+            # 末尾の ``` を除去
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            fixed = "\n".join(lines)
+
+        return fixed if fixed else None
+
     # ─── 修正提案 ──────────────────────────────────────
 
     def suggest_fix(self, code: str, error_message: str) -> str:
@@ -746,10 +788,19 @@ class CodeEngine:
                 error_msg = result.stderr.strip()
                 lines.append(f"📛 {error_msg[:200]}")
 
-                # リトライ上限でなければ修正提案
+                # リトライ上限でなければ自動修正を試みる
                 if attempt < max_retries:
-                    fix = self.suggest_fix(current_code, error_msg)
-                    lines.append(f"🔧 修正提案: {fix[:150]}")
+                    logger.info(
+                        "run_and_fix: 試行%d失敗、自動修正を試みます",
+                        attempt + 1,
+                    )
+                    fixed_code = self.auto_fix_code(current_code, error_msg)
+                    if fixed_code is not None:
+                        lines.append("🤖 LLM自動修正を適用")
+                        current_code = fixed_code
+                    else:
+                        fix = self.suggest_fix(current_code, error_msg)
+                        lines.append(f"🔧 修正提案: {fix[:150]}")
 
         self._memory.record(
             "run", "python",
@@ -777,3 +828,93 @@ class CodeEngine:
             f"💻 コードエンジン: "
             f"パターン{total}件 / 成功率{rate:.0%}"
         )
+
+    # ─── アカシックコア統合 ────────────────────────────
+
+    def analyze_with_akashic(self, code: str, language: str = "python", llm_fn=None) -> dict:
+        """
+        アカシックコアによる多次元コード解析。
+        情報理論・生物学・数学・物理学の4ドメインからコードを同時評価。
+        """
+        result: dict = {
+            "language": language,
+            "akashic_available": False,
+            "field_resonances": {},
+            "entropy_profile": {},
+            "phi_score": 0.0,
+            "domain_insights": [],
+            "assumptions": [],
+        }
+
+        # ── UnifiedField: 多ドメイン共鳴解析 ──
+        try:
+            from core.akashic.unified_field import UnifiedField
+            field = UnifiedField()
+            sig = field.resonate(code[:500])  # 先頭500文字で特徴把握
+            result["field_resonances"] = dict(sig.resonances)
+            result["phi_score"] = sig.phi_score
+            result["akashic_available"] = True
+
+            # ドメイン別インサイト生成
+            domain_map = {
+                "information": "情報圧縮・エントロピー・モジュール性",
+                "mathematics": "構造的一貫性・抽象化・代数的性質",
+                "biology": "適応性・生存可能性・成長余地",
+                "physics": "エネルギー効率・不変量・対称性",
+            }
+            for domain, meaning in domain_map.items():
+                score = sig.resonances.get(domain, 0.0)
+                if score > 0.2:
+                    result["domain_insights"].append(
+                        f"[{domain}:{score:.2f}] {meaning} の観点で共鳴"
+                    )
+        except Exception as _e:
+            logger.debug("[CodeEngine/Akashic] UnifiedField エラー: %s", _e)
+
+        # ── EntropyEngine: 概念エントロピー計測 ──
+        try:
+            from core.akashic.entropy_engine import EntropyEngine
+            eng = EntropyEngine()
+            profile = eng.profile(code)
+            result["entropy_profile"] = {
+                "unique_word_ratio": profile.unique_word_ratio,
+                "sentence_length_variance": profile.sentence_length_variance,
+                "domain_diversity": profile.domain_diversity,
+                "collocation_surprise": profile.collocation_surprise,
+            }
+        except Exception as _e:
+            logger.debug("[CodeEngine/Akashic] EntropyEngine エラー: %s", _e)
+
+        # ── FrameDestructor: アーキテクチャ前提の発掘 ──
+        try:
+            from core.akashic.frame_destructor import FrameDestructor
+            destructor = FrameDestructor(llm_fn=llm_fn)
+            assumptions = destructor.mine_assumptions(code[:800], llm_fn=llm_fn)
+            result["assumptions"] = [
+                {"content": a.content, "type": a.type, "shakeable": a.shakeable}
+                for a in assumptions[:5]
+            ]
+        except Exception as _e:
+            logger.debug("[CodeEngine/Akashic] FrameDestructor エラー: %s", _e)
+
+        return result
+
+    def compute_akashic_complexity(self, code: str) -> float:
+        """
+        アカシックエントロピーに基づくコード複雑度スコア (0.0-1.0)。
+        低い値 = 単純・冗長、高い値 = 複雑・多様。
+        最適ゾーン [0.55, 0.75] = 創造性と明瞭さのバランス。
+        """
+        try:
+            from core.akashic.entropy_engine import EntropyEngine
+            profile = EntropyEngine().profile(code)
+            # 4軸の加重平均
+            score = (
+                profile.unique_word_ratio * 0.35
+                + profile.sentence_length_variance * 0.20
+                + profile.domain_diversity * 0.25
+                + profile.collocation_surprise * 0.20
+            )
+            return round(score, 3)
+        except Exception:
+            return 0.0

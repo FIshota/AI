@@ -7,6 +7,11 @@ Phase C: 連続リスニングモード
   - start_continuous_listening(): VAD ベースの自動発話検出と送信
   - 振幅ベースの無音検出で発話終了を判定
 
+Phase D: 複数話者対応
+  - 録音音声を無音区間で分割し、セグメントごとに話者識別 + 変換
+  - voice_id (MFCC) を使った軽量な話者識別
+  - セグメント単位の逐次処理で体感速度を改善
+
 インストール: pip install faster-whisper sounddevice soundfile
 """
 from __future__ import annotations
@@ -15,14 +20,34 @@ import tempfile
 import os
 import platform
 import time
+import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.voice_id import VoiceIDManager
+
+logger = logging.getLogger(__name__)
 
 IS_MAC = platform.system() == "Darwin"
 
 # サンプリングレート（Whisper の推奨値）
 SAMPLE_RATE = 16000
 CHANNELS    = 1
+
+# Phase D: セグメント分割パラメータ
+_WINDOW_MS       = 20      # 振幅判定の窓サイズ (ms)
+_MIN_SILENCE_MS  = 400     # 話者交代とみなす無音長 (ms)
+_MIN_SEGMENT_MS  = 800     # 有効セグメントの最短長 (ms)
+
+
+@dataclass
+class SpeakerUtterance:
+    """話者ごとの発話結果"""
+    speaker: str        # 話者名（識別できなければ空文字列）
+    text: str           # 認識テキスト
+    confidence: float   # 話者識別の信頼度 (0.0–1.0)
 
 
 class STTEngine:
@@ -51,6 +76,9 @@ class STTEngine:
         self._continuous_active = False
         self._continuous_paused = False  # TTS 読み上げ中の一時停止
         self._continuous_thread: Optional[threading.Thread] = None
+
+        # Phase D: 話者識別連携
+        self._voice_id: Optional[VoiceIDManager] = None
 
     # ─── モデル管理 ──────────────────────────────────────────────
 
@@ -99,6 +127,199 @@ class STTEngine:
         if self._load_error:
             return f"error: {self._load_error}"
         return "not_started"
+
+    # ─── Phase D: 話者識別連携 ─────────────────────────────────────
+
+    def set_voice_id(self, voice_id: VoiceIDManager) -> None:
+        """話者識別マネージャを設定して複数話者モードを有効にする"""
+        self._voice_id = voice_id
+        logger.info("[STT] 話者識別を有効化 (プロファイル数=%d)",
+                     len(voice_id.profiles))
+
+    @property
+    def multi_speaker_enabled(self) -> bool:
+        """複数話者モードが利用可能かどうか"""
+        return self._voice_id is not None and len(self._voice_id.profiles) > 0
+
+    # ─── Phase D: 音声セグメント分割 ────────────────────────────────
+
+    @staticmethod
+    def segment_audio_by_silence(
+        audio: "np.ndarray",
+        sr: int = SAMPLE_RATE,
+        silence_threshold: float = 0.008,
+        min_silence_ms: int = _MIN_SILENCE_MS,
+        min_segment_ms: int = _MIN_SEGMENT_MS,
+    ) -> "list[np.ndarray]":
+        """音声を無音区間で分割して話者ターンごとのセグメントにする。
+
+        Args:
+            audio: 1次元 float32 波形
+            sr: サンプリングレート
+            silence_threshold: 無音判定の振幅閾値
+            min_silence_ms: 話者交代とみなす最小無音長 (ms)
+            min_segment_ms: 有効セグメントの最短長 (ms)
+
+        Returns:
+            分割された音声セグメントのリスト
+        """
+        import numpy as np
+
+        window_samples = int(sr * _WINDOW_MS / 1000)
+        min_silence_windows = max(1, min_silence_ms // _WINDOW_MS)
+        min_segment_samples = int(sr * min_segment_ms / 1000)
+
+        # 各窓の振幅を計算
+        n_windows = len(audio) // window_samples
+        if n_windows == 0:
+            return [audio] if len(audio) >= min_segment_samples else []
+
+        amplitudes = []
+        for i in range(n_windows):
+            start = i * window_samples
+            end = start + window_samples
+            amplitudes.append(float(np.abs(audio[start:end]).mean()))
+
+        # 無音区間でセグメント境界を検出
+        segments: list[np.ndarray] = []
+        seg_start_window = 0
+        silence_count = 0
+        in_speech = False
+
+        for i, amp in enumerate(amplitudes):
+            if amp >= silence_threshold:
+                if not in_speech:
+                    in_speech = True
+                silence_count = 0
+            else:
+                silence_count += 1
+                if in_speech and silence_count >= min_silence_windows:
+                    # 無音が十分長い → セグメント境界
+                    seg_end = (i - silence_count + 1) * window_samples
+                    seg_start = seg_start_window * window_samples
+                    segment = audio[seg_start:seg_end]
+                    if len(segment) >= min_segment_samples:
+                        segments.append(segment)
+                    seg_start_window = i + 1
+                    in_speech = False
+                    silence_count = 0
+
+        # 残りの音声をセグメントとして追加
+        remaining_start = seg_start_window * window_samples
+        if remaining_start < len(audio):
+            remaining = audio[remaining_start:]
+            if len(remaining) >= min_segment_samples:
+                segments.append(remaining)
+
+        # セグメントが一つも取れなかった場合は全体を返す
+        if not segments:
+            return [audio] if len(audio) >= min_segment_samples else []
+
+        logger.info("[STT] 音声を %d セグメントに分割", len(segments))
+        return segments
+
+    def _identify_speaker(self, audio_segment: "np.ndarray") -> tuple[str, float]:
+        """音声セグメントから話者を識別する。
+
+        Returns:
+            (話者名, 信頼度) — 識別できなければ ("", 0.0)
+        """
+        if self._voice_id is None:
+            return ("", 0.0)
+        try:
+            from core.voice_id import extract_voice_features, cosine_similarity
+            import numpy as np
+
+            query = extract_voice_features(audio_segment, sr=SAMPLE_RATE)
+
+            best_name = ""
+            best_score = 0.0
+            for profile in self._voice_id.profiles.values():
+                if not profile.has_voice_print:
+                    continue
+                stored = np.array(profile.voice_features, dtype=np.float32)
+                score = cosine_similarity(query, stored)
+                if score > best_score:
+                    best_score = score
+                    best_name = profile.name
+
+            threshold = self._voice_id.match_threshold
+            if best_score >= threshold:
+                return (best_name, best_score)
+            return ("", best_score)
+
+        except (ImportError, ValueError) as exc:
+            logger.debug("[STT] 話者識別スキップ: %s", exc)
+            return ("", 0.0)
+
+    def _transcribe_segment(self, audio: "np.ndarray") -> str:
+        """単一セグメントをテキスト変換する（軽量版）"""
+        if not self.is_ready():
+            return ""
+        tmp_path = None
+        try:
+            import soundfile as sf
+
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp_path = tmp.name
+            sf.write(tmp_path, audio, SAMPLE_RATE)
+
+            segments, _ = self._model.transcribe(
+                tmp_path,
+                language=self.language,
+                beam_size=3,        # セグメント単位なので beam を小さくして高速化
+                vad_filter=True,
+            )
+            return " ".join(seg.text.strip() for seg in segments).strip()
+        except Exception as e:
+            logger.warning("[STT] セグメント変換エラー: %s", e)
+            return ""
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
+    def transcribe_multi_speaker(
+        self, buf: list
+    ) -> list[SpeakerUtterance]:
+        """録音バッファを話者ごとに分割して変換する。
+
+        ① 音声を無音区間でセグメント分割
+        ② 各セグメントで話者識別 (MFCC)
+        ③ 各セグメントを Whisper で変換
+        ④ 話者付きの結果リストを返す
+
+        Returns:
+            SpeakerUtterance のリスト
+        """
+        import numpy as np
+
+        if not self.is_ready() or not buf:
+            return []
+
+        audio = np.concatenate(buf, axis=0).flatten()
+        segments = self.segment_audio_by_silence(audio)
+
+        results: list[SpeakerUtterance] = []
+        for seg in segments:
+            text = self._transcribe_segment(seg)
+            if not text:
+                continue
+            speaker, conf = self._identify_speaker(seg)
+            results.append(SpeakerUtterance(
+                speaker=speaker,
+                text=text,
+                confidence=conf,
+            ))
+
+        logger.info(
+            "[STT] 複数話者変換完了: %d 発話 (話者: %s)",
+            len(results),
+            ", ".join(r.speaker or "不明" for r in results),
+        )
+        return results
 
     # ─── 録音 ────────────────────────────────────────────────────
 
@@ -161,34 +382,98 @@ class STTEngine:
 
         return self._transcribe_buffer(buf)
 
+    def stop_recording_and_transcribe_multi(self) -> list[SpeakerUtterance]:
+        """録音を停止して複数話者対応でテキスト変換する。
+
+        Returns:
+            SpeakerUtterance のリスト（話者識別無効時は単一要素）
+        """
+        with self._audio_lock:
+            if not self._recording:
+                return []
+            self._recording = False
+        if self._stream:
+            try:
+                self._stream.stop()
+                self._stream.close()
+            except Exception:
+                pass
+            self._stream = None
+
+        with self._audio_lock:
+            if not self._audio_data:
+                return []
+            buf = list(self._audio_data)
+            self._audio_data = []
+
+        if self.multi_speaker_enabled:
+            return self.transcribe_multi_speaker(buf)
+        else:
+            text = self._transcribe_buffer(buf)
+            if text:
+                return [SpeakerUtterance(speaker="", text=text, confidence=0.0)]
+            return []
+
     def _transcribe_buffer(self, buf: list | None = None) -> str:
-        """録音バッファを Whisper でテキスト変換"""
+        """録音バッファを Whisper でテキスト変換。
+
+        音声が長い場合は自動的にセグメント分割して高速化する。
+        """
         if not self.is_ready():
             return ""
         if buf is None:
             buf = self._audio_data
         if not buf:
             return ""
-        tmp_path = None
         try:
             import numpy as np
+
+            audio = np.concatenate(buf, axis=0).flatten()
+            duration_sec = len(audio) / SAMPLE_RATE
+
+            # 2秒超の音声はセグメント分割して高速化
+            if duration_sec > 2.0:
+                segments = self.segment_audio_by_silence(audio)
+                if len(segments) > 1:
+                    logger.info(
+                        "[STT] %.1f秒の音声を %d セグメントに分割して変換",
+                        duration_sec, len(segments),
+                    )
+                    texts = []
+                    for seg in segments:
+                        t = self._transcribe_segment(seg)
+                        if t:
+                            texts.append(t)
+                    result = " ".join(texts).strip()
+                    print(f"[STT] 認識結果(分割): {result[:80]}", flush=True)
+                    return result
+
+            # 短い音声 or 分割不要な場合は一括変換
+            return self._transcribe_single(audio)
+
+        except Exception as e:
+            print(f"[STT] 変換エラー: {e}", flush=True)
+            return ""
+
+    def _transcribe_single(self, audio: "np.ndarray") -> str:
+        """単一の音声配列を一括でWhisper変換する"""
+        if not self.is_ready():
+            return ""
+        tmp_path = None
+        try:
             import soundfile as sf
 
-            # バッファを結合して一時 WAV ファイルに保存
-            audio = np.concatenate(buf, axis=0).flatten()
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
                 tmp_path = tmp.name
             sf.write(tmp_path, audio, SAMPLE_RATE)
 
-            # Whisper で認識
             segments, _ = self._model.transcribe(
                 tmp_path,
                 language=self.language,
                 beam_size=5,
-                vad_filter=True,        # 無音区間をスキップ
+                vad_filter=True,
             )
             text = " ".join(seg.text.strip() for seg in segments)
-
             print(f"[STT] 認識結果: {text[:80]}", flush=True)
             return text.strip()
 
@@ -196,7 +481,6 @@ class STTEngine:
             print(f"[STT] 変換エラー: {e}", flush=True)
             return ""
         finally:
-            # 例外が発生しても必ず一時ファイルを削除
             if tmp_path and os.path.exists(tmp_path):
                 try:
                     os.unlink(tmp_path)
@@ -364,9 +648,24 @@ class STTEngine:
 
             # 変換（発話データがある場合のみ）
             if speech_chunks and self._continuous_active and not self._continuous_paused:
-                text = self._transcribe_buffer(speech_chunks)
-                if text and self._continuous_active:
-                    on_text(text)
+                if self.multi_speaker_enabled:
+                    # Phase D: 複数話者モード — セグメント分割+話者識別
+                    utterances = self.transcribe_multi_speaker(speech_chunks)
+                    for utt in utterances:
+                        if not self._continuous_active:
+                            break
+                        # 話者名付きのテキストをコールバックに渡す
+                        labeled = (
+                            f"[{utt.speaker}] {utt.text}"
+                            if utt.speaker
+                            else utt.text
+                        )
+                        on_text(labeled)
+                else:
+                    # 従来の単一話者モード
+                    text = self._transcribe_buffer(speech_chunks)
+                    if text and self._continuous_active:
+                        on_text(text)
 
         self._continuous_active = False
 
@@ -379,7 +678,13 @@ class STTEngine:
     # ─── ワンショット認識 ────────────────────────────────────────
 
     def transcribe_file(self, audio_path: str) -> str:
-        """既存の音声ファイルをテキスト変換する"""
+        """既存の音声ファイルをテキスト変換する。
+
+        Item #P7: word-level confidence フィルタと重複フレーム除去を適用。
+        - avg_logprob が極端に低い segment を棄却
+        - no_speech_prob が高い segment を棄却
+        - 同一テキストの連続重複を除去
+        """
         if not self.is_ready():
             return ""
         try:
@@ -387,8 +692,28 @@ class STTEngine:
                 audio_path,
                 language=self.language,
                 vad_filter=True,
+                # Item #P7: 無音検出強化 + より厳しい閾値
+                vad_parameters={"min_silence_duration_ms": 500},
+                no_speech_threshold=0.6,
+                log_prob_threshold=-1.0,
             )
-            return " ".join(seg.text.strip() for seg in segments)
+            parts: list[str] = []
+            last_text = ""
+            for seg in segments:
+                text = (getattr(seg, "text", "") or "").strip()
+                if not text:
+                    continue
+                # 信頼度フィルタ
+                avg_lp = getattr(seg, "avg_logprob", 0.0)
+                no_speech = getattr(seg, "no_speech_prob", 0.0)
+                if avg_lp < -1.0 or no_speech > 0.6:
+                    continue
+                # 直前と重複するテキストをスキップ
+                if text == last_text:
+                    continue
+                last_text = text
+                parts.append(text)
+            return " ".join(parts)
         except Exception as e:
             print(f"[STT] ファイル認識エラー: {e}", flush=True)
             return ""

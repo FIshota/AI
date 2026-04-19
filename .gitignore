@@ -89,3 +89,17 @@ data/llm_cache/
 .idea/
 *.swp
 *.swo
+
+# Phase 0 記憶切り離し対策 (2026-04-20)
+data/
+logs/
+backups/
+output/
+reports/
+personality/
+yamato_dna/
+models/
+config/settings.json
+*.enc
+*.key
+*.keyfile

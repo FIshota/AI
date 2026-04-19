@@ -398,6 +398,17 @@ class JapaneseQualityFilter:
         # です→だよ、ます→るよ
         (re.compile(r"です([。！？\s])"), r"だよ\1"),
         (re.compile(r"ます([。！？\s])"), r"るよ\1"),
+        # markdown artifacts 除去
+        (re.compile(r"\*\*([^*]+)\*\*"), r"\1"),
+        (re.compile(r"^#{1,6}\s+", re.MULTILINE), ""),
+        (re.compile(r"^- ", re.MULTILINE), ""),
+        # LLM role prefix 除去
+        (re.compile(r"^(アシスタント|AI|Assistant|アイ)\s*[:：]\s*", re.MULTILINE), ""),
+        # 省略記号の正規化
+        (re.compile(r"\.{3,}"), "…"),
+        (re.compile(r"。{2,}"), "…"),
+        # trailing whitespace 除去
+        (re.compile(r"[ \t]+$", re.MULTILINE), ""),
         # 余分な改行・空白の整理
         (re.compile(r"\n{3,}"), "\n\n"),
         (re.compile(r"　{2,}"), "　"),
@@ -420,6 +431,94 @@ class JapaneseQualityFilter:
             result = pattern.sub(replacement, result)
         return result
 
+    @classmethod
+    def remove_english_lines(cls, text: str) -> str:
+        """
+        行単位で英語文を除去する。
+        10文字超かつASCII文字が80%以上の行を除去し、日本語を保持する。
+        """
+        lines = text.split("\n")
+        kept: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if len(stripped) <= 10:
+                # 短い行はそのまま保持（空行や短い記号など）
+                kept.append(line)
+                continue
+            ascii_count = sum(1 for ch in stripped if ord(ch) < 128)
+            ascii_ratio = ascii_count / len(stripped)
+            # CJK文字が1つでもあれば日本語混じりとみなして保持
+            has_cjk = any(
+                '\u3000' <= ch <= '\u9fff' or '\uff00' <= ch <= '\uffef'
+                for ch in stripped
+            )
+            if not has_cjk and ascii_ratio > 0.8:
+                # 純英語文として除去
+                continue
+            kept.append(line)
+        return "\n".join(kept)
+
+
+# ─── アカシック場共鳴解析 ─────────────────────────────────────
+
+def analyze_field_resonance(text: str) -> dict:
+    """
+    アカシック場共鳴解析。
+    発話がどのドメインに共鳴しているかを測定。
+    高いΦスコア = 多次元統合的な発話。
+    """
+    result = {
+        "phi_score": 0.0,
+        "resonances": {},
+        "level": 0,
+        "universal_pattern": "",
+        "is_deep": False,
+        "akashic_available": False,
+    }
+    try:
+        from core.akashic.unified_field import UnifiedField
+        field = UnifiedField()
+        sig = field.resonate(text)
+        result["phi_score"] = sig.phi_score
+        result["resonances"] = dict(sig.resonances)
+        result["universal_pattern"] = sig.universal_pattern
+        result["is_deep"] = sig.phi_score > 0.5
+        result["akashic_available"] = True
+    except Exception:
+        pass
+    try:
+        from core.akashic.strange_loop import StrangeLoop
+        result["level"] = StrangeLoop().detect_level(text)
+    except Exception:
+        pass
+    return result
+
+
+def enrich_intent_with_field(intent: "ConversationIntent", text: str) -> dict:
+    """
+    意図分類にアカシック場情報を付加する。
+    表面的な意図（質問/相談/雑談）の奥にある深層構造を返す。
+    """
+    base = {
+        "intent_type": intent.intent_type,
+        "confidence": intent.confidence,
+        "sub_type": intent.sub_type,
+        "field_phi": 0.0,
+        "field_level": 0,
+        "depth_hint": "surface",
+    }
+    try:
+        field_info = analyze_field_resonance(text)
+        base["field_phi"] = field_info["phi_score"]
+        base["field_level"] = field_info["level"]
+        if field_info["phi_score"] > 0.6 or field_info["level"] >= 3:
+            base["depth_hint"] = "deep"
+        elif field_info["phi_score"] > 0.3 or field_info["level"] >= 2:
+            base["depth_hint"] = "mid"
+    except Exception:
+        pass
+    return base
+
 
 # ─── 統合: 会話知能プロセッサ ────────────────────────────────
 
@@ -429,10 +528,16 @@ class ConversationIntelligence:
     ai_chan.py の chat() メソッド内で使用する。
     """
 
+    # 応答多様性チェック用の履歴サイズ
+    _RESPONSE_HISTORY_MAX = 5
+    # 類似度がこの値を超えると警告
+    _DIVERSITY_THRESHOLD = 0.8
+
     def __init__(self):
         self._depth_mgr = ConversationDepthManager()
         self._quality_filter = JapaneseQualityFilter()
         self._last_intent: ConversationIntent | None = None
+        self._response_history: list[str] = []
 
     def analyze_input(
         self,
@@ -492,11 +597,103 @@ class ConversationIntelligence:
             "max_sentences": strategy.max_sentences,
         }
 
+    @staticmethod
+    def _char_bigrams(text: str) -> set[str]:
+        """テキストの文字バイグラム集合を返す"""
+        chars = text.replace(" ", "").replace("\n", "")
+        if len(chars) < 2:
+            return {chars}
+        return {chars[i:i + 2] for i in range(len(chars) - 1)}
+
+    def check_diversity(self, new_response: str) -> float:
+        """
+        新しい応答と最近の応答履歴の類似度をチェックする (#73)。
+
+        文字バイグラムの Jaccard 類似度を使用。
+        最も類似度が高い既存応答との値を返す。
+
+        Returns:
+            最大類似度 (0.0-1.0)。0.8 以上は「繰り返しの疑い」。
+        """
+        if not self._response_history:
+            return 0.0
+
+        new_bigrams = self._char_bigrams(new_response)
+        if not new_bigrams:
+            return 0.0
+
+        max_similarity = 0.0
+        for past in self._response_history:
+            past_bigrams = self._char_bigrams(past)
+            if not past_bigrams:
+                continue
+            intersection = len(new_bigrams & past_bigrams)
+            union = len(new_bigrams | past_bigrams)
+            if union > 0:
+                similarity = intersection / union
+                max_similarity = max(max_similarity, similarity)
+
+        return round(max_similarity, 3)
+
+    def _record_response(self, response: str) -> None:
+        """応答を履歴に追加する"""
+        self._response_history.append(response)
+        if len(self._response_history) > self._RESPONSE_HISTORY_MAX:
+            self._response_history = self._response_history[-self._RESPONSE_HISTORY_MAX:]
+
     def post_process(self, response: str) -> str:
         """LLMの応答を後処理する（品質フィルタ）"""
-        # 自動修正
+        _SAFE_FALLBACK = "うーん、ちょっとうまく言えないけど…"
+
+        # 1. 自動修正（敬語→タメ口、markdown除去、role prefix除去 etc.）
         response = self._quality_filter.auto_fix(response)
+
+        # 2. 英語行の除去
+        response = self._quality_filter.remove_english_lines(response)
+
+        # 3. 重複連続文の除去
+        response = self._remove_duplicate_sentences(response)
+
+        # 4. 最大8文にトリム（。！？で分割）
+        response = self._trim_to_max_sentences(response, max_sentences=8)
+
+        # 5. 空応答チェック → 安全なフォールバック
+        if not response.strip():
+            return _SAFE_FALLBACK
+
+        # 6. 多様性チェック (#73) — 類似度が高い場合はログ警告
+        diversity_score = self.check_diversity(response)
+        if diversity_score > self._DIVERSITY_THRESHOLD:
+            # 警告は出すが応答は返す（上位層で対処可能）
+            pass
+
+        # 応答を履歴に記録
+        self._record_response(response)
+
         return response
+
+    @staticmethod
+    def _trim_to_max_sentences(text: str, max_sentences: int = 8) -> str:
+        """文末記号（。！？）で分割し、先頭 max_sentences 文だけ保持する"""
+        # 文末記号で分割しつつ区切り文字を保持
+        parts = re.split(r"(?<=[。！？])", text)
+        sentences = [p for p in parts if p.strip()]
+        if len(sentences) <= max_sentences:
+            return text
+        return "".join(sentences[:max_sentences])
+
+    @staticmethod
+    def _remove_duplicate_sentences(text: str) -> str:
+        """連続する同一文を除去する"""
+        parts = re.split(r"(?<=[。！？])", text)
+        sentences = [p for p in parts if p.strip()]
+        if not sentences:
+            return text
+        deduped: list[str] = [sentences[0]]
+        for sentence in sentences[1:]:
+            if sentence.strip() != deduped[-1].strip():
+                deduped.append(sentence)
+        return "".join(deduped)
 
     @property
     def last_intent(self) -> ConversationIntent | None:

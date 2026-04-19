@@ -8,17 +8,24 @@
 - 学習カリキュラム（簡単→難しいの順序制御）
 - 知識蒸留（冗長な学習データの圧縮・統合）
 - 学習効果の追跡・可視化
+- ユーザー語彙追跡 (#74)
+- 品質スコアリングによる few-shot 最適化 (#80)
 """
 from __future__ import annotations
 
 import json
+import logging
 import math
+import re
 import threading
-from collections import defaultdict
+import unicodedata
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -117,8 +124,10 @@ class ContinuousLearner:
     def __init__(self, base_dir: str | Path):
         self._base = Path(base_dir)
         self._data_path = self._base / "data" / "continuous_learning.json"
+        self._vocab_path = self._base / "data" / "user_vocabulary.json"
         self._examples: list[LearningExample] = []
         self._clusters: dict[str, TopicCluster] = {}
+        self._user_vocabulary: Counter = Counter()
         self._lock = threading.Lock()
         self._stats = {
             "total_learned": 0,
@@ -126,6 +135,7 @@ class ContinuousLearner:
             "distillations": 0,
         }
         self._load()
+        self._load_vocabulary()
 
     # ─── 学習 ────────────────────────────────────────────────
 
@@ -219,17 +229,18 @@ class ContinuousLearner:
             if diff_match:
                 candidates = diff_match
 
-        # スコアリング
+        # スコアリング (#80: score_example で品質ソート)
         scored: list[tuple[float, LearningExample]] = []
         for ex in candidates:
-            score = ex.quality_score * 10  # 品質重視
+            # 品質スコアリング
+            example_score = self.score_example(ex.to_dict()) * 10
             # 関連度ボーナス
             if user_input:
                 overlap = sum(1 for c in user_input if c in ex.user)
-                score += min(overlap, 5)
+                example_score += min(overlap, 5)
             # 使用頻度が低いものを優先（多様性）
-            score -= ex.use_count * 0.5
-            scored.append((score, ex))
+            example_score -= ex.use_count * 0.5
+            scored.append((example_score, ex))
 
         scored.sort(key=lambda x: -x[0])
         selected = scored[:n]
@@ -359,6 +370,93 @@ class ContinuousLearner:
     @property
     def example_count(self) -> int:
         return len(self._examples)
+
+    # ─── ユーザー語彙追跡 (#74) ─────────────────────────────────
+
+    def update_vocabulary(self, user_input: str) -> None:
+        """ユーザー入力から語彙を更新する"""
+        # 簡易トークナイズ: 日本語文字の連続区間とASCII単語を抽出
+        tokens = re.findall(
+            r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]+|[a-zA-Z]+',
+            user_input,
+        )
+        # 短すぎるトークンは除外
+        meaningful = [t for t in tokens if len(t) >= 2]
+        with self._lock:
+            self._user_vocabulary.update(meaningful)
+        self._save_vocabulary()
+
+    def get_frequent_words(self, top_n: int = 20) -> list[tuple[str, int]]:
+        """頻出語彙トップ N を返す"""
+        return self._user_vocabulary.most_common(top_n)
+
+    def _load_vocabulary(self) -> None:
+        """語彙データを読み込む"""
+        if not self._vocab_path.exists():
+            return
+        try:
+            data = json.loads(self._vocab_path.read_text("utf-8"))
+            self._user_vocabulary = Counter(data)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    def _save_vocabulary(self) -> None:
+        """語彙データを保存する"""
+        self._vocab_path.parent.mkdir(parents=True, exist_ok=True)
+        self._vocab_path.write_text(
+            json.dumps(dict(self._user_vocabulary.most_common(500)), ensure_ascii=False, indent=2),
+            "utf-8",
+        )
+
+    # ─── 品質スコアリング (#80) ────────────────────────────────
+
+    @staticmethod
+    def score_example(example: dict) -> float:
+        """
+        学習例の品質スコアを計算する。
+
+        スコア基準:
+        - 長さ: 短すぎず長すぎない応答が高得点
+        - 日本語含有率: 日本語が多いほど高得点
+        - 繰り返しなし: 同じフレーズの繰り返しがないほど高得点
+        - 基本 quality_score も加味
+
+        Returns:
+            0.0-1.0 の品質スコア
+        """
+        ai_text = example.get("ai", "")
+        user_text = example.get("user", "")
+        base_quality = example.get("quality_score", 0.5)
+
+        score = 0.0
+
+        # 長さスコア (20-150文字が理想的)
+        ai_len = len(ai_text)
+        if 20 <= ai_len <= 150:
+            score += 0.3
+        elif 10 <= ai_len <= 200:
+            score += 0.2
+        elif ai_len > 0:
+            score += 0.1
+
+        # 日本語含有率
+        jp_chars = sum(
+            1 for c in ai_text
+            if '\u3000' <= c <= '\u9fff' or '\uff00' <= c <= '\uffef'
+        )
+        total_chars = max(len(ai_text), 1)
+        jp_ratio = jp_chars / total_chars
+        score += jp_ratio * 0.3
+
+        # 繰り返しチェック: 3文字以上のフレーズが2回以上出現しない
+        has_repetition = bool(re.search(r'(.{3,})\1', ai_text))
+        if not has_repetition:
+            score += 0.2
+
+        # 基本品質スコアを加味
+        score += base_quality * 0.2
+
+        return min(1.0, round(score, 3))
 
     # ─── 永続化 ──────────────────────────────────────────────
 

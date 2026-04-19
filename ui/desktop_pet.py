@@ -4,18 +4,23 @@
 クリックで会話できるウィンドウを提供します。
 """
 from __future__ import annotations
+import logging
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog
 import threading
 import math
 import time
 import sys
 import platform
+from datetime import datetime
 from pathlib import Path
+from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 IS_MAC = platform.system() == "Darwin"
-# ウィンドウ背景色（PNG の透明部分と馴染む深い紫）
-WIN_BG = "#1A0A2E"
+# ウィンドウ背景色（ペットウィンドウの透過用）
+WIN_BG = "#F5F3F8"
 
 try:
     from PIL import Image, ImageTk, ImageFilter, ImageEnhance
@@ -25,6 +30,18 @@ except ImportError:
 
 BASE_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE_DIR))
+
+from ui.chat_widgets import (
+    CommandPalette,
+    EmotionBar,
+    FeedbackButtons,
+    KeyboardShortcuts,
+    MessageBubble,
+    TypewriterMixin,
+    TypingIndicator,
+    detect_dark_mode,
+    get_theme_colors,
+)
 
 
 def _all_children(widget):
@@ -43,16 +60,26 @@ IMAGE_CANDIDATES = [
     BASE_DIR / "config"  / "assets" / "ai_chan.png",
 ]
 
-# カラーパレット（アイのテーマカラー）
-COLOR_BG       = "#2D1B3D"   # ダークパープル
-COLOR_PANEL    = "#3D2255"   # パネル背景
-COLOR_INPUT    = "#1A0F2E"   # 入力欄
-COLOR_ACCENT   = "#E8A5C8"   # ピンクアクセント
-COLOR_ACCENT2  = "#B57BDC"   # パープルアクセント
-COLOR_TEXT     = "#F5E6FF"   # 明るいテキスト
-COLOR_SUBTEXT  = "#C9A8E8"   # サブテキスト
-COLOR_BUBBLE   = "#4A2870"   # 吹き出し背景
-COLOR_USER_BUB = "#2A1545"   # ユーザー吹き出し
+# 表情差分画像のベースパス（{emotion} を置換して使う）
+EXPRESSION_CANDIDATES = [
+    BASE_DIR / "assets" / "ai_chan_{emotion}.png",
+    BASE_DIR / "assets" / "expressions" / "ai_chan_{emotion}.png",
+]
+
+# ──────── カラーパレット（Clean × Soft — Cotomo inspired） ────────
+COLOR_BG       = "#FFFFFF"   # 白背景（クリーン・高視認性）
+COLOR_PANEL    = "#F5F3F8"   # ソフトラベンダーグレー（パネル）
+COLOR_INPUT    = "#FFFFFF"   # 入力欄（白）
+COLOR_ACCENT   = "#6C5CE7"   # メインアクセント（上品な紫）
+COLOR_ACCENT2  = "#A29BFE"   # セカンドアクセント（明るい紫）
+COLOR_TEXT     = "#2D2D3F"   # ダークネイビー（テキスト・高コントラスト）
+COLOR_SUBTEXT  = "#8E8EA0"   # ミューテッドグレー（サブテキスト）
+COLOR_BUBBLE   = "#F0EEFF"   # AIバブル（うすいラベンダー）
+COLOR_USER_BUB = "#E8F4FD"   # ユーザーバブル（うすいブルー）
+COLOR_BORDER   = "#E5E5EA"   # ボーダー（ソフトグレー）
+COLOR_SUCCESS  = "#34C759"   # アクティブ（グリーン）
+COLOR_DANGER   = "#FF3B30"   # 録音中（レッド）
+COLOR_GLOW     = "#EDE9FE"   # フォーカス（うすい紫）
 
 PET_WIDTH  = 220
 PET_HEIGHT = 260
@@ -73,22 +100,24 @@ def find_character_image(custom_path: str = "") -> Path | None:
 
 
 class SpeechBubble(tk.Toplevel):
-    """アイの台詞吹き出し"""
+    """アイの台詞吹き出し（クリーン・ミニマル）"""
 
     def __init__(self, parent, text: str, x: int, y: int):
         super().__init__(parent)
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         self.attributes("-alpha", 0.0)
-        self.configure(bg=COLOR_BUBBLE)
+        self.configure(bg=COLOR_BORDER)
 
-        # 角丸風フレーム
-        frame = tk.Frame(self, bg=COLOR_BUBBLE, padx=14, pady=10)
-        frame.pack()
+        # ボーダー効果: 外側フレーム → 内側フレームで1pxボーダーを再現
+        outer = tk.Frame(self, bg=COLOR_BORDER, padx=1, pady=1)
+        outer.pack()
+        inner = tk.Frame(outer, bg=COLOR_BG, padx=18, pady=14)
+        inner.pack()
 
         label = tk.Label(
-            frame, text=text, bg=COLOR_BUBBLE, fg=COLOR_TEXT,
-            font=("Hiragino Sans", 12), wraplength=260, justify="left"
+            inner, text=text, bg=COLOR_BG, fg=COLOR_TEXT,
+            font=("Hiragino Sans", 13), wraplength=280, justify="left"
         )
         label.pack()
 
@@ -127,18 +156,27 @@ class SpeechBubble(tk.Toplevel):
             return
 
 
-class ChatWindow(tk.Toplevel):
+class ChatWindow(tk.Toplevel, TypewriterMixin):
     """チャットウィンドウ"""
 
     def __init__(self, parent, ai_chan_instance, pet=None):
         super().__init__(parent)
-        self.ai_chan = ai_chan_instance
+        self._ai_chan_direct = ai_chan_instance
         self._pet   = pet  # DesktopPet インスタンス（アイドルタイマーリセット用）
 
-        # アイコン・名前設定を読み込む
+        # ダークモード検出とテーマ色
+        self._dark_mode = detect_dark_mode()
+        self._theme = get_theme_colors(dark=self._dark_mode)
+
+        # フォントサイズ（Ctrl++/- で変更可能）
+        self._font_size: int = 12
+        self._font_name: str = "Hiragino Sans"
+
+        # アイコン・名前設定を読み込む（ai_chan が None でも安全にデフォルト使用）
+        _ai = self.ai_chan  # property 経由で pet からも解決
         ui_cfg = {}
-        if ai_chan_instance and hasattr(ai_chan_instance, "settings"):
-            ui_cfg = ai_chan_instance.settings.get("ui", {})
+        if _ai and hasattr(_ai, "settings"):
+            ui_cfg = _ai.settings.get("ui", {})
         self._ai_icon   = ui_cfg.get("ai_icon",   "💗")
         self._user_icon = ui_cfg.get("user_icon",  "👤")
         self._user_name = ui_cfg.get("user_name",  "あなた")
@@ -174,6 +212,71 @@ class ChatWindow(tk.Toplevel):
         self.after(50, self._focus_input)
         # 開いた時はLLMに自然な挨拶を生成させる
         self._generate_open_greeting()
+
+    @property
+    def ai_chan(self):
+        """ai_chan を動的に解決する。
+        初期化時に None が渡されても、後から DesktopPet に ai_chan がセットされれば
+        自動的にそちらを参照する。
+        """
+        if self._ai_chan_direct is not None:
+            return self._ai_chan_direct
+        if self._pet is not None and getattr(self._pet, "ai_chan", None) is not None:
+            return self._pet.ai_chan
+        return None
+
+    @ai_chan.setter
+    def ai_chan(self, value):
+        self._ai_chan_direct = value
+        # ai_chan が後からセットされた場合、アイコン画像を再読み込みする
+        if value is not None and hasattr(value, "settings"):
+            self._reload_icons_if_needed(value)
+
+    def _reload_icons_if_needed(self, ai):
+        """ai_chan が後からセットされた時にアイコン画像を再読み込みする。
+        既に読み込み済みの場合はスキップ。"""
+        try:
+            ui_cfg = ai.settings.get("ui", {})
+
+            # メッセージアイコン
+            if self._ai_icon_photo is None and PILLOW_AVAILABLE:
+                self._ai_icon_photo = self._load_icon_image(
+                    ui_cfg.get("ai_icon_image", "")
+                )
+                if self._ai_icon_photo is None:
+                    self._ai_icon_photo = self._load_head_icon_from_pet_image(
+                        ui_cfg.get("pet_image", "")
+                    )
+            if self._user_icon_photo is None and PILLOW_AVAILABLE:
+                self._user_icon_photo = self._load_icon_image(
+                    ui_cfg.get("user_icon_image", "")
+                )
+
+            # アイコン・名前もデフォルトのままなら更新
+            if self._ai_icon == "💗":
+                self._ai_icon = ui_cfg.get("ai_icon", "💗")
+            if self._user_name == "あなた":
+                self._user_name = ui_cfg.get("user_name", "あなた")
+
+            # タイトルバーアイコン
+            if self._title_head_photo is None and PILLOW_AVAILABLE:
+                pet_img_path = ui_cfg.get("pet_image", "")
+                self._title_head_photo = self._load_head_icon_from_pet_image(
+                    pet_img_path, size=28
+                )
+                if self._title_head_photo is not None:
+                    # タイトルバーにアイコンを追加（既存レイアウトに差し込み）
+                    for child in self.winfo_children():
+                        if isinstance(child, tk.Frame) and child.cget("height") == 48:
+                            title_icon = tk.Label(
+                                child, image=self._title_head_photo,
+                                bg=COLOR_PANEL
+                            )
+                            title_icon.image = self._title_head_photo
+                            title_icon.pack(side="left", padx=(16, 0), before=child.winfo_children()[0] if child.winfo_children() else None)
+                            break
+        except Exception as e:
+            print(f"[Chat] アイコン再読み込み失敗: {e}", flush=True)
 
     def _load_icon_image(self, path: str, size: int = 36):
         """アイコン画像を読み込んでリサイズする。失敗したら None を返す"""
@@ -236,7 +339,8 @@ class ChatWindow(tk.Toplevel):
         if self.ai_chan and self.ai_chan.llm_loaded:
             def _gen():
                 try:
-                    resp = self.ai_chan.chat("チャットを開いてくれた。自然に一言だけ話しかけて。")
+                    prompt = self.ai_chan.build_greeting_prompt("chat_open")
+                    resp = self.ai_chan.chat(prompt)
                 except Exception:
                     resp = "どうしたの？"
                 try:
@@ -249,51 +353,62 @@ class ChatWindow(tk.Toplevel):
             self._add_message("アイ", "どうしたの？", is_ai=True)
 
     def _build_ui(self):
-        # タイトルバー
-        title_bar = tk.Frame(self, bg=COLOR_PANEL, height=44)
+        # ══════════════════════════════════════════════════════
+        # タイトルバー（ライト・クリーン）
+        # ══════════════════════════════════════════════════════
+        title_bar = tk.Frame(self, bg=COLOR_BG, height=48)
         title_bar.pack(fill="x")
         title_bar.pack_propagate(False)
 
-        # タイトルバー用の頭部アイコン（少し大きめ）
+        # タイトルバー用の頭部アイコン
         self._title_head_photo = None
         if PILLOW_AVAILABLE and self.ai_chan and hasattr(self.ai_chan, "settings"):
             pet_img_path = self.ai_chan.settings.get("ui", {}).get("pet_image", "")
             self._title_head_photo = self._load_head_icon_from_pet_image(
-                pet_img_path, size=28
+                pet_img_path, size=30
             )
 
         if self._title_head_photo is not None:
             title_icon = tk.Label(
-                title_bar, image=self._title_head_photo, bg=COLOR_PANEL
+                title_bar, image=self._title_head_photo, bg=COLOR_BG
             )
             title_icon.image = self._title_head_photo  # GC 防止
-            title_icon.pack(side="left", padx=(16, 6), pady=8)
-            tk.Label(
-                title_bar, text="アイ",
-                bg=COLOR_PANEL, fg=COLOR_ACCENT,
-                font=("Hiragino Sans", 14, "bold")
-            ).pack(side="left", pady=8)
-        else:
-            tk.Label(
-                title_bar, text="アイ",
-                bg=COLOR_PANEL, fg=COLOR_ACCENT,
-                font=("Hiragino Sans", 14, "bold")
-            ).pack(side="left", padx=16, pady=8)
+            title_icon.pack(side="left", padx=(16, 8), pady=9)
 
-        # 閉じるボタン
+        # タイトルテキスト
+        tk.Label(
+            title_bar, text="アイ",
+            bg=COLOR_BG, fg=COLOR_ACCENT,
+            font=("Hiragino Sans", 15, "bold")
+        ).pack(side="left", padx=(4 if self._title_head_photo else 16, 0), pady=9)
+
+        # オンラインステータスドット
+        tk.Label(
+            title_bar, text="●", bg=COLOR_BG, fg=COLOR_SUCCESS,
+            font=("Arial", 7)
+        ).pack(side="left", padx=(6, 0), pady=9)
+
+        # 閉じるボタン（ホバー効果付き）
         close_btn = tk.Label(
-            title_bar, text="✕", bg=COLOR_PANEL, fg=COLOR_SUBTEXT,
-            font=("Arial", 14), cursor="hand2"
+            title_bar, text="✕", bg=COLOR_BG, fg=COLOR_SUBTEXT,
+            font=("Arial", 14), cursor="hand2", padx=8
         )
-        close_btn.pack(side="right", padx=16)
+        close_btn.pack(side="right", padx=(0, 12))
         close_btn.bind("<Button-1>", lambda e: self.withdraw())
+        close_btn.bind("<Enter>", lambda e: close_btn.configure(fg=COLOR_DANGER))
+        close_btn.bind("<Leave>", lambda e: close_btn.configure(fg=COLOR_SUBTEXT))
 
-        # チャット履歴エリア
+        # タイトルバー下の区切り線
+        tk.Frame(self, bg=COLOR_BORDER, height=1).pack(fill="x")
+
+        # ══════════════════════════════════════════════════════
+        # チャット履歴エリア（白背景・広々）
+        # ══════════════════════════════════════════════════════
         chat_frame = tk.Frame(self, bg=COLOR_BG)
-        chat_frame.pack(fill="both", expand=True, padx=12, pady=(8, 4))
+        chat_frame.pack(fill="both", expand=True, padx=0, pady=0)
 
         self.chat_canvas = tk.Canvas(
-            chat_frame, bg=COLOR_BG, highlightthickness=0
+            chat_frame, bg=COLOR_BG, highlightthickness=0, bd=0
         )
         scrollbar = ttk.Scrollbar(chat_frame, orient="vertical",
                                    command=self.chat_canvas.yview)
@@ -309,79 +424,113 @@ class ChatWindow(tk.Toplevel):
         self.msg_frame.bind("<Configure>", self._on_frame_configure)
         self.chat_canvas.bind("<Configure>", self._on_canvas_configure)
 
-        # 感情表示バー
+        # ══════════════════════════════════════════════════════
+        # ステータスバー（感情 + 音声ステータス）
+        # ══════════════════════════════════════════════════════
         self.emotion_var = tk.StringVar(value="😊 元気")
-        emotion_bar = tk.Frame(self, bg=COLOR_PANEL, height=28)
-        emotion_bar.pack(fill="x")
-        emotion_bar.pack_propagate(False)
+        status_bar = tk.Frame(self, bg=COLOR_PANEL, height=28)
+        status_bar.pack(fill="x")
+        status_bar.pack_propagate(False)
         tk.Label(
-            emotion_bar, textvariable=self.emotion_var,
+            status_bar, textvariable=self.emotion_var,
             bg=COLOR_PANEL, fg=COLOR_SUBTEXT,
             font=("Hiragino Sans", 10)
-        ).pack(side="left", padx=12)
+        ).pack(side="left", padx=16)
 
-        # 音声ステータスインジケータ（録音中・読み上げ中）
+        # 音声ステータスインジケータ
         self._voice_status_var = tk.StringVar(value="")
         self._voice_status_label = tk.Label(
-            emotion_bar, textvariable=self._voice_status_var,
-            bg=COLOR_PANEL, fg="#E84040",
+            status_bar, textvariable=self._voice_status_var,
+            bg=COLOR_PANEL, fg=COLOR_DANGER,
             font=("Hiragino Sans", 10, "bold")
         )
-        self._voice_status_label.pack(side="right", padx=12)
+        self._voice_status_label.pack(side="right", padx=16)
 
-        # 入力エリア
-        input_frame = tk.Frame(self, bg=COLOR_PANEL, pady=10)
+        # ══════════════════════════════════════════════════════
+        # 入力エリア（Cotomo風・クリーンデザイン）
+        # ══════════════════════════════════════════════════════
+        input_separator = tk.Frame(self, bg=COLOR_BORDER, height=1)
+        input_separator.pack(fill="x")
+
+        input_frame = tk.Frame(self, bg=COLOR_BG, pady=10)
         input_frame.pack(fill="x", side="bottom")
+
+        # 入力欄 + 送信ボタン行
+        entry_row = tk.Frame(input_frame, bg=COLOR_BG)
+        entry_row.pack(fill="x", padx=14)
 
         self.input_var = tk.StringVar()
         self.input_entry = tk.Entry(
-            input_frame, textvariable=self.input_var,
-            bg=COLOR_INPUT, fg=COLOR_TEXT, insertbackground=COLOR_ACCENT,
-            font=("Hiragino Sans", 13), relief="flat",
-            highlightbackground=COLOR_ACCENT2, highlightthickness=1
+            entry_row, textvariable=self.input_var,
+            bg=COLOR_PANEL, fg=COLOR_TEXT, insertbackground=COLOR_ACCENT,
+            font=("Hiragino Sans", 14), relief="flat",
+            highlightbackground=COLOR_BORDER, highlightthickness=1,
+            highlightcolor=COLOR_ACCENT,
         )
         self.input_entry.pack(side="left", fill="x", expand=True,
-                               padx=(12, 6), ipady=8)
+                               padx=(0, 8), ipady=10)
         self.input_entry.bind("<Return>", self._on_send)
 
         send_btn = tk.Button(
-            input_frame, text="送信 ➤",
-            bg=COLOR_ACCENT, fg=COLOR_BG,
-            font=("Hiragino Sans", 12, "bold"),
+            entry_row, text="➤",
+            bg=COLOR_ACCENT, fg="#FFFFFF",
+            font=("Arial", 16, "bold"),
             relief="flat", cursor="hand2",
             command=self._on_send,
-            padx=10, pady=6
+            padx=12, pady=8,
+            activebackground=COLOR_ACCENT2, activeforeground="#FFFFFF",
         )
-        send_btn.pack(side="right", padx=(0, 12))
+        send_btn.pack(side="right")
 
-        # マイクボタン（STT が有効な場合のみ表示）
+        # ── ツールボタン行（入力欄の下） ──
+        tool_row = tk.Frame(input_frame, bg=COLOR_BG)
+        tool_row.pack(fill="x", padx=14, pady=(8, 0))
+
+        # マイクボタン（大きく目立つ）
         self._mic_btn = tk.Button(
-            input_frame, text="🎤",
+            tool_row, text="🎤 録音",
             bg=COLOR_PANEL, fg=COLOR_TEXT,
-            font=("Hiragino Sans", 14),
+            font=("Hiragino Sans", 11),
             relief="flat", cursor="hand2",
             command=self._toggle_mic,
-            padx=6, pady=4
+            padx=12, pady=5,
+            highlightthickness=0,
+            activebackground=COLOR_GLOW,
         )
-        self._mic_btn.pack(side="right", padx=(0, 4))
+        self._mic_btn.pack(side="left", padx=(0, 6))
         self._mic_recording = False
-        self._mic_processing = False  # 変換処理中フラグ
+        self._mic_processing = False
 
-        # 連続リスニングボタン（Phase C）
+        # 連続リスニングボタン
         self._continuous_btn = tk.Button(
-            input_frame, text="♾",
+            tool_row, text="♾ 連続",
             bg=COLOR_PANEL, fg=COLOR_SUBTEXT,
-            font=("Hiragino Sans", 12),
+            font=("Hiragino Sans", 11),
             relief="flat", cursor="hand2",
             command=self._toggle_continuous_mode,
-            padx=4, pady=4
+            padx=12, pady=5,
+            highlightthickness=0,
+            activebackground=COLOR_GLOW,
         )
-        self._continuous_btn.pack(side="right", padx=(0, 2))
+        self._continuous_btn.pack(side="left", padx=(0, 6))
         self._continuous_mode = False
+
+        # 画像ボタン
+        self._img_btn = tk.Button(
+            tool_row, text="🖼 画像",
+            bg=COLOR_PANEL, fg=COLOR_SUBTEXT,
+            font=("Hiragino Sans", 11),
+            relief="flat", cursor="hand2",
+            command=self._on_image_select,
+            padx=12, pady=5,
+            highlightthickness=0,
+            activebackground=COLOR_GLOW,
+        )
+        self._img_btn.pack(side="left", padx=(0, 6))
 
         self._update_mic_button_visibility()
 
-        # キーボードショートカット: Ctrl+M でマイクトグル, Ctrl+Shift+M で連続モード
+        # キーボードショートカット
         self.bind("<Control-m>", lambda e: self._toggle_mic())
         self.input_entry.bind("<Control-m>", lambda e: self._toggle_mic())
         self.bind("<Control-Shift-M>", lambda e: self._toggle_continuous_mode())
@@ -389,6 +538,130 @@ class ChatWindow(tk.Toplevel):
 
         # TTS 読み上げ中インジケータの定期チェックを開始
         self._start_voice_status_poll()
+
+        # ── 新機能ウィジェット群 ────────────────────────────
+
+        # 感情バー（グラデーション）
+        self._emotion_bar = EmotionBar(self, bg=self._theme["panel"], height=4)
+        self._emotion_bar.pack(fill="x", before=input_separator)
+
+        # 入力中インジケータ
+        self._typing_indicator = TypingIndicator(
+            self.msg_frame, bg=self._theme["bg"], fg=self._theme["subtext"]
+        )
+
+        # フォントサイズ変更ショートカット
+        self.bind("<Control-plus>", lambda e: self._change_font_size(1))
+        self.bind("<Control-minus>", lambda e: self._change_font_size(-1))
+        self.bind("<Control-equal>", lambda e: self._change_font_size(1))
+        self.input_entry.bind("<Control-plus>", lambda e: self._change_font_size(1))
+        self.input_entry.bind("<Control-minus>", lambda e: self._change_font_size(-1))
+        self.input_entry.bind("<Control-equal>", lambda e: self._change_font_size(1))
+
+        # キーボードショートカット一括バインド
+        self._command_map = {
+            "chat": "チャット送信",
+            "mic": "マイク切替",
+            "emotion": "感情表示",
+            "palette": "コマンドパレット",
+            "zoom_in": "フォント拡大",
+            "zoom_out": "フォント縮小",
+            "image": "画像分析",
+            "shortcuts": "ショートカット一覧",
+        }
+
+        # コマンドパレット
+        self.bind("<Control-k>", lambda e: self._open_command_palette())
+        self.input_entry.bind("<Control-k>", lambda e: self._open_command_palette())
+
+        # 追加ショートカット
+        self.bind("<Control-e>", lambda e: self._show_emotion_detail())
+        self.input_entry.bind("<Control-e>", lambda e: self._show_emotion_detail())
+
+    def _now_timestamp(self) -> str:
+        """現在時刻を HH:MM 形式で返す。"""
+        return datetime.now().strftime("%H:%M")
+
+    def _change_font_size(self, delta: int) -> None:
+        """フォントサイズを変更して全メッセージに反映する (#36)。"""
+        self._font_size = max(8, min(24, self._font_size + delta))
+        for widget in _all_children(self.msg_frame):
+            if isinstance(widget, tk.Label):
+                try:
+                    current_font = widget.cget("font")
+                    if isinstance(current_font, str) and "bold" in current_font:
+                        widget.configure(font=(self._font_name, self._font_size, "bold"))
+                    elif isinstance(current_font, tuple) and len(current_font) > 2 and "bold" in current_font:
+                        widget.configure(font=(self._font_name, self._font_size, "bold"))
+                    else:
+                        widget.configure(font=(self._font_name, self._font_size))
+                except Exception:
+                    pass
+
+    def _on_image_select(self) -> None:
+        """ファイルダイアログで画像を選択して AI に分析させる (#34)。"""
+        filetypes = [
+            ("画像ファイル", "*.png *.jpg *.jpeg *.gif *.bmp *.webp"),
+            ("すべて", "*.*"),
+        ]
+        path = filedialog.askopenfilename(
+            title="画像を選択",
+            filetypes=filetypes,
+            parent=self,
+        )
+        if not path:
+            return
+        self._add_message(self._user_name, f"[画像: {Path(path).name}]", is_ai=False)
+
+        def _analyze() -> None:
+            response = "画像分析機能は準備中だよ"
+            try:
+                if self.ai_chan and hasattr(self.ai_chan, "analyze_image"):
+                    response = self.ai_chan.analyze_image(path)
+                elif self.ai_chan and hasattr(self.ai_chan, "image_analyzer"):
+                    response = self.ai_chan.image_analyzer.analyze(path)
+            except Exception as exc:
+                logger.warning("画像分析エラー: %s", exc)
+                response = f"画像を見れなかったよ...({exc})"
+
+            def _apply() -> None:
+                try:
+                    if self.winfo_exists():
+                        self._add_message("アイ", response, is_ai=True)
+                except tk.TclError:
+                    pass
+            try:
+                self.after(0, _apply)
+            except tk.TclError:
+                pass
+
+        threading.Thread(target=_analyze, daemon=True).start()
+
+    def _open_command_palette(self) -> None:
+        """コマンドパレットを開く (#39)。"""
+        CommandPalette(self, self._command_map, self._run_command)
+
+    def _run_command(self, cmd_key: str) -> None:
+        """コマンドパレットから選択されたコマンドを実行する。"""
+        actions = {
+            "chat": lambda: self.input_entry.focus_set(),
+            "mic": lambda: self._toggle_mic(),
+            "emotion": lambda: self._show_emotion_detail(),
+            "palette": lambda: self._open_command_palette(),
+            "zoom_in": lambda: self._change_font_size(1),
+            "zoom_out": lambda: self._change_font_size(-1),
+            "image": lambda: self._on_image_select(),
+            "shortcuts": lambda: KeyboardShortcuts.show_help(self),
+        }
+        action = actions.get(cmd_key)
+        if action:
+            action()
+
+    def _show_emotion_detail(self) -> None:
+        """感情の詳細を表示する。"""
+        if self.ai_chan and hasattr(self.ai_chan, "emotion"):
+            text = self.ai_chan.emotion.get_display_string()
+            self._add_message("アイ", f"今の気持ち: {text}", is_ai=True)
 
     def _focus_input(self):
         """入力欄にフォーカスを確実にセットする（macOS 対策）"""
@@ -400,16 +673,32 @@ class ChatWindow(tk.Toplevel):
             pass
 
     def _update_mic_button_visibility(self):
-        """STT が有効な場合のみマイクボタン・連続モードボタンを表示する"""
+        """STT が有効な場合のみマイクボタン・連続モードボタンを表示する。
+        設定ファイルで enabled=true なら常に表示（whisperロード失敗時も入力可能にする）。
+        """
         stt_enabled = False
         if self.ai_chan and hasattr(self.ai_chan, "settings"):
             stt_enabled = self.ai_chan.settings.get("stt", {}).get("enabled", False)
-        if stt_enabled:
-            self._mic_btn.pack(side="right", padx=(0, 4))
-            self._continuous_btn.pack(side="right", padx=(0, 2))
+
+        # TTS 設定も確認: TTS が有効なら音声操作ボタンも表示する
+        tts_enabled = False
+        if self.ai_chan and hasattr(self.ai_chan, "settings"):
+            tts_enabled = self.ai_chan.settings.get("tts", {}).get("enabled", False)
+
+        show_voice_buttons = stt_enabled or tts_enabled
+
+        if show_voice_buttons:
+            try:
+                self._mic_btn.pack(side="right", padx=(0, 4))
+                self._continuous_btn.pack(side="right", padx=(0, 2))
+            except tk.TclError:
+                pass  # ウィジェットが既に破棄されている場合
         else:
-            self._mic_btn.pack_forget()
-            self._continuous_btn.pack_forget()
+            try:
+                self._mic_btn.pack_forget()
+                self._continuous_btn.pack_forget()
+            except tk.TclError:
+                pass
 
     def _toggle_mic(self):
         """マイク録音を開始/停止して、変換テキストを自動送信する"""
@@ -428,36 +717,71 @@ class ChatWindow(tk.Toplevel):
         if not self._mic_recording:
             # 録音開始
             self._mic_recording = True
-            self._mic_btn.configure(bg="#E84040", text="■")
+            self._mic_btn.configure(bg=COLOR_DANGER, fg="#FFFFFF", text="■ 停止")
             self._voice_status_var.set("● 録音中...")
-            self._voice_status_label.configure(fg="#E84040")
+            self._voice_status_label.configure(fg=COLOR_DANGER)
             from core.stt import STTEngine
             model_size = self.ai_chan.settings.get("stt", {}).get("model_size", "small")
             if not hasattr(self, "_stt_engine"):
                 self._stt_engine = STTEngine(model_size=model_size)
                 self._stt_engine.load_model_async()
+                # 話者識別マネージャを接続
+                if self.ai_chan and hasattr(self.ai_chan, "voice_id"):
+                    vid = self.ai_chan.voice_id
+                    if vid and len(vid.profiles) > 0:
+                        self._stt_engine.set_voice_id(vid)
             self._stt_engine.start_recording()
         else:
             # 録音停止・変換・自動送信
             self._mic_recording = False
             self._mic_processing = True
-            self._mic_btn.configure(bg=COLOR_ACCENT2, text="⏳")
+            self._mic_btn.configure(bg=COLOR_GLOW, fg=COLOR_ACCENT, text="⏳ 変換")
             self._voice_status_var.set("変換中...")
-            self._voice_status_label.configure(fg=COLOR_ACCENT2)
+            self._voice_status_label.configure(fg=COLOR_ACCENT)
 
             def _transcribe_and_send():
-                text = ""
-                if hasattr(self, "_stt_engine"):
-                    text = self._stt_engine.stop_recording_and_transcribe()
+                utterances = []
+                timed_out = False
+                try:
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                        if hasattr(self, "_stt_engine"):
+                            if self._stt_engine.multi_speaker_enabled:
+                                future = pool.submit(
+                                    self._stt_engine.stop_recording_and_transcribe_multi
+                                )
+                                utterances = future.result(timeout=30)
+                            else:
+                                future = pool.submit(
+                                    self._stt_engine.stop_recording_and_transcribe
+                                )
+                                text = future.result(timeout=30)
+                                if text:
+                                    from core.stt import SpeakerUtterance
+                                    utterances = [SpeakerUtterance("", text, 0.0)]
+                except concurrent.futures.TimeoutError:
+                    timed_out = True
+                    print("[STT] 変換タイムアウト(30秒)", flush=True)
+                except Exception as e:
+                    print(f"[STT] 変換エラー: {e}", flush=True)
 
                 def _on_result():
                     self._mic_processing = False
-                    self._mic_btn.configure(bg=COLOR_PANEL, text="🎤")
+                    self._mic_btn.configure(bg=COLOR_PANEL, fg=COLOR_TEXT, text="🎤 録音")
                     self._voice_status_var.set("")
-                    if text:
-                        # テキストを入力欄にセットしてから送信
-                        self.input_var.set(text)
-                        self._on_send()
+                    if timed_out:
+                        self._voice_status_var.set("変換に時間がかかりすぎました")
+                        self._voice_status_label.configure(fg=COLOR_DANGER)
+                        self.after(3000, lambda: self._voice_status_var.set(""))
+                    elif utterances:
+                        for utt in utterances:
+                            labeled = (
+                                f"[{utt.speaker}] {utt.text}"
+                                if utt.speaker
+                                else utt.text
+                            )
+                            self.input_var.set(labeled)
+                            self._on_send()
                     else:
                         self._voice_status_var.set("音声が聞き取れませんでした")
                         self._voice_status_label.configure(fg=COLOR_SUBTEXT)
@@ -494,6 +818,11 @@ class ChatWindow(tk.Toplevel):
         if not hasattr(self, "_stt_engine"):
             self._stt_engine = STTEngine(model_size=model_size)
             self._stt_engine.load_model_async()
+            # 話者識別マネージャを接続
+            if self.ai_chan and hasattr(self.ai_chan, "voice_id"):
+                vid = self.ai_chan.voice_id
+                if vid and len(vid.profiles) > 0:
+                    self._stt_engine.set_voice_id(vid)
 
         if not self._stt_engine.is_ready():
             self._voice_status_var.set("モデル読み込み中...")
@@ -514,7 +843,7 @@ class ChatWindow(tk.Toplevel):
             self._activate_continuous_listening()
         elif self._stt_engine.get_status().startswith("error"):
             self._voice_status_var.set("モデル読み込みエラー")
-            self._voice_status_label.configure(fg="#E84040")
+            self._voice_status_label.configure(fg=COLOR_DANGER)
             self.after(2000, lambda: self._voice_status_var.set(""))
         else:
             # まだ読み込み中 — 再試行
@@ -526,7 +855,9 @@ class ChatWindow(tk.Toplevel):
             return
 
         def _on_continuous_text(text: str):
-            """連続リスニングで認識されたテキストを UI スレッドで処理"""
+            """連続リスニングで認識されたテキストを UI スレッドで処理。
+            Phase D: "[話者名] テキスト" 形式もそのまま処理する。
+            """
             def _apply():
                 try:
                     if not self.winfo_exists():
@@ -534,6 +865,19 @@ class ChatWindow(tk.Toplevel):
                     if text.strip():
                         self.input_var.set(text)
                         self._on_send()
+                        # 複数話者モード時はステータスに話者名表示
+                        import re
+                        m = re.match(r'^\[([^\]]+)\]', text)
+                        if m:
+                            self._voice_status_var.set(
+                                f"🎤 {m.group(1)} → 連続リスニング中"
+                            )
+                            self.after(
+                                2000,
+                                lambda: self._voice_status_var.set(
+                                    "連続リスニング中"
+                                ),
+                            )
                 except tk.TclError:
                     pass
             try:
@@ -548,15 +892,15 @@ class ChatWindow(tk.Toplevel):
         )
         if ok:
             self._continuous_mode = True
-            self._continuous_btn.configure(bg="#4CAF50", fg=COLOR_TEXT)
+            self._continuous_btn.configure(bg=COLOR_SUCCESS, fg="#FFFFFF")
             self._mic_btn.configure(state="disabled")
             self._voice_status_var.set("連続リスニング中")
-            self._voice_status_label.configure(fg="#4CAF50")
+            self._voice_status_label.configure(fg=COLOR_SUCCESS)
             # TTS 読み上げ中の自動一時停止を開始
             self._start_continuous_tts_monitor()
         else:
             self._voice_status_var.set("連続リスニング開始失敗")
-            self._voice_status_label.configure(fg="#E84040")
+            self._voice_status_label.configure(fg=COLOR_DANGER)
             self.after(2000, lambda: self._voice_status_var.set(""))
 
     def _stop_continuous_mode(self):
@@ -589,13 +933,13 @@ class ChatWindow(tk.Toplevel):
             if tts.is_speaking():
                 if not stt.is_continuous_paused:
                     stt.pause_continuous_listening()
-                    self._voice_status_var.set("読み上げ中（リスニング一時停止）")
-                    self._voice_status_label.configure(fg=COLOR_ACCENT)
+                    self._voice_status_var.set("🔊 読み上げ中（一時停止）")
+                    self._voice_status_label.configure(fg=COLOR_ACCENT2)
             else:
                 if stt.is_continuous_paused:
                     stt.resume_continuous_listening()
                     self._voice_status_var.set("連続リスニング中")
-                    self._voice_status_label.configure(fg="#4CAF50")
+                    self._voice_status_label.configure(fg=COLOR_SUCCESS)
 
         self.after(200, self._start_continuous_tts_monitor)
 
@@ -617,7 +961,7 @@ class ChatWindow(tk.Toplevel):
             tts = self._get_tts_engine()
             if tts is not None and tts.is_speaking():
                 self._voice_status_var.set("🔊 読み上げ中")
-                self._voice_status_label.configure(fg=COLOR_ACCENT)
+                self._voice_status_label.configure(fg=COLOR_ACCENT2)
             else:
                 # 他のステータス表示がなければクリア
                 current = self._voice_status_var.get()
@@ -654,8 +998,8 @@ class ChatWindow(tk.Toplevel):
                         pass
 
     def _add_message(self, sender: str, text: str, is_ai: bool = True):
-        row = tk.Frame(self.msg_frame, bg=COLOR_BG, pady=4)
-        row.pack(fill="x", padx=8)
+        row = tk.Frame(self.msg_frame, bg=COLOR_BG, pady=5)
+        row.pack(fill="x", padx=16)
 
         # アイコン（画像優先、なければ絵文字）
         icon_photo = self._ai_icon_photo if is_ai else self._user_icon_photo
@@ -664,38 +1008,77 @@ class ChatWindow(tk.Toplevel):
             icon.image = icon_photo  # GC防止
         else:
             icon_text = self._ai_icon if is_ai else self._user_icon
-            icon = tk.Label(row, text=icon_text, bg=COLOR_BG, font=("Arial", 16))
+            icon = tk.Label(row, text=icon_text, bg=COLOR_BG, font=("Arial", 18))
 
-        # 吹き出し
+        # ── バブルデザイン（クリーン・ライト） ──
         bubble_color = COLOR_BUBBLE if is_ai else COLOR_USER_BUB
         name_color   = COLOR_ACCENT if is_ai else COLOR_ACCENT2
-        bubble = tk.Frame(row, bg=bubble_color, padx=12, pady=8)
 
-        name_label = tk.Label(
-            bubble, text=sender,
+        bubble = tk.Frame(row, bg=bubble_color, padx=16, pady=12)
+
+        # 名前 + タイムスタンプ行
+        ts = self._now_timestamp()
+        header_frame = tk.Frame(bubble, bg=bubble_color)
+        header_frame.pack(fill="x", anchor="w")
+
+        tk.Label(
+            header_frame, text=sender,
             bg=bubble_color, fg=name_color,
-            font=("Hiragino Sans", 10, "bold")
-        )
-        name_label.pack(anchor="w")
+            font=(self._font_name, max(9, self._font_size - 1), "bold")
+        ).pack(side="left")
 
-        wrap = max(200, self.winfo_width() - 120) if self.winfo_width() > 1 else 300
+        tk.Label(
+            header_frame, text=ts,
+            bg=bubble_color, fg=COLOR_SUBTEXT,
+            font=(self._font_name, max(8, self._font_size - 3))
+        ).pack(side="left", padx=(8, 0))
+
+        # メッセージ本文
+        wrap = max(200, self.winfo_width() - 130) if self.winfo_width() > 1 else 300
         msg_label = tk.Label(
             bubble, text=text,
             bg=bubble_color, fg=COLOR_TEXT,
-            font=("Hiragino Sans", 12),
+            font=(self._font_name, self._font_size),
             wraplength=wrap, justify="left"
         )
-        msg_label.pack(anchor="w")
+        msg_label.pack(anchor="w", pady=(4, 0))
+
+        # フィードバックボタン（AI 応答のみ）
+        if is_ai and text not in ("んー…✨",):
+            fb = FeedbackButtons(
+                bubble,
+                callback=self._on_feedback,
+                bg=bubble_color,
+            )
+            fb.pack(anchor="w", pady=(6, 0))
 
         if is_ai:
-            icon.pack(side="left", anchor="n", padx=(0, 6))
+            icon.pack(side="left", anchor="n", padx=(0, 10))
             bubble.pack(side="left", anchor="w")
         else:
             bubble.pack(side="right", anchor="e")
-            icon.pack(side="right", anchor="n", padx=(6, 0))
+            icon.pack(side="right", anchor="n", padx=(10, 0))
+
+        # 感情バー更新
+        if is_ai and self.ai_chan and hasattr(self.ai_chan, "emotion"):
+            try:
+                emotions = self.ai_chan.emotion.state.to_dict()
+                self._emotion_bar.update_emotions(emotions)
+            except Exception:
+                pass
 
         # 最下部へスクロール
         self.after(50, lambda: self.chat_canvas.yview_moveto(1.0))
+
+    def _on_feedback(self, positive: bool) -> None:
+        """フィードバックボタンのコールバック (#54)。"""
+        label = "good" if positive else "bad"
+        logger.info("ユーザーフィードバック: %s", label)
+        if self.ai_chan and hasattr(self.ai_chan, "correction_learning"):
+            try:
+                self.ai_chan.correction_learning.record_feedback(positive)
+            except Exception as exc:
+                logger.warning("フィードバック記録エラー: %s", exc)
 
     def _safe_add_message(self, name: str, text: str, is_ai: bool):
         """winfo_exists 検証付きの _add_message ラッパー"""
@@ -717,6 +1100,10 @@ class ChatWindow(tk.Toplevel):
         # アイドルタイマーリセット
         if self._pet is not None:
             self._pet._last_interaction = time.time()
+
+        # #32 入力中インジケータを表示
+        self._typing_indicator.pack(fill="x", padx=8, pady=2)
+        self._typing_indicator.start()
 
         # AI応答を別スレッドで生成（UIフリーズ防止）
         # プレースホルダーを追加し、その参照を覚えて後で安全に削除
@@ -762,13 +1149,23 @@ class ChatWindow(tk.Toplevel):
                 try:
                     if not self.winfo_exists():
                         return
+                    # #32 入力中インジケータ停止
+                    self._typing_indicator.stop()
+                    self._typing_indicator.pack_forget()
                     # 特定のプレースホルダーだけを削除（最後の子ではなく）
                     if placeholder is not None:
                         try:
                             placeholder.destroy()
                         except tk.TclError:
                             pass
-                    self._add_message("アイ", response, is_ai=True)
+                    # モードインジケータを付与（familyモード以外）
+                    display_response = response
+                    _mode_icons = {"family": "\U0001f497", "agent": "\U0001f4bc", "learning": "\U0001f4da", "creative": "\U0001f3a8"}
+                    _mm = getattr(self.ai_chan, "mode_manager", None)
+                    if _mm and _mm.current_mode != "family":
+                        _icon = _mode_icons.get(_mm.current_mode, "")
+                        display_response = f"{_icon} {response}"
+                    self._add_message("アイ", display_response, is_ai=True)
                     self.emotion_var.set(emotion_str)
                 except tk.TclError:
                     pass
@@ -919,6 +1316,48 @@ class DesktopPet:
             print(f"[Pet] 画像読み込みエラー: {e}", flush=True)
             traceback.print_exc()
 
+        # #26 表情差分画像のプリロード
+        self._expression_images: dict[str, object] = {}
+        self._load_expression_images()
+
+    def _load_expression_images(self) -> None:
+        """表情差分画像を読み込む (#26)。ファイルがなくても安全にスキップする。"""
+        if not PILLOW_AVAILABLE:
+            return
+        emotions = ("happy", "sad", "excited", "calm", "anxious", "tired", "angry")
+        for emotion in emotions:
+            for template in EXPRESSION_CANDIDATES:
+                path = Path(str(template).replace("{emotion}", emotion))
+                if path.exists():
+                    try:
+                        img = Image.open(path).convert("RGBA")
+                        target_size = (PET_WIDTH - 10, PET_HEIGHT - 20)
+                        img.thumbnail(target_size, Image.LANCZOS)
+                        r = int(WIN_BG[1:3], 16)
+                        g = int(WIN_BG[3:5], 16)
+                        b = int(WIN_BG[5:7], 16)
+                        bg_img = Image.new("RGBA", img.size, (r, g, b, 255))
+                        composite = Image.alpha_composite(bg_img, img)
+                        self._expression_images[emotion] = ImageTk.PhotoImage(
+                            composite.convert("RGB")
+                        )
+                        logger.info("表情画像読み込み: %s (%s)", emotion, path)
+                    except Exception as exc:
+                        logger.warning("表情画像読み込みエラー %s: %s", emotion, exc)
+                    break
+
+    def _update_expression(self, emotion: str) -> None:
+        """表情差分画像があればスプライトを切り替える (#26)。"""
+        if not self.sprite_id:
+            return
+        photo = self._expression_images.get(emotion)
+        if photo:
+            try:
+                self.canvas.itemconfig(self.sprite_id, image=photo)
+                self._current_photo = photo
+            except tk.TclError:
+                pass
+
     def _build_ui(self):
         self.canvas = tk.Canvas(
             self.root,
@@ -936,11 +1375,11 @@ class DesktopPet:
         else:
             # 画像がない場合はプレースホルダー
             self.canvas.create_oval(
-                60, 40, 160, 200, fill="#E8A5C8", outline="#B57BDC", width=3
+                60, 40, 160, 200, fill=COLOR_PANEL, outline=COLOR_ACCENT, width=2
             )
             self.canvas.create_text(
                 PET_WIDTH // 2, 130,
-                text="💗\nアイ", fill="#2D1B3D",
+                text="💎\nアイ", fill=COLOR_ACCENT,
                 font=("Hiragino Sans", 14, "bold"), justify="center"
             )
             self.sprite_id = None
@@ -949,44 +1388,54 @@ class DesktopPet:
         self._last_click_time = 0.0
         self._press_x = 0
         self._press_y = 0
+        self._long_press_id = None  # 長押し判定用 after ID
 
         self.canvas.bind("<ButtonPress-1>",   self._on_press)
         self.canvas.bind("<B1-Motion>",       self._drag_motion)
         self.canvas.bind("<ButtonRelease-1>", self._on_release)
 
-        # 右クリック: macOS では Button-2 が右クリック、Button-3 はミドル
-        # overrideredirect 環境では Release で拾う方が確実
-        # 500ms デバウンスで Press/Release 二重発火を防止
+        # 右クリック: macOS + floating ウィンドウでは Button-2/3 が
+        # 個別シーケンスで canvas に到達しないことがある。
+        # 汎用 <ButtonPress> で全ボタンを受け取り、num で判別する方式に変更。
+        # Press/Release 両方 + 500ms デバウンスで二重発火を防止。
         self._ctx_last_time = 0.0
         if IS_MAC:
-            # macOS: Button-2 = 右クリック, Control+Button-1 = 右クリック代替
-            ctx_seqs = ("<ButtonPress-2>", "<ButtonRelease-2>",
-                        "<Control-ButtonPress-1>", "<Control-ButtonRelease-1>")
+            # 汎用 ButtonPress/Release — _on_any_button 内で num を判別
+            for seq in ("<ButtonPress>", "<ButtonRelease>"):
+                self.canvas.bind(seq, self._on_any_button, add="+")
+                self.root.bind(seq, self._on_any_button, add="+")
+            # Control+Click は別途明示バインド（num=1 なので汎用では拾えない）
+            for seq in ("<Control-ButtonPress-1>", "<Control-ButtonRelease-1>"):
+                self.canvas.bind(seq, self._show_context_menu)
+                self.root.bind(seq, self._show_context_menu)
         else:
-            # Windows/Linux: Button-3 = 右クリック
             ctx_seqs = ("<ButtonPress-3>", "<ButtonRelease-3>")
-        for seq in ctx_seqs:
-            self.canvas.bind(seq, self._show_context_menu)
+            for seq in ctx_seqs:
+                self.canvas.bind(seq, self._show_context_menu)
+                self.root.bind(seq, self._show_context_menu)
 
-        # コンテキストメニュー
+        # コンテキストメニュー（クリーンスタイル）
         self.context_menu = tk.Menu(self.root, tearoff=0,
-                                     bg=COLOR_PANEL, fg=COLOR_TEXT,
+                                     bg=COLOR_BG, fg=COLOR_TEXT,
                                      activebackground=COLOR_ACCENT,
-                                     activeforeground=COLOR_BG)
-        self.context_menu.add_command(label="チャットを開く",    command=self._open_chat)
-        self.context_menu.add_command(label="アイの気分",  command=self._show_emotion)
+                                     activeforeground="#FFFFFF",
+                                     font=("Hiragino Sans", 12),
+                                     borderwidth=1,
+                                     relief="flat")
+        self.context_menu.add_command(label="  💬  チャットを開く",    command=self._open_chat)
+        self.context_menu.add_command(label="  😊  アイの気分",  command=self._show_emotion)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="成長記録を見る",    command=self._open_graph)
-        self.context_menu.add_command(label="議事録アプリ",      command=self._open_minutes)
-        self.context_menu.add_command(label="スクリーンショット", command=self._on_screenshot)
+        self.context_menu.add_command(label="  📊  成長記録を見る",    command=self._open_graph)
+        self.context_menu.add_command(label="  📝  議事録アプリ",      command=self._open_minutes)
+        self.context_menu.add_command(label="  📸  スクリーンショット", command=self._on_screenshot)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="会話ログを保存",    command=self._open_export)
-        self.context_menu.add_command(label="設定",              command=self._open_settings)
+        self.context_menu.add_command(label="  💾  会話ログを保存",    command=self._open_export)
+        self.context_menu.add_command(label="  ⚙️  設定",              command=self._open_settings)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="終了",              command=self.root.quit)
+        self.context_menu.add_command(label="  ✕   終了",              command=self.root.quit)
 
     def _on_press(self, event):
-        """マウス押下：ドラッグ起点を記録。アニメーションを一時停止。"""
+        """マウス押下：ドラッグ起点を記録。長押し (600ms) で右クリックメニュー。"""
         self._press_x = event.x_root
         self._press_y = event.y_root
         # アニメの geometry() がドラッグと競合しないよう即座に停止
@@ -995,6 +1444,18 @@ class DesktopPet:
         # winfo ではなく _base_x/_base_y を信頼（macOS floating で winfo が不正確なため）
         self._win_start_x = self._base_x
         self._win_start_y = self._base_y
+        # 長押し判定: 400ms 動かなければ右クリックメニューを表示
+        if self._long_press_id is not None:
+            self.root.after_cancel(self._long_press_id)
+        self._long_press_id = self.root.after(
+            400, lambda: self._on_long_press(event)
+        )
+
+    def _on_long_press(self, event):
+        """長押し判定コールバック。ドラッグ開始していなければメニューを表示。"""
+        self._long_press_id = None
+        if not self._dragging:
+            self._show_context_menu(event)
 
     def _drag_motion(self, event):
         """5px以上動いたらドラッグと判定（delta方式）"""
@@ -1002,6 +1463,10 @@ class DesktopPet:
         dy = event.y_root - self._press_y
         if abs(dx) > 5 or abs(dy) > 5:
             self._dragging = True
+            # ドラッグ開始 → 長押し判定をキャンセル
+            if self._long_press_id is not None:
+                self.root.after_cancel(self._long_press_id)
+                self._long_press_id = None
         if self._dragging:
             x = self._win_start_x + dx
             y = self._win_start_y + dy
@@ -1009,6 +1474,10 @@ class DesktopPet:
 
     def _on_release(self, event):
         """マウス離し：ドラッグ完了 or クリック判定"""
+        # 長押し判定をキャンセル
+        if self._long_press_id is not None:
+            self.root.after_cancel(self._long_press_id)
+            self._long_press_id = None
         self._drag_ready = False
         if self._dragging:
             # ドラッグ後の位置を delta から計算（winfo_x/y は macOS で不正確なため使わない）
@@ -1031,17 +1500,16 @@ class DesktopPet:
             self.chat_window.lift()
             self.chat_window.after(50, self.chat_window._focus_input)
 
+    def _on_any_button(self, event):
+        """macOS 汎用ボタンハンドラ: num=2 or 3 なら右クリックメニューを表示。"""
+        if getattr(event, "num", 1) in (2, 3):
+            self._show_context_menu(event)
+
     def _show_context_menu(self, event):
         """
-        macOS + overrideredirect 対応の右クリックメニュー表示。
+        macOS + overrideredirect / floating 対応の右クリックメニュー表示。
         Press / Release が連続発火するため、500ms のデバウンスで抑止する。
-        Release イベントのみで発火させ、Press は無視する。
         """
-        # Release イベントのみ処理（Press で出すと Release で二重発火する）
-        evt_type = str(event.type)
-        if "Press" in evt_type or evt_type == "4":
-            return
-
         now = time.time()
         last = getattr(self, "_ctx_last_time", 0.0)
         if now - last < 0.5:
@@ -1056,6 +1524,7 @@ class DesktopPet:
 
         def _popup():
             try:
+                self.root.update_idletasks()
                 self.root.focus_force()
                 self.root.lift()
                 self.context_menu.tk_popup(x, y, 0)
@@ -1067,8 +1536,8 @@ class DesktopPet:
                 except Exception:
                     pass
 
-        # 50ms遅延でmacOSのフォーカス遷移を待つ（10msでは不足な場合がある）
-        self.root.after(50, _popup)
+        # 80ms遅延でmacOSのフォーカス遷移を待つ（50msでは不足な場合がある）
+        self.root.after(80, _popup)
 
     def _show_emotion(self):
         if self.ai_chan:
@@ -1083,6 +1552,12 @@ class DesktopPet:
                 self.bubble.destroy()
             except Exception:
                 pass
+        # モードインジケータを付与（familyモード以外）
+        _mode_icons = {"family": "\U0001f497", "agent": "\U0001f4bc", "learning": "\U0001f4da", "creative": "\U0001f3a8"}
+        _mm = getattr(self.ai_chan, "mode_manager", None) if self.ai_chan else None
+        if _mm and _mm.current_mode != "family":
+            _icon = _mode_icons.get(_mm.current_mode, "")
+            text = f"{_icon} {text}"
         x = self.root.winfo_x() + PET_WIDTH // 2
         y = self.root.winfo_y() + 30
         self.bubble = SpeechBubble(self.root, text, x, y)
@@ -1091,7 +1566,8 @@ class DesktopPet:
         if self.ai_chan:
             def _gen():
                 try:
-                    resp = self.ai_chan.chat("起動した。一言だけ自然に話しかけて。")
+                    prompt = self.ai_chan.build_greeting_prompt("startup")
+                    resp = self.ai_chan.chat(prompt)
                 except Exception:
                     resp = "起きたよ"
                 self.root.after(0, lambda: self._show_bubble(resp))
@@ -1301,27 +1777,37 @@ class DesktopPet:
         by = self._base_y
 
         if self.sprite_id and PILLOW_AVAILABLE and hasattr(self, "_display_base"):
-            # Sprint 3.0-D: 感情に応じて色調を変化させる（10フレームに1回更新）
+            # Sprint 3.0-D: 感情に応じて表情を変化させる（10フレームに1回更新）
             display = self._display_base
             if self._anim_tick % 10 == 0:
                 try:
-                    if (self.ai_chan and hasattr(self.ai_chan, "expression")
-                            and self.ai_chan.expression
-                            and hasattr(self, "_base_image")):
+                    if self.ai_chan and hasattr(self.ai_chan, "emotion"):
                         emotion_dict = self.ai_chan.emotion.state.to_dict()
-                        modified = self.ai_chan.expression.apply_emotion(
-                            self._base_image, emotion_dict
-                        )
-                        # RGBA → RGB（背景色と合成）
-                        r = int(WIN_BG[1:3], 16)
-                        g = int(WIN_BG[3:5], 16)
-                        b = int(WIN_BG[5:7], 16)
-                        bg = Image.new("RGBA", modified.size, (r, g, b, 255))
-                        composite = Image.alpha_composite(bg, modified.convert("RGBA"))
-                        self._emotion_display = composite.convert("RGB")
+                        # 感情を分類
+                        from core.expression_engine import classify_emotion
+                        emotion_label = classify_emotion(emotion_dict)
+
+                        # 優先1: 表情差分画像があればそちらを使う
+                        expr_photo = self._expression_images.get(emotion_label)
+                        if expr_photo:
+                            self._update_expression(emotion_label)
+                            self._emotion_display = None  # 差分画像使用中はスキップ
+                        # 優先2: ExpressionEngine で色調変化
+                        elif (hasattr(self.ai_chan, "expression")
+                                and self.ai_chan.expression
+                                and hasattr(self, "_base_image")):
+                            modified = self.ai_chan.expression.apply_emotion(
+                                self._base_image, emotion_dict
+                            )
+                            r = int(WIN_BG[1:3], 16)
+                            g = int(WIN_BG[3:5], 16)
+                            b = int(WIN_BG[5:7], 16)
+                            bg = Image.new("RGBA", modified.size, (r, g, b, 255))
+                            composite = Image.alpha_composite(bg, modified.convert("RGBA"))
+                            self._emotion_display = composite.convert("RGB")
                 except Exception:
                     pass
-            if hasattr(self, "_emotion_display"):
+            if getattr(self, "_emotion_display", None) is not None:
                 display = self._emotion_display
                 self._breath_dirty = True  # 感情変化時にフレーム再構築
 
@@ -1346,6 +1832,28 @@ class DesktopPet:
                 return
 
         self._anim_after_id = self.root.after(50, self._idle_anim)  # 20fps
+
+    def update_expression_from_entropy(self, text: str) -> str:
+        """
+        テキストのエントロピーからデスクトップペットの表情を更新。
+        高エントロピー(複雑な思考) → 考え込んだ表情
+        低エントロピー(シンプルな感情) → はっきりした表情
+        最適ゾーン(0.6-0.8) → 活発で生き生きした表情
+        """
+        try:
+            from core.akashic.entropy_engine import EntropyEngine
+            profile = EntropyEngine().profile(text)
+            entropy = profile.domain_diversity * 0.6 + profile.domain_diversity * 0.4
+            if 0.6 <= entropy <= 0.8:
+                return "active"      # カオスの縁: 最も生き生き
+            elif entropy > 0.8:
+                return "thinking"    # 高エントロピー: 考え込み
+            elif entropy > 0.4:
+                return "normal"      # 中程度
+            else:
+                return "sleepy"      # 低エントロピー: 眠そう
+        except Exception:
+            return "normal"
 
     def run(self):
         self.root.mainloop()
@@ -1435,6 +1943,16 @@ def run_desktop_pet(base_dir: str | Path = "."):
                 except Exception as e:
                     print(f"[Pet] _idle_minutes 設定失敗: {e}", flush=True)
                     pet._idle_minutes = 30
+                # 既に開いている ChatWindow があれば ai_chan を更新し、
+                # マイクボタンを再表示する
+                try:
+                    cw = pet.chat_window
+                    if cw is not None and cw.winfo_exists():
+                        cw.ai_chan = ai
+                        cw._update_mic_button_visibility()
+                        print("[Pet] ✓ ChatWindow に ai_chan を反映", flush=True)
+                except Exception as e:
+                    print(f"[Pet] ChatWindow 更新失敗: {e}", flush=True)
                 try:
                     pet._show_bubble("準備できたよ！何でも話しかけてね💕")
                 except Exception as e:

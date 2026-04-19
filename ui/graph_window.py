@@ -7,25 +7,26 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from pathlib import Path
 
-COLOR_BG      = "#2D1B3D"
-COLOR_PANEL   = "#3D2255"
-COLOR_INPUT   = "#1A0F2E"
-COLOR_ACCENT  = "#E8A5C8"
-COLOR_ACCENT2 = "#B57BDC"
-COLOR_TEXT    = "#F5E6FF"
-COLOR_SUBTEXT = "#C9A8E8"
+COLOR_BG      = "#FFFFFF"
+COLOR_PANEL   = "#F5F3F8"
+COLOR_INPUT   = "#FFFFFF"
+COLOR_ACCENT  = "#6C5CE7"
+COLOR_ACCENT2 = "#A29BFE"
+COLOR_TEXT    = "#2D2D3F"
+COLOR_SUBTEXT = "#8E8EA0"
+COLOR_BORDER  = "#E5E5EA"
 
 LABEL_FONT = ("Hiragino Sans", 11)
 SMALL_FONT = ("Hiragino Sans", 9)
 HEADER_FONT = ("Hiragino Sans", 12, "bold")
 
-# 感情ラインカラー
+# 感情ラインカラー（白背景で映えるトーン）
 EMOTION_COLORS = {
-    "happiness": "#F9D342",
-    "affection":  "#E8A5C8",
-    "curiosity":  "#7FD4F0",
-    "energy":     "#98E88A",
-    "anxiety":    "#FF8080",
+    "happiness": "#6C5CE7",
+    "affection":  "#E84393",
+    "curiosity":  "#0984E3",
+    "energy":     "#00B894",
+    "anxiety":    "#E17055",
 }
 EMOTION_LABELS = {
     "happiness": "幸福",
@@ -148,7 +149,7 @@ class GraphWindow(tk.Toplevel):
         for ratio in [0.0, 0.25, 0.5, 0.75, 1.0]:
             y = pad_t + graph_h * (1 - ratio)
             canvas.create_line(pad_l, y, w - pad_r, y,
-                               fill="#4A2870", width=1)
+                               fill=COLOR_BORDER, width=1)
             canvas.create_text(pad_l - 4, y, text=f"{ratio:.0%}",
                                anchor="e", fill=COLOR_SUBTEXT,
                                font=("Helvetica", 8))

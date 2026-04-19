@@ -386,3 +386,110 @@ class KnowledgeGraph:
             self._graph_path.write_text(
                 json.dumps(data, ensure_ascii=False, indent=2), "utf-8"
             )
+
+    # ── #78: 関連トピック提案 ──────────────────────────────
+
+    def _build_adjacency(self) -> dict[str, list[str]]:
+        """関係リストからエンティティの隣接リストを構築する。"""
+        adj: dict[str, list[str]] = defaultdict(list)
+        for rel in self._relations:
+            if rel.target not in adj[rel.source]:
+                adj[rel.source].append(rel.target)
+            if rel.source not in adj[rel.target]:
+                adj[rel.target].append(rel.source)
+        return dict(adj)
+
+    def get_related_topics(
+        self,
+        current_topic: str,
+        limit: int = 3,
+    ) -> list[str]:
+        """グラフの隣接関係から関連トピックを返す。
+
+        Args:
+            current_topic: 起点となるトピック / エンティティ名。
+            limit: 返す最大件数。
+
+        Returns:
+            関連トピック名のリスト（mention_count 降順）。
+        """
+        # まず current_topic にマッチするエンティティを探す
+        start_entities: list[str] = self._find_matching_entities(current_topic)
+        if not start_entities:
+            return []
+
+        adj: dict[str, list[str]] = self._build_adjacency()
+
+        # 1ホップ隣接をすべて集める
+        candidates: set[str] = set()
+        for start in start_entities:
+            for neighbor in adj.get(start, []):
+                if neighbor not in start_entities:
+                    candidates.add(neighbor)
+
+        # mention_count で重み付けソート
+        scored: list[tuple[str, int]] = []
+        for name in candidates:
+            entity: Entity | None = self._entities.get(name)
+            count: int = entity.mention_count if entity else 0
+            scored.append((name, count))
+
+        scored.sort(key=lambda x: -x[1])
+        return [name for name, _ in scored[:limit]]
+
+    def get_topic_suggestions(
+        self,
+        context: str,
+        limit: int = 3,
+    ) -> list[str]:
+        """入力文脈から話題の提案を返す。
+
+        グラフ内のエンティティと関連トピックを探索し、
+        会話に出ていないが関連性のある話題を提案する。
+
+        Args:
+            context: 直近の会話テキスト（ユーザー発話等）。
+            limit: 返す最大件数。
+
+        Returns:
+            提案トピック名のリスト。
+        """
+        # 文脈にマッチするエンティティを起点とする
+        matched: list[str] = self._find_matching_entities(context)
+        if not matched:
+            # マッチなしの場合、最も mention_count が高いエンティティを提案
+            all_entities: list[Entity] = sorted(
+                self._entities.values(),
+                key=lambda e: -e.mention_count,
+            )
+            return [e.name for e in all_entities[:limit]]
+
+        adj: dict[str, list[str]] = self._build_adjacency()
+
+        # 1-2ホップ先を集める（文脈に含まれないもの優先）
+        visited: set[str] = set(matched)
+        suggestions: list[str] = []
+
+        queue: list[tuple[str, int]] = [(m, 0) for m in matched]
+        while queue and len(suggestions) < limit * 3:
+            node, depth = queue.pop(0)
+            if depth > 2:
+                continue
+            for neighbor in adj.get(node, []):
+                if neighbor in visited:
+                    continue
+                visited.add(neighbor)
+                # 文脈に既出でなければ候補
+                if neighbor not in context:
+                    suggestions.append(neighbor)
+                if depth < 2:
+                    queue.append((neighbor, depth + 1))
+
+        # mention_count 降順でソート
+        suggestions.sort(
+            key=lambda name: -(
+                self._entities[name].mention_count
+                if name in self._entities else 0
+            ),
+        )
+        return suggestions[:limit]

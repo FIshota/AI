@@ -11,13 +11,14 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
-COLOR_BG      = "#2D1B3D"
-COLOR_PANEL   = "#3D2255"
-COLOR_INPUT   = "#1A0F2E"
-COLOR_ACCENT  = "#E8A5C8"
-COLOR_ACCENT2 = "#B57BDC"
-COLOR_TEXT    = "#F5E6FF"
-COLOR_SUBTEXT = "#C9A8E8"
+COLOR_BG      = "#FFFFFF"
+COLOR_PANEL   = "#F5F3F8"
+COLOR_INPUT   = "#FFFFFF"
+COLOR_ACCENT  = "#6C5CE7"
+COLOR_ACCENT2 = "#A29BFE"
+COLOR_TEXT    = "#2D2D3F"
+COLOR_SUBTEXT = "#8E8EA0"
+COLOR_BORDER  = "#E5E5EA"
 
 
 def _parse_exchange(content: str) -> Optional[dict]:

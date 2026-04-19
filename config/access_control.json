@@ -1,0 +1,5 @@
+{
+  "allowed_dirs": [],
+  "denied_patterns": ["*.key", "*.env", ".git/*"],
+  "require_approval": ["*.py", "*.json"]
+}

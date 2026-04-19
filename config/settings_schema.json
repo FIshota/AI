@@ -1,0 +1,441 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "アイちゃん設定スキーマ",
+  "description": "アイちゃんの設定ファイル (config/settings.json) のバリデーション用スキーマ",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "設定ファイルのバージョン (セマンティックバージョニング)",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "llm": {
+      "type": "object",
+      "description": "言語モデル (LLM) の設定",
+      "properties": {
+        "model_path": {
+          "type": "string",
+          "description": "モデルファイルが格納されているディレクトリパス"
+        },
+        "model_file": {
+          "type": "string",
+          "description": "GGUFモデルのファイル名"
+        },
+        "context_length": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 131072,
+          "description": "コンテキスト長 (トークン数)"
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 4096,
+          "description": "生成する最大トークン数"
+        },
+        "max_sentences": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "description": "生成する最大文数"
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 2.0,
+          "description": "サンプリング温度 (高いほどランダム)"
+        },
+        "top_p": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Top-p サンプリングの閾値"
+        },
+        "repeat_penalty": {
+          "type": "number",
+          "minimum": 1.0,
+          "maximum": 3.0,
+          "description": "繰り返しペナルティ"
+        },
+        "top_k": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "description": "Top-k サンプリングの候補数"
+        },
+        "n_gpu_layers": {
+          "type": "integer",
+          "description": "GPUにオフロードするレイヤー数 (-1 = 全レイヤー)"
+        },
+        "n_threads": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128,
+          "description": "推論に使用するCPUスレッド数"
+        },
+        "n_batch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096,
+          "description": "バッチサイズ"
+        },
+        "flash_attn": {
+          "type": "boolean",
+          "description": "Flash Attention を有効にするか"
+        },
+        "use_mmap": {
+          "type": "boolean",
+          "description": "メモリマッピングを使用するか"
+        },
+        "use_mlock": {
+          "type": "boolean",
+          "description": "メモリロックを使用するか"
+        },
+        "mlx": {
+          "type": "object",
+          "description": "Apple MLX バックエンドの設定",
+          "properties": {
+            "model_path": {
+              "type": "string",
+              "description": "MLXモデルのパス"
+            },
+            "adapter_path": {
+              "type": "string",
+              "description": "LoRAアダプターのパス"
+            },
+            "adapter_enabled": {
+              "type": "boolean",
+              "description": "アダプターを有効にするか"
+            }
+          }
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "description": "記憶システムの設定",
+      "properties": {
+        "short_term_max": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 1000,
+          "description": "短期記憶の最大保持数"
+        },
+        "mid_term_max": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 5000,
+          "description": "中期記憶の最大保持数"
+        },
+        "compression_threshold": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "記憶圧縮の閾値 (類似度)"
+        },
+        "importance_threshold": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "重要度の閾値"
+        },
+        "db_path": {
+          "type": "string",
+          "description": "メモリDBファイルのパス"
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "description": "セキュリティ設定",
+      "properties": {
+        "encrypt_database": {
+          "type": "boolean",
+          "description": "データベースを暗号化するか"
+        },
+        "key_file": {
+          "type": "string",
+          "description": "暗号化キーファイルのパス"
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "description": "ユーザーインターフェース設定",
+      "properties": {
+        "language": {
+          "type": "string",
+          "enum": ["ja", "en"],
+          "description": "表示言語 (ja: 日本語, en: 英語)"
+        },
+        "show_emotion": {
+          "type": "boolean",
+          "description": "感情表示を有効にするか"
+        },
+        "color_theme": {
+          "type": "string",
+          "description": "カラーテーマ名"
+        },
+        "user_icon": {
+          "type": "string",
+          "description": "ユーザーアイコン (絵文字)"
+        },
+        "ai_icon": {
+          "type": "string",
+          "description": "AIアイコン (絵文字)"
+        },
+        "user_name": {
+          "type": "string",
+          "description": "ユーザー表示名"
+        },
+        "pet_image": {
+          "type": "string",
+          "description": "ペット画像のファイルパス"
+        },
+        "ai_icon_image": {
+          "type": "string",
+          "description": "AIアイコン画像のファイルパス"
+        },
+        "user_icon_image": {
+          "type": "string",
+          "description": "ユーザーアイコン画像のファイルパス"
+        }
+      }
+    },
+    "portability": {
+      "type": "object",
+      "description": "ポータビリティ設定",
+      "properties": {
+        "auto_backup": {
+          "type": "boolean",
+          "description": "自動バックアップを有効にするか"
+        },
+        "backup_interval_hours": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 168,
+          "description": "バックアップ間隔 (時間)"
+        }
+      }
+    },
+    "autonomous": {
+      "type": "object",
+      "description": "自律行動の設定",
+      "properties": {
+        "idle_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "独り言を開始するまでの放置時間 (分)"
+        },
+        "allow_network": {
+          "type": "boolean",
+          "description": "ネットワークアクセスを許可するか"
+        },
+        "weather_city": {
+          "type": "string",
+          "description": "天気予報の都市名"
+        },
+        "schedule_enabled": {
+          "type": "boolean",
+          "description": "スケジュール通知を有効にするか"
+        },
+        "clipboard_watch": {
+          "type": "boolean",
+          "description": "クリップボード監視を有効にするか"
+        }
+      }
+    },
+    "tts": {
+      "type": "object",
+      "description": "音声合成 (Text-to-Speech) の設定",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "TTSを有効にするか"
+        },
+        "voice": {
+          "type": "string",
+          "description": "使用する音声名"
+        },
+        "rate": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 400,
+          "description": "読み上げ速度 (words per minute)"
+        }
+      }
+    },
+    "stt": {
+      "type": "object",
+      "description": "音声認識 (Speech-to-Text) の設定",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "STTを有効にするか"
+        },
+        "model_size": {
+          "type": "string",
+          "enum": ["tiny", "base", "small", "medium", "large"],
+          "description": "Whisperモデルのサイズ"
+        },
+        "language": {
+          "type": "string",
+          "description": "認識言語コード"
+        }
+      }
+    },
+    "semantic_search": {
+      "type": "object",
+      "description": "セマンティック検索の設定",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "セマンティック検索を有効にするか"
+        }
+      }
+    },
+    "vision": {
+      "type": "object",
+      "description": "ビジョン (画像認識) の設定",
+      "properties": {
+        "enable_moondream": {
+          "type": "boolean",
+          "description": "Moondreamモデルを有効にするか"
+        }
+      }
+    },
+    "integrations": {
+      "type": "object",
+      "description": "外部サービス連携設定",
+      "properties": {
+        "notion": {
+          "type": "object",
+          "description": "Notion 連携設定",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Notion連携を有効にするか"
+            },
+            "api_key": {
+              "type": "string",
+              "description": "Notion API キー"
+            },
+            "minutes_database_id": {
+              "type": "string",
+              "description": "議事録用データベースID"
+            },
+            "todo_database_id": {
+              "type": "string",
+              "description": "TODO用データベースID"
+            }
+          }
+        },
+        "google_calendar": {
+          "type": "object",
+          "description": "Google Calendar 連携設定",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Google Calendar連携を有効にするか"
+            },
+            "credentials_file": {
+              "type": "string",
+              "description": "認証情報ファイルのパス"
+            },
+            "calendar_id": {
+              "type": "string",
+              "description": "カレンダーID (デフォルト: primary)"
+            }
+          }
+        }
+      }
+    },
+    "minutes": {
+      "type": "object",
+      "description": "議事録機能の設定",
+      "properties": {
+        "whisper_model": {
+          "type": "string",
+          "enum": ["tiny", "base", "small", "medium", "large"],
+          "description": "議事録用Whisperモデルのサイズ"
+        },
+        "auto_extract": {
+          "type": "boolean",
+          "description": "議事録の自動抽出を有効にするか"
+        },
+        "auto_push_notion": {
+          "type": "boolean",
+          "description": "Notionへの自動プッシュを有効にするか"
+        },
+        "auto_push_gcal": {
+          "type": "boolean",
+          "description": "Google Calendarへの自動プッシュを有効にするか"
+        }
+      }
+    },
+    "server_home": {
+      "type": "object",
+      "description": "ホームサーバー接続設定",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "ホームサーバー接続を有効にするか"
+        },
+        "host": {
+          "type": "string",
+          "description": "サーバーのホスト名またはIPアドレス"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "SSH接続ポート番号"
+        },
+        "username": {
+          "type": "string",
+          "description": "SSHユーザー名"
+        },
+        "password": {
+          "type": "string",
+          "description": "SSHパスワード"
+        },
+        "connect_timeout_sec": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "接続タイムアウト (秒)"
+        },
+        "allowed_commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "実行を許可するコマンドのリスト"
+        }
+      }
+    },
+    "autonomous_actions": {
+      "type": "object",
+      "description": "自律行動の詳細設定",
+      "properties": {
+        "greeting_enabled": {
+          "type": "boolean",
+          "description": "挨拶を有効にするか"
+        },
+        "proactive_enabled": {
+          "type": "boolean",
+          "description": "プロアクティブ発言を有効にするか"
+        },
+        "diary_enrich_enabled": {
+          "type": "boolean",
+          "description": "日記の充実化を有効にするか"
+        },
+        "idle_learn_enabled": {
+          "type": "boolean",
+          "description": "アイドル時の学習を有効にするか"
+        }
+      }
+    }
+  },
+  "required": ["version", "llm", "memory"]
+}

@@ -135,6 +135,59 @@ class CodeSandbox:
 
 ---
 
+### Phase 3.5: iPhone スタンドアローン化（理想形）
+
+**目的**: Mac なしで iPhone 単体でアイと話せるようにする
+
+#### 現状（2026-04時点）
+- iPhone は Web API 経由で Mac に接続する「リモコン」方式
+- Mac が起動・同一 Wi-Fi 接続が必須
+- 音声（TTS）も Mac スピーカーから再生される
+
+#### 理想の構成
+```
+iPhone 単体
+├── ネイティブ iOS アプリ（Swift）
+├── llama.cpp iOS ビルド → LLM をオンデバイス実行
+├── Core ML 変換モデル（Qwen2.5-3B or 小型版）
+├── アイの記憶・感情システム（Swift 移植 or Python-to-C橋渡し）
+└── TTS → AVSpeechSynthesizer（iOS 標準）またはニューラル TTS
+```
+
+#### 実現手順（概要）
+| ステップ | 内容 | 難易度 |
+|---------|------|--------|
+| 1 | Xcode プロジェクト作成、llama.cpp を iOS 向けビルド | 中 |
+| 2 | Qwen2.5-3B を GGUF 形式で iPhone に載せる | 中 |
+| 3 | Swift で会話ループ実装（Core → Swift ブリッジ） | 高 |
+| 4 | 記憶・感情システムを SQLite ベースで Swift 移植 | 高 |
+| 5 | TTS・UI 実装（SwiftUI） | 中 |
+| 6 | Xcode で実機インストール（App Store 不要、個人開発プロファイル） | 低 |
+
+#### 必要なもの
+- Mac（Xcode ビルド用）
+- Apple Developer アカウント（**無料**で自分の iPhone にインストール可能）
+- iPhone 12 以上推奨（RAM 4GB+）、iPhone 15 Pro 以上が理想（RAM 8GB）
+- モデルファイル：Qwen2.5-1.5B-Instruct-Q4（約 1GB）が iPhone には最適
+
+#### 段階的アプローチ（現実的工程）
+```
+Step A（暫定）:  Mac サーバー + Tailscale で外出先からも接続可能に
+Step B（中期）:  iOS ネイティブアプリ化（Swift + llama.cpp）
+Step C（理想）:  完全スタンドアローン + Mac との記憶同期（連合学習）
+```
+
+#### Mac との記憶同期（Step C）
+スタンドアローン化後も、iPhone と Mac のアイが**学習記録を共有**できる：
+```
+iPhone のアイ ──── Wi-Fi ────> Mac のアイ
+     ↑                              ↓
+     └──── 記憶・学習データ同期 ──────┘
+           （既存の連合学習スタブを実装）
+```
+
+---
+
 ### Phase 4: YAMATO分離準備（1-2ヶ月）
 
 **目的**: アイから技術を切り出してYAMATOの核を作る

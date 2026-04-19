@@ -333,7 +333,8 @@ class AutoLearner:
         import json, hashlib
         memo_path = self.data_dir / "auto_learn_memos.jsonl"
         entry = {
-            "id":      hashlib.md5(text.encode()).hexdigest()[:8],
+            # MD5 is used as a short non-cryptographic ID only
+            "id":      hashlib.md5(text.encode(), usedforsecurity=False).hexdigest()[:8],
             "text":    text,
             "tags":    tags or [],
             "ts":      datetime.now().isoformat()[:16],

@@ -9,13 +9,14 @@ from tkinter import ttk, messagebox
 from pathlib import Path
 from typing import Optional
 
-COLOR_BG      = "#2D1B3D"
-COLOR_PANEL   = "#3D2255"
-COLOR_INPUT   = "#1A0F2E"
-COLOR_ACCENT  = "#E8A5C8"
-COLOR_ACCENT2 = "#B57BDC"
-COLOR_TEXT    = "#F5E6FF"
-COLOR_SUBTEXT = "#C9A8E8"
+COLOR_BG      = "#FFFFFF"
+COLOR_PANEL   = "#F5F3F8"
+COLOR_INPUT   = "#FFFFFF"
+COLOR_ACCENT  = "#6C5CE7"
+COLOR_ACCENT2 = "#A29BFE"
+COLOR_TEXT    = "#2D2D3F"
+COLOR_SUBTEXT = "#8E8EA0"
+COLOR_BORDER  = "#E5E5EA"
 
 LABEL_FONT  = ("Hiragino Sans", 11)
 HEADER_FONT = ("Hiragino Sans", 12, "bold")
@@ -665,7 +666,7 @@ class SettingsWindow(tk.Toplevel):
             # 学習済みかどうか確認してアイコン変更
             status = self._al_get_source_status(url, kind)
             icon  = "✓" if status == "learned" else "・"
-            color = "#98E88A" if status == "learned" else COLOR_SUBTEXT
+            color = "#34C759" if status == "learned" else COLOR_SUBTEXT
             tk.Label(row, text=icon, bg=COLOR_INPUT,
                      fg=color, font=SMALL_FONT, width=2).pack(side="left")
             tk.Label(row, text=url[:55] + ("…" if len(url) > 55 else ""),
@@ -729,7 +730,7 @@ class SettingsWindow(tk.Toplevel):
         for e in recent:
             ok   = e.get("status") == "ok"
             icon = "✓" if ok else "✗"
-            col  = "#98E88A" if ok else "#FF8080"
+            col  = "#34C759" if ok else "#FF3B30"
             kind = e.get("kind", "")
             url  = e.get("url", "")[:40]
             ts   = e.get("ts", "")[:16]
@@ -762,7 +763,7 @@ class SettingsWindow(tk.Toplevel):
             row = tk.Frame(self._al_memo_frame, bg=COLOR_INPUT)
             row.pack(fill="x", pady=1)
             reviewed = m.get("reviews", 0)
-            color = "#98E88A" if reviewed > 0 else COLOR_SUBTEXT
+            color = "#34C759" if reviewed > 0 else COLOR_SUBTEXT
             tk.Label(row, text=f"×{reviewed}",
                      bg=COLOR_INPUT, fg=color,
                      font=("Hiragino Sans", 8), width=4
@@ -804,7 +805,7 @@ class SettingsWindow(tk.Toplevel):
         self._al_url_var.set("")
         self._al_refresh_lists()
         self._al_status_lbl.configure(
-            fg="#98E88A",
+            fg="#34C759",
             text=f"{kind_label} リストに追加したよ！\n{url[:50]}"
         )
 
@@ -849,7 +850,7 @@ class SettingsWindow(tk.Toplevel):
             msg = "\n".join(results) or "学習するコンテンツがなかったよ。"
 
             def _done():
-                self._al_status_lbl.configure(fg="#98E88A", text="学習完了！")
+                self._al_status_lbl.configure(fg="#34C759", text="学習完了！")
                 self._al_refresh_lists()
                 self._al_refresh_log()
                 messagebox.showinfo("学習完了", msg, parent=self)

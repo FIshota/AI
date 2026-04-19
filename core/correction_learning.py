@@ -217,6 +217,72 @@ class CorrectionLearning:
             return ""
         return "過去の訂正: " + " / ".join(hints)
 
+    def generalize_corrections(self) -> dict:
+        """
+        訂正をカテゴリ別にグループ化し、3件以上の訂正があるカテゴリから
+        メタルールを自動生成する (#79)。
+
+        カテゴリは訂正内容のキーワードから推定する。
+        結果は data/correction_rules.json に保存される。
+
+        Returns:
+            生成されたメタルールのレポート
+        """
+        # カテゴリ分類キーワード
+        category_keywords: dict[str, list[str]] = {
+            "repetition": ["同じ", "繰り返", "またさ", "ワンパターン", "おんなじ"],
+            "tone": ["敬語", "です・ます", "口調", "丁寧", "タメ口"],
+            "factual": ["違う", "間違", "正しく", "事実"],
+            "relevance": ["関係ない", "そうじゃなくて", "意味", "ずれ"],
+            "length": ["長い", "短い", "もっと", "簡潔"],
+            "emotion": ["気持ち", "感情", "共感", "寄り添"],
+        }
+
+        # 訂正をカテゴリに分類
+        categorized: dict[str, list[CorrectionEntry]] = {}
+        for entry in self.corrections:
+            text = entry.correction_input + " " + entry.correct_info
+            assigned_category = "other"
+            for cat, keywords in category_keywords.items():
+                if any(kw in text for kw in keywords):
+                    assigned_category = cat
+                    break
+            categorized.setdefault(assigned_category, []).append(entry)
+
+        # 3件以上のカテゴリからメタルールを生成
+        meta_rules: list[dict] = []
+        for category, entries in categorized.items():
+            if len(entries) < 3:
+                continue
+
+            # 代表的な訂正内容を収集
+            samples = [
+                e.correct_info or e.correction_input
+                for e in entries[-5:]
+                if e.correct_info or e.correction_input
+            ]
+
+            rule = {
+                "category": category,
+                "count": len(entries),
+                "rule": f"カテゴリ '{category}' で{len(entries)}件の訂正あり。注意して応答すること。",
+                "samples": samples[:3],
+                "created_at": time.time(),
+            }
+            meta_rules.append(rule)
+
+        # 保存
+        rules_path = self.data_dir / "correction_rules.json"
+        rules_path.write_text(
+            json.dumps(meta_rules, ensure_ascii=False, indent=2), "utf-8"
+        )
+
+        return {
+            "total_categories": len(categorized),
+            "rules_generated": len(meta_rules),
+            "categories": {cat: len(entries) for cat, entries in categorized.items()},
+        }
+
     def stats(self) -> dict:
         return {
             "total_corrections": self._correction_count,

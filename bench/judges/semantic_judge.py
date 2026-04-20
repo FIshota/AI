@@ -22,9 +22,14 @@ DEFAULT_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
 
 @dataclass
 class SemanticJudge:
-    """埋め込みコサイン類似度で採点."""
+    """埋め込みコサイン類似度で採点.
+
+    H-2: aggregation に "max" (既定) / "mean" / "median" を指定可能。
+    reference list が多様化したとき max は saturate しやすいため mean が有効。
+    """
     name: str = "semantic"
     model_name: str = DEFAULT_MODEL
+    aggregation: str = "max"  # "max" | "mean" | "median"
     _model: Optional[object] = field(default=None, init=False, repr=False)
 
     def _ensure_model(self):
@@ -66,16 +71,25 @@ class SemanticJudge:
         # コサイン類似度 (normalize 済みなので内積 = cos)
         import numpy as np
         sims = [float(np.dot(pred_vec, rv)) for rv in ref_vecs]
-        best = max(sims) if sims else 0.0
+        if not sims:
+            return JudgeScore(score=0.0, judge_name=self.name,
+                              raw={"reason": "no_sims"})
+        if self.aggregation == "mean":
+            agg = sum(sims) / len(sims)
+        elif self.aggregation == "median":
+            agg = float(sorted(sims)[len(sims) // 2])
+        else:  # "max" (既定)
+            agg = max(sims)
 
         # -1..1 → 0..1 に正規化
-        normalized = (best + 1.0) / 2.0
+        normalized = (agg + 1.0) / 2.0
         normalized = max(0.0, min(1.0, normalized))
 
         return JudgeScore(
             score=normalized,
             raw={
-                "cosine_max": best,
+                "cosine_agg": agg,
+                "aggregation": self.aggregation,
                 "cosine_all": sims,
                 "model": self.model_name,
             },

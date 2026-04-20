@@ -38,7 +38,8 @@ def _load_judges() -> list:
     judges: list = [RuleJudge()]
     try:
         from bench.judges.semantic_judge import SemanticJudge
-        judges.append(SemanticJudge())
+        # H-2: family_dialog は reference が多様 → max だと saturate するので mean を使う
+        judges.append(SemanticJudge(aggregation="mean"))
     except Exception:
         pass
     # G-1: Memory Honesty 4 軸採点 (LLM judge — self-eval だが zero-cost)

@@ -19,3 +19,17 @@ repos:
         args: ["-c", "pyproject.toml", "--quiet"]
         additional_dependencies: ["bandit[toml]"]
         exclude: "tests/"
+
+  # E-4: TAXONOMY integrity check (docs/TAXONOMY.md が単一源泉)
+  - repo: local
+    hooks:
+      - id: taxonomy-check
+        name: taxonomy integrity check
+        entry: python3 scripts/check_taxonomy.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        description: >-
+          docs/TAXONOMY.md に反する用語・フェーズ表記を検出する。
+          エラーがあれば commit を中止する (警告は info-only)。

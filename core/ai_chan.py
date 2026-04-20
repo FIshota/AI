@@ -1549,6 +1549,66 @@ class AiChan:
         return memory_context
 
     # ──────────────────────────────────────────────────────────
+    # D-2 / E-1: Memory Honesty 統合
+    # ──────────────────────────────────────────────────────────
+
+    # 「覚えてる?」「〜だっけ?」系クエリ検出
+    _HONESTY_QUERY_PATTERNS = (
+        "覚えてる", "覚えてない", "覚えてますか",
+        "だっけ", "だったっけ", "じゃなかったっけ",
+        "何だっけ", "なんだっけ", "どこだっけ", "いつだっけ",
+    )
+
+    def _map_growth_to_subjective_stage(self) -> str:
+        """GrowthStage (INFANT..MATURE) → memory_phrasing Stage (S0..S3)."""
+        try:
+            s = int(self.growth.stage)
+        except Exception:
+            return "S1"
+        if s <= 1:
+            return "S0"
+        if s == 2:
+            return "S1"
+        if s == 3:
+            return "S2"
+        return "S3"
+
+    def _is_memory_recall_query(self, text: str) -> bool:
+        """入力が記憶想起クエリかどうか。"""
+        if not text:
+            return False
+        # 疑問符が無くてもパターンで判定 (感情タグ込み想定)
+        return any(p in text for p in self._HONESTY_QUERY_PATTERNS)
+
+    def _try_memory_honesty_response(self, user_input: str) -> str | None:
+        """none-band (低信頼度) のときだけ早期に honest 応答を返す。
+
+        high/mid/low 帯は通常フローで memory_context を充実させて LLM に投げる方が
+        家族らしい応答になるため、ここでは介入しない。
+        """
+        if not self._is_memory_recall_query(user_input):
+            return None
+        try:
+            stage = self._map_growth_to_subjective_stage()
+            subject = getattr(self, "_last_speaker_tag", None) or None
+            recent = [
+                h.get("content", "")
+                for h in self.conversation_history[-4:]
+                if h.get("role") == "user"
+            ]
+            phrase, conf = self.memory.respond_about_memory(
+                user_input, stage=stage, subject=subject, recent=recent,
+            )
+        except Exception as exc:
+            logger.debug("memory-honesty skip: %s", exc)
+            return None
+        # 信頼度が "none" 帯 (<0.3) のときだけ早期リターン
+        if conf < 0.3:
+            logger.info("memory-honesty early-return: conf=%.2f stage=%s", conf, stage)
+            return phrase
+        return None
+
+    # ──────────────────────────────────────────────────────────
     # メインの chat メソッド
     # ──────────────────────────────────────────────────────────
 
@@ -1661,6 +1721,27 @@ class AiChan:
 
         # 感情を更新
         self.emotion.update_from_message(user_input)
+
+        # ── E-1: Memory Honesty 早期応答 (none-band のみ) ──
+        if not is_system_call and not _correction_entry:
+            _honesty_reply = self._try_memory_honesty_response(user_input)
+            if _honesty_reply:
+                self.conversation_history.append({"role": "user", "content": user_input})
+                self.conversation_history.append({"role": "assistant", "content": _honesty_reply})
+                try:
+                    if hasattr(self.tts, "speak_with_emotion_analysis"):
+                        _ed = self.emotion.state.to_dict() if hasattr(self.emotion.state, "to_dict") else {}
+                        self.tts.speak_with_emotion_analysis(_honesty_reply, _ed)
+                    else:
+                        self.tts.speak_sentence_by_sentence(_honesty_reply)
+                except Exception:
+                    pass
+                self._log_conversation_jsonl(
+                    user_input, _honesty_reply, {"layer": "memory_honesty"},
+                )
+                if len(self.conversation_history) > 12:
+                    self.conversation_history = self.conversation_history[-12:]
+                return _honesty_reply
 
         # ── 生物神経系: 反射 → 大脳(LLM) ──
         if getattr(self, "bio_nervous", None) and not is_system_call and not _correction_entry:

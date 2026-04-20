@@ -46,8 +46,16 @@ def _load_judges() -> list:
     return judges
 
 
-def run(model_family: str, limit: int | None = None) -> list[ElyzaResult]:
-    items = load_elyza_tasks_100(limit=limit)
+def run(
+    model_family: str,
+    limit: int | None = None,
+    qid_prefix: str | None = None,
+) -> list[ElyzaResult]:
+    items = load_elyza_tasks_100(limit=None if qid_prefix else limit)
+    if qid_prefix:
+        items = [it for it in items if it.qid.startswith(qid_prefix)]
+        if limit is not None:
+            items = items[:limit]
     cfg = EvalConfig(model_family=model_family, max_tokens=384)
     records = evaluate_suite(items, cfg, judges=_load_judges())
     agg = aggregate(records)

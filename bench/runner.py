@@ -41,7 +41,13 @@ def cmd_list() -> int:
     return 0
 
 
-def cmd_run(model: str, suite: str | None, run_all: bool, limit: int | None) -> int:
+def cmd_run(
+    model: str,
+    suite: str | None,
+    run_all: bool,
+    limit: int | None,
+    qid_prefix: str | None = None,
+) -> int:
     if model not in _known_families():
         print(f"[bench] ⚠ 未知の model_family: {model} (続行)")
     targets = list(SUITES.keys()) if run_all else [suite] if suite else []
@@ -58,8 +64,13 @@ def cmd_run(model: str, suite: str | None, run_all: bool, limit: int | None) -> 
             print(f"[bench] 不明なスイート: {name}", file=sys.stderr)
             continue
         info = mod.describe()
-        print(f"[bench] run {name} on {model} ({info.get('status','?')})")
-        results = mod.run(model_family=model, limit=limit)
+        tag = f" qid_prefix={qid_prefix!r}" if qid_prefix else ""
+        print(f"[bench] run {name} on {model} ({info.get('status','?')}){tag}")
+        try:
+            results = mod.run(model_family=model, limit=limit, qid_prefix=qid_prefix)
+        except TypeError:
+            # backward compat: suite が qid_prefix をまだ受けない場合
+            results = mod.run(model_family=model, limit=limit)
         payload = {
             "suite": name,
             "model_family": model,
@@ -85,11 +96,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--suite", default=None, help="single suite to run")
     p.add_argument("--all", action="store_true", help="run all suites")
     p.add_argument("--limit", type=int, default=None, help="per-suite item limit")
+    p.add_argument(
+        "--qid-prefix",
+        default=None,
+        help="filter items by qid prefix (e.g. 'honesty_' for Memory Honesty seeds)",
+    )
     args = p.parse_args(argv)
 
     if args.list:
         return cmd_list()
-    return cmd_run(args.model, args.suite, args.all, args.limit)
+    return cmd_run(
+        args.model, args.suite, args.all, args.limit, qid_prefix=args.qid_prefix
+    )
 
 
 if __name__ == "__main__":

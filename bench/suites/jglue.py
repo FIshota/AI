@@ -39,9 +39,17 @@ def describe() -> dict:
     }
 
 
-def run(model_family: str, limit: int | None = None) -> list[JGLUEResult]:
+def run(
+    model_family: str,
+    limit: int | None = None,
+    qid_prefix: str | None = None,
+) -> list[JGLUEResult]:
     """JCommonsenseQA を rule_judge で採点."""
-    items = load_jcommonsenseqa(limit=limit)
+    items = load_jcommonsenseqa(limit=None if qid_prefix else limit)
+    if qid_prefix:
+        items = [it for it in items if it.qid.startswith(qid_prefix)]
+        if limit is not None:
+            items = items[:limit]
     cfg = EvalConfig(
         model_family=model_family,
         choice_format=True,

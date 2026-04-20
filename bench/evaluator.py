@@ -6,7 +6,7 @@ zero-cost 原則により OpenAI / Claude API は使わない。
 使い方 (suite 内部から):
 
     from bench.evaluator import evaluate_suite, EvalConfig
-    from bench.datasets import load_jcommonsenseqa
+    from bench.dataset_loaders import load_jcommonsenseqa
     from bench.judges.rule_judge import RuleJudge
 
     items = load_jcommonsenseqa(limit=50)
@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Optional, Protocol
 
-from .datasets import QAItem
+from .dataset_loaders import QAItem
 from .judges.base import JudgeScore
 
 logger = logging.getLogger(__name__)

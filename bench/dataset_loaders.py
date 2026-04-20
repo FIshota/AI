@@ -35,20 +35,29 @@ def _ensure_cache() -> Path:
 
 # ─── JGLUE JCommonsenseQA ─────────────────────────────────
 
+JCOMMONSENSEQA_URL = (
+    "https://raw.githubusercontent.com/yahoojapan/JGLUE/main/"
+    "datasets/jcommonsenseqa-v1.3/valid-v1.3.json"
+)
+
+
 def load_jcommonsenseqa(limit: int | None = None) -> list[QAItem]:
-    """JGLUE JCommonsenseQA の validation split を返す."""
+    """JGLUE JCommonsenseQA の validation split を返す.
+
+    HuggingFace loading script (`shunk031/JGLUE`) は datasets>=2.20 で廃止。
+    公式 GitHub (yahoojapan/JGLUE) から生 JSONL を直接 DL する。CC BY-SA 4.0。
+    """
     cache = _ensure_cache() / "jcommonsenseqa_valid.jsonl"
     if not cache.exists():
         logger.info("[datasets] downloading JCommonsenseQA ...")
+        import urllib.request
         try:
-            from datasets import load_dataset
-            ds = load_dataset("shunk031/JGLUE", "JCommonsenseQA", split="validation")
-            with cache.open("w", encoding="utf-8") as f:
-                for row in ds:
-                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            with urllib.request.urlopen(JCOMMONSENSEQA_URL, timeout=30) as resp:
+                body = resp.read().decode("utf-8")
+            cache.write_text(body, encoding="utf-8")
         except Exception as e:
             raise RuntimeError(
-                f"JCommonsenseQA DL に失敗: {e}。`pip install datasets` を確認。"
+                f"JCommonsenseQA DL に失敗: {e}。ネットワーク/URL を確認。"
             ) from e
 
     items = []

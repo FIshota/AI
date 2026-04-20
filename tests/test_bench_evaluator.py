@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from bench.datasets import QAItem, load_family_dialog
+from bench.dataset_loaders import QAItem, load_family_dialog
 from bench.evaluator import EvalConfig, EvalRecord, aggregate, evaluate_suite
 from bench.judges.base import JudgeScore
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from bench.datasets import load_elyza_tasks_100
+from bench.dataset_loaders import load_elyza_tasks_100
 from bench.evaluator import EvalConfig, aggregate, evaluate_suite
 from bench.judges.rule_judge import RuleJudge
 

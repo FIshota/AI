@@ -88,10 +88,18 @@ class TestHonestyBenchSeeds:
         from bench.dataset_loaders import FAMILY_DIALOG_SEED
 
         qids = {row["qid"] for row in FAMILY_DIALOG_SEED}
-        assert "honesty_forget_01" in qids
-        assert "honesty_uncertain_01" in qids
-        assert "honesty_conflict_01" in qids
-        assert "honesty_emotion_first_01" in qids
+        # G-3 expansion: 各 aspect 4 variation ずつ (合計 16 問)
+        for aspect in ("forget", "uncertain", "conflict", "emotion_first"):
+            for n in range(1, 5):
+                qid = f"honesty_{aspect}_{n:02d}"
+                assert qid in qids, f"missing seed: {qid}"
+
+    def test_honesty_seeds_count(self):
+        """G-3: 合計 16 問 (4 aspect × 4 variation)."""
+        from bench.dataset_loaders import FAMILY_DIALOG_SEED
+
+        honesty = [r for r in FAMILY_DIALOG_SEED if r["qid"].startswith("honesty_")]
+        assert len(honesty) == 16, f"expected 16 honesty seeds, got {len(honesty)}"
 
     def test_honesty_seeds_tagged(self):
         from bench.dataset_loaders import FAMILY_DIALOG_SEED

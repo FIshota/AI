@@ -41,6 +41,15 @@ def _load_judges() -> list:
         judges.append(SemanticJudge())
     except Exception:
         pass
+    # G-1: Memory Honesty 4 軸採点 (LLM judge — self-eval だが zero-cost)
+    # 有効化: 環境変数 BENCH_HONESTY_JUDGE=1 (遅いので opt-in)
+    import os
+    if os.environ.get("BENCH_HONESTY_JUDGE") == "1":
+        try:
+            from bench.judges.local_judge import make_honesty_judge
+            judges.append(make_honesty_judge())
+        except Exception:
+            pass
     return judges
 
 

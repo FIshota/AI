@@ -24,7 +24,7 @@ import logging
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ class SubjectRightsManager:
     def export_to_file(
         self,
         subject_id: str = SELF_SUBJECT_ID,
-        output_path: Optional[Path] = None,
+        output_path: Path | None = None,
     ) -> Path:
         """export_subject の結果を JSON ファイルに書き出し、パスを返す。"""
         payload = self.export_subject(subject_id)

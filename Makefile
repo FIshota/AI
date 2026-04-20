@@ -19,17 +19,26 @@ test-verbose: ## pytest を詳細モードで実行
 test-coverage: ## カバレッジ付きテスト
 	$(PYTHON) -m pytest tests/ --cov=core --cov=ui --cov-report=term-missing
 
-lint: ## ruff でリント実行
+lint: ## ruff でリント実行 (loose zone)
 	$(PYTHON) -m ruff check core/ ui/ scripts/ tests/
 
 lint-fix: ## ruff で自動修正
 	$(PYTHON) -m ruff check --fix core/ ui/ scripts/ tests/
 
+lint-strict: ## M4 strict zone: BLE001/S110/S112 適用対象
+	$(PYTHON) -m ruff check --select F,E,W,I,UP,BLE,S \
+		core/memory.py utils/crypto.py utils/secure_store.py \
+		utils/keychain.py core/tenant.py core/subject_rights.py \
+		core/protocols.py core/deps.py core/ops/
+
 format: ## black でフォーマット
 	$(PYTHON) -m black core/ ui/ scripts/ tests/
 
-typecheck: ## mypy で型チェック
+typecheck: ## mypy で型チェック (loose)
 	$(PYTHON) -m mypy core/ ui/ --ignore-missing-imports
+
+typecheck-strict: ## M4 strict zone: mypy strict 対象 (pyproject.toml [tool.mypy].files)
+	$(PYTHON) -m mypy
 
 benchmark: ## 品質ベンチマークを実行
 	$(PYTHON) scripts/run_benchmark_compare.py

@@ -8,23 +8,23 @@ AES-256-GCM による全データの暗号化・復号を担当します
   本番環境では必ず arm64 ネイティブ Python + cryptography を使用してください。
 """
 from __future__ import annotations
+
+import base64
 import hashlib
 import hmac
 import json
 import logging
 import os
-import base64
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 # ── cryptography のインポート（アーキテクチャ不整合時はフォールバック） ──
 try:
+    from cryptography.hazmat.primitives import hashes as _hashes
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM as _AESGCM
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC as _PBKDF2HMAC
-    from cryptography.hazmat.primitives import hashes as _hashes
     _CRYPTO_AVAILABLE = True
 except (ImportError, OSError) as _crypto_err:
     _CRYPTO_AVAILABLE = False
@@ -307,7 +307,7 @@ def rotate_key(
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def derive_key_from_passphrase(
-    passphrase: str, salt: Optional[bytes] = None
+    passphrase: str, salt: bytes | None = None
 ) -> tuple[bytes, bytes]:
     """
     パスフレーズから PBKDF2 で暗号化キーを導出する。

@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class LLMProtocol(Protocol):
         prompt: str,
         max_tokens: int = 400,
         temperature: float = 0.65,
-        stop: Optional[List[str]] = None,
+        stop: list[str] | None = None,
     ) -> str:
         """プロンプトからテキストを生成する"""
         ...
@@ -40,7 +40,7 @@ class MemoryProtocol(Protocol):
         content: str,
         memory_type: str = "mid",
         importance: float = 0.5,
-        tags: Optional[List[str]] = None,
+        tags: list[str] | None = None,
     ) -> int:
         """記憶を保存し、IDを返す"""
         ...
@@ -48,9 +48,9 @@ class MemoryProtocol(Protocol):
     def search(
         self,
         query: str,
-        memory_type: Optional[str] = None,
+        memory_type: str | None = None,
         limit: int = 5,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """クエリに関連する記憶を検索する"""
         ...
 
@@ -58,7 +58,7 @@ class MemoryProtocol(Protocol):
         """指定IDの記憶を削除する（保護されていない場合のみ）"""
         ...
 
-    def get_recent(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_recent(self, limit: int = 10) -> list[dict[str, Any]]:
         """最近の記憶を取得する"""
         ...
 
@@ -67,11 +67,11 @@ class MemoryProtocol(Protocol):
 class EmotionProtocol(Protocol):
     """感情エンジンのプロトコル"""
 
-    def get_state(self) -> Dict[str, float]:
+    def get_state(self) -> dict[str, float]:
         """現在の感情状態を辞書で返す"""
         ...
 
-    def update(self, text: str, context: Optional[Dict[str, Any]] = None) -> None:
+    def update(self, text: str, context: dict[str, Any] | None = None) -> None:
         """テキストと文脈に基づいて感情状態を更新する"""
         ...
 
@@ -106,11 +106,11 @@ class STTProtocol(Protocol):
 class DiaryProtocol(Protocol):
     """日記管理のプロトコル"""
 
-    def write(self, content: str, date: Optional[str] = None) -> bool:
+    def write(self, content: str, date: str | None = None) -> bool:
         """日記エントリを書く"""
         ...
 
-    def read(self, date: Optional[str] = None) -> Optional[str]:
+    def read(self, date: str | None = None) -> str | None:
         """指定日の日記を読む"""
         ...
 
@@ -119,7 +119,7 @@ class DiaryProtocol(Protocol):
 class LearningProtocol(Protocol):
     """学習エンジンのプロトコル"""
 
-    def get_examples(self, limit: int = 5) -> List[Dict[str, str]]:
+    def get_examples(self, limit: int = 5) -> list[dict[str, str]]:
         """学習済み例文を取得する"""
         ...
 
@@ -145,13 +145,13 @@ class AuditLogProtocol(Protocol):
 class SubjectRightsProtocol(Protocol):
     """GDPR 17/20 条対応 (H1, 2026-04-21)"""
 
-    def export_subject(self, subject_id: str = "self") -> Dict[str, Any]:
+    def export_subject(self, subject_id: str = "self") -> dict[str, Any]:
         """subject の全データを辞書として返す (GDPR 20 条)"""
         ...
 
     def purge_subject(
         self, subject_id: str = "self", dry_run: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """subject の全データを削除する (GDPR 17 条)"""
         ...
 

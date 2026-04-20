@@ -22,7 +22,6 @@ import os
 import platform
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from utils.crypto import generate_key, load_or_create_key
 
@@ -35,7 +34,7 @@ _SALT_FILE = "key.salt"
 
 # ── macOS Keychain ──────────────────────────────────────────────
 
-def _mac_keychain_get() -> Optional[bytes]:
+def _mac_keychain_get() -> bytes | None:
     try:
         result = subprocess.run(
             [

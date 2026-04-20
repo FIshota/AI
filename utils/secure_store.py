@@ -15,16 +15,16 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-from utils.crypto import encrypt_text, decrypt_text
+from utils.crypto import decrypt_text, encrypt_text
 
 logger = logging.getLogger(__name__)
 
 _MAGIC = "AICHAN_ENC_V1\n"
 
 
-def load_json(path: Path, key: Optional[bytes], default: Any) -> Any:
+def load_json(path: Path, key: bytes | None, default: Any) -> Any:
     """JSON を読み込む。暗号化されていれば復号する。
 
     Args:
@@ -73,7 +73,7 @@ def load_json(path: Path, key: Optional[bytes], default: Any) -> Any:
     return data
 
 
-def save_json(path: Path, data: Any, key: Optional[bytes]) -> None:
+def save_json(path: Path, data: Any, key: bytes | None) -> None:
     """JSON を書き出す。鍵があれば暗号化する。"""
     path.parent.mkdir(parents=True, exist_ok=True)
     serialized = json.dumps(data, ensure_ascii=False, indent=2)

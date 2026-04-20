@@ -22,7 +22,7 @@ core/ai_chan.py の god-object `__init__` を段階的に DI 化するための
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -36,17 +36,17 @@ class AiChanDeps:
     段階的に core.protocols.*Protocol へ差し替えていく。
     """
 
-    memory: Optional[Any] = None
-    emotion: Optional[Any] = None
-    llm: Optional[Any] = None
-    diary: Optional[Any] = None
-    emotion_history: Optional[Any] = None
-    anniversary: Optional[Any] = None
-    learning: Optional[Any] = None
-    subject_rights: Optional[Any] = None
-    audit_log: Optional[Any] = None
-    scheduler: Optional[Any] = None
-    event_bus: Optional[Any] = None
+    memory: Any | None = None
+    emotion: Any | None = None
+    llm: Any | None = None
+    diary: Any | None = None
+    emotion_history: Any | None = None
+    anniversary: Any | None = None
+    learning: Any | None = None
+    subject_rights: Any | None = None
+    audit_log: Any | None = None
+    scheduler: Any | None = None
+    event_bus: Any | None = None
 
     def override(self, obj: Any, attr: str, label: str) -> Any:
         """`obj.attr` が未設定 or None なら self.<label> で上書きする内部ヘルパー。

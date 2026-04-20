@@ -1,0 +1,106 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ai-chan project configuration
+# Created: 2026-04-21 (M4: ruff BLE001/S110 + mypy strict 段階導入)
+#
+# Strategy: gradually expand strict checks from "core/memory.py" and
+# "utils/crypto.py" outward. Each module migrated must pass full
+# rule set. Other modules use loose defaults.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[project]
+name = "ai-chan"
+description = "ai-chan — family-AI prototype, parent of YAMATO"
+requires-python = ">=3.10"
+dynamic = ["version"]
+
+# ──────────────────────────────────────────────────────────────
+# ruff — fast Python linter + formatter
+# ──────────────────────────────────────────────────────────────
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = [
+    "scripts/convert_hf_to_gguf.py",  # vendored from llama.cpp upstream
+    "build",
+    "dist",
+    ".venv",
+    "__pycache__",
+]
+
+[tool.ruff.lint]
+# 全域に対して有効化する控えめなルールセット。
+# まず F (pyflakes) と E (pycodestyle) のみで静かに通す。
+select = [
+    "F",     # pyflakes
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "I",     # isort
+    "UP",    # pyupgrade
+]
+
+# 全域でひとまず無効化する慣習依存のルール。
+ignore = [
+    "E501",  # line too long — black/auto-format に任せる
+    "E731",  # lambda assign — 短い helper で許容
+    "E741",  # ambiguous variable name — l, I 等は文脈次第で許容
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["F401", "F811"]  # テストでの import 重複は許容
+"scripts/**/*.py" = ["F401"]        # スクリプトでの未使用 import は警告のみ
+"core/cmd_handlers.py" = ["E402"]   # 動的 import が必要なため
+
+# ──────────────────────────────────────────────────────────────
+# 厳格モード: 段階的にここへモジュールを追加していく
+# 対象モジュールは BLE001 (blind except) / S110 (try-except-pass) / S112 を有効化。
+# ──────────────────────────────────────────────────────────────
+
+# ──────────────────────────────────────────────────────────────
+# 厳格ゾーン（strict zone） — BLE001 / S110 / S112 追加適用対象。
+# 新規コードは原則このゾーンに置くこと。追加は段階的に。
+# 実行: `make lint-strict` または下記コマンド:
+#   ruff check --select F,E,W,I,UP,BLE,S \
+#       core/memory.py utils/crypto.py utils/secure_store.py \
+#       utils/keychain.py core/tenant.py core/subject_rights.py \
+#       core/protocols.py core/deps.py core/ops/
+# ──────────────────────────────────────────────────────────────
+
+# ──────────────────────────────────────────────────────────────
+# mypy — strict typing only on selected modules
+# ──────────────────────────────────────────────────────────────
+
+[tool.mypy]
+python_version = "3.10"
+files = [
+    "core/memory.py",
+    "core/tenant.py",
+    "core/subject_rights.py",
+    "core/protocols.py",
+    "core/deps.py",
+    "core/ops/security_ops.py",
+    "core/ops/server_ops.py",
+    "utils/crypto.py",
+    "utils/secure_store.py",
+    "utils/keychain.py",
+]
+ignore_missing_imports = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+strict_equality = true
+# strict サブセット — 段階導入のため一部はまだ off
+disallow_untyped_defs = false   # まずは関数シグネチャ補完が完了してから on
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_reexport = true
+
+# 全域に対しては緩い設定（参考として記載）
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "scripts.convert_hf_to_gguf"
+ignore_errors = true

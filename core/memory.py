@@ -8,16 +8,15 @@
 保護領域: アイのコア人格・重要な思い出は絶対に削除しない
 """
 from __future__ import annotations
-import sqlite3
+
 import json
 import logging
-import time
-import threading
-from pathlib import Path
+import sqlite3
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
-from dataclasses import dataclass, asdict
-from typing import Optional
-from utils.crypto import load_or_create_key, encrypt_text, decrypt_text
+from pathlib import Path
+
+from utils.crypto import decrypt_text, encrypt_text, load_or_create_key
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +56,10 @@ class Memory:
     access_count: int = 0
     is_protected: bool = False   # True = 通常の forget() で削除されない
     is_core: bool = False        # True = 絶対記憶 (forget でも削除されない)
-    core_id: Optional[str] = None  # personality/memories.yaml のキー (重複投入防止)
-    emotion_tag: Optional[str] = None   # Item #76: 感情タグ
+    core_id: str | None = None  # personality/memories.yaml のキー (重複投入防止)
+    emotion_tag: str | None = None   # Item #76: 感情タグ
     security_level: str = "public"      # Item #97: public/private/secret
-    id: Optional[int] = None
+    id: int | None = None
 
 
 class MemoryManager:
@@ -307,7 +306,6 @@ class MemoryManager:
         """重要度スコアに基づき短期記憶を中期記憶へ昇格させます"""
         threshold = 0.4
         promoted = []
-        kept = []
         discarded = []
 
         for mem in self._short_term[:-10]:  # 直近10件は常に保持
@@ -836,7 +834,7 @@ class MemoryManager:
 
     def _save_version(self, conn: sqlite3.Connection, memory_id: int,
                       old_content: str, old_importance: float,
-                      old_emotion_tag: Optional[str]) -> None:
+                      old_emotion_tag: str | None) -> None:
         """更新前の記憶内容をバージョン履歴に保存する"""
         now = datetime.now().isoformat()
         try:
@@ -850,7 +848,7 @@ class MemoryManager:
             logger.warning("[Memory] バージョン保存失敗: %s", e)
 
     def update_memory(self, memory_id: int, new_content: str,
-                      new_importance: Optional[float] = None) -> bool:
+                      new_importance: float | None = None) -> bool:
         """
         既存の記憶を更新する。更新前の内容はバージョン履歴に保存される。
         """

@@ -61,7 +61,6 @@ from core.event_bus import EventBus, CONFIG_CHANGED
 from core.config_watcher import ConfigWatcher
 from core.mode_manager import ModeManager, FAMILY_MODE, AGENT_MODE
 from core.voice_id import VoiceIDManager
-from core.federated_stub import FederatedStub
 
 # ──────────────────────────────────────────────────────────────
 # 分割モジュール
@@ -189,8 +188,8 @@ class AiChan:
         self._load_config()
 
         # E-08: settings.json ホットリロード
-        # NOTE: _event_bus は _init_components → _init_heavy_components 内で
-        #       PluginLoader が参照するため、_init_components より前に初期化する
+        # NOTE: _event_bus は他コンポーネントが参照するため、
+        #       _init_components より前に初期化する
         self._event_bus = EventBus()
 
         self._init_components()
@@ -604,10 +603,11 @@ class AiChan:
             data_dir=self.base_dir / "data",
         )
 
-        # ─── 次世代ビジョン: モード切替・声紋ID・連合学習 ───────
+        # ─── 次世代ビジョン: モード切替・声紋ID ───────
+        # M3 (2026-04-21): FederatedStub スタブ削除（LATER tier の PP-1 で本実装時に再導入）
         self.mode_manager = ModeManager(data_dir=self.base_dir / "data")
         self.voice_id = VoiceIDManager(data_dir=self.base_dir / "data")
-        self.federated = FederatedStub(data_dir=self.base_dir / "data")
+        self.federated = None  # 連合学習は LATER tier で本実装予定
         print(f"[ModeManager] ✓ モード切替を初期化（現在: {self.mode_manager.current_mode}）", flush=True)
         _trust = self.voice_id.get_trust_level()
         if _trust > 40:
@@ -1158,18 +1158,8 @@ class AiChan:
             print(f"[Middleware] 初期化失敗: {e}", flush=True)
             self.middleware_chain = None
 
-        # ─── プラグインローダー ───────────────────────────────
-        try:
-            from core.plugin_loader import PluginLoader
-            self.plugin_loader = PluginLoader(
-                bus=self._event_bus,
-                plugin_dir=self.base_dir / "core" / "plugins",
-            )
-            loaded = self.plugin_loader.load_all()
-            print(f"[PluginLoader] ✓ プラグインを{len(loaded)}件ロード", flush=True)
-        except Exception as e:
-            print(f"[PluginLoader] 初期化失敗: {e}", flush=True)
-            self.plugin_loader = None
+        # M3 (2026-04-21): PluginLoader スタブ削除（core/plugins/ は空だった）
+        self.plugin_loader = None
 
         # ─── プロンプト A/B テスト ────────────────────────────
         try:
@@ -2161,17 +2151,8 @@ class AiChan:
                     except Exception:
                         pass
 
-                if getattr(self, "federated", None):
-                    try:
-                        pattern = self.federated.extract_pattern(
-                            [{"role": "user", "content": _ui},
-                             {"role": "assistant", "content": _resp}],
-                            quality_score=_q_score,
-                        )
-                        if pattern:
-                            self.federated.queue_for_sync(pattern)
-                    except Exception:
-                        pass
+                # M3 (2026-04-21): FederatedStub 削除により連合学習ブロックは無効化
+                # LATER tier PP-1 で本実装時に再配線予定
 
                 if getattr(self, "prompt_ab_test", None):
                     try:

@@ -2,10 +2,11 @@
 Tests for critical untested modules:
   - core/mode_manager.py
   - core/voice_id.py
-  - core/federated_stub.py
   - core/health_check.py
   - core/injection_guard.py
   - core/middleware.py
+
+M3 (2026-04-21): federated_stub tests removed (stub deleted).
 """
 from __future__ import annotations
 
@@ -322,98 +323,6 @@ class TestVoiceIDGreeting:
             mgr = VoiceIDManager(data_dir=Path(tmp))
             greeting = mgr.get_greeting()
             assert "はじめまして" in greeting
-
-
-# ─── 2c. core/federated_stub.py ─────────────────────────────────
-
-
-from core.federated_stub import FederatedStub, LearningPattern
-
-
-class TestFederatedExtract:
-    """Pattern extraction from conversations."""
-
-    def _stub(self) -> FederatedStub:
-        with tempfile.TemporaryDirectory() as tmp:
-            return FederatedStub(data_dir=Path(tmp))
-
-    def test_extract_returns_pattern(self) -> None:
-        stub = self._stub()
-        conversation = [
-            {"role": "user", "content": "こんにちは"},
-            {"role": "assistant", "content": "こんにちは！"},
-        ]
-        pattern = stub.extract_pattern(conversation, quality_score=0.8)
-        assert pattern is not None
-        assert isinstance(pattern, LearningPattern)
-        assert pattern.pattern_type == "dialogue_structure"
-        assert pattern.quality_score == 0.8
-
-    def test_extract_from_empty_returns_none(self) -> None:
-        stub = self._stub()
-        assert stub.extract_pattern([], quality_score=0.5) is None
-
-    def test_extract_features_contain_turn_count(self) -> None:
-        stub = self._stub()
-        conversation = [
-            {"role": "user", "content": "質問"},
-            {"role": "assistant", "content": "回答"},
-            {"role": "user", "content": "追加質問"},
-        ]
-        pattern = stub.extract_pattern(conversation, quality_score=0.6)
-        assert pattern is not None
-        assert pattern.features["turn_count"] == 3.0
-
-
-class TestFederatedQueue:
-    """Sync queue operations."""
-
-    def test_queue_increments_count(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            stub = FederatedStub(data_dir=Path(tmp))
-            assert stub.get_pending_count() == 0
-
-            pattern = stub.extract_pattern(
-                [{"role": "user", "content": "hi"}], quality_score=0.5
-            )
-            assert pattern is not None
-            stub.queue_for_sync(pattern)
-            assert stub.get_pending_count() == 1
-
-            stub.queue_for_sync(pattern)
-            assert stub.get_pending_count() == 2
-
-
-class TestFederatedSyncStatus:
-    """Sync status reporting."""
-
-    def test_standalone_mode(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            stub = FederatedStub(data_dir=Path(tmp))
-            status = stub.get_sync_status()
-            assert status["status"] == "standalone_mode"
-            assert status["sync_available"] is False
-            assert status["pending_patterns"] == 0
-
-
-class TestFederatedPrivacyHash:
-    """Privacy hash determinism."""
-
-    def test_same_features_produce_same_hash(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            stub = FederatedStub(data_dir=Path(tmp))
-            features: Dict[str, float] = {"turn_count": 3.0, "avg_length": 10.0}
-            h1 = stub._compute_privacy_hash(features)
-            h2 = stub._compute_privacy_hash(features)
-            assert h1 == h2
-            assert len(h1) == 16
-
-    def test_different_features_produce_different_hash(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            stub = FederatedStub(data_dir=Path(tmp))
-            h1 = stub._compute_privacy_hash({"turn_count": 1.0})
-            h2 = stub._compute_privacy_hash({"turn_count": 2.0})
-            assert h1 != h2
 
 
 # ─── 2d. core/health_check.py ───────────────────────────────────

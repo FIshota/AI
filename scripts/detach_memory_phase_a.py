@@ -9,7 +9,7 @@
   - SSD:      /Volumes/backup/ai-chan-archive/<stamp>/
 
 暗号化:
-  - 機微ディレクトリ (data/, logs/, personality/, yamato_dna/) は Fernet 暗号化
+  - 機微ディレクトリ (data/, logs/, personality/) は Fernet 暗号化
   - 公開・軽量ディレクトリ (models/, output/, reports/) は平文 tar.gz
   - transport key は keys/transport.key に両方保存
 
@@ -38,7 +38,7 @@ TARGETS: list[tuple[str, bool]] = [
     ("data",        True),
     ("logs",        True),
     ("personality", True),
-    ("yamato_dna",  True),
+    # M3 (2026-04-21): yamato_dna 削除 — スタブのみで実装なし
     ("models",      False),
     ("output",      False),
     ("reports",     False),

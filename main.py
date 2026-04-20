@@ -137,7 +137,7 @@ def _ensure_runtime_dirs(base_dir: Path) -> None:
 
     記憶切り離し (Phase B) 後の新生起動 / CI / 公開デモ での
     "記憶ゼロから動く ai-chan" を保証する最小限の土台整備。
-    personality/ と yamato_dna/ はアーカイブ復元でしか作らない方針なので除外。
+    personality/ はアーカイブ復元でしか作らない方針なので除外。
     """
     for d in ("data", "logs", "output", "reports", "backups", "models"):
         (base_dir / d).mkdir(parents=True, exist_ok=True)

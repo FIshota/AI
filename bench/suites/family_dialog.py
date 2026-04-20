@@ -67,6 +67,27 @@ def run(
     records = evaluate_suite(items, cfg, judges=_load_judges())
     agg = aggregate(records)
 
+    # H-1: per-item details を JSONL で吐く (aspect 別集計で使用)
+    import json
+    import os
+    from datetime import date
+    from pathlib import Path
+    out_dir = Path("bench/results") / date.today().isoformat() / model_family
+    out_dir.mkdir(parents=True, exist_ok=True)
+    details_path = out_dir / f"{NAME}_details.jsonl"
+    try:
+        with details_path.open("w", encoding="utf-8") as f:
+            for r in records:
+                f.write(json.dumps({
+                    "qid": r.qid,
+                    "question": r.question,
+                    "prediction": r.prediction[:500],
+                    "scores": r.scores,
+                    "latency_sec": r.latency_sec,
+                }, ensure_ascii=False) + "\n")
+    except Exception:  # noqa: BLE001
+        pass
+
     results: list[FamilyDialogResult] = []
     for judge_name, mean in agg["means"].items():
         results.append(

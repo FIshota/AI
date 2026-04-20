@@ -2265,183 +2265,50 @@ class AiChan:
     # Sprint 2.1: セキュリティ機能
     # ──────────────────────────────────────────────────────────
 
+    # ──────────────────────────────────────────────────────────
+    # Security/Backup/Lockdown ops — 実体は core/ops/security_ops.py
+    # M2 (2026-04-21): God Object 解体のため委譲化。
+    # ──────────────────────────────────────────────────────────
+
     def _run_security_check(self) -> str:
-        lines: list[str] = ["\U0001f6e1\ufe0f セキュリティ診断を実行するね！\n"]
-        if getattr(self, "host_guardian", None):
-            try:
-                summary = self.host_guardian.get_summary_text()
-                lines.append("【PCセキュリティ】")
-                lines.append(summary)
-            except Exception as e:
-                lines.append(f"【PCセキュリティ】確認できなかったよ: {e}")
-        if getattr(self, "integrity", None):
-            try:
-                result = self.integrity.verify()
-                if result["status"] == "ok":
-                    lines.append("\n【データ整合性】\u2705 異常なし")
-                else:
-                    lines.append(f"\n【データ整合性】\u26a0 問題あり: 変更{len(result['modified'])}件、消失{len(result['missing'])}件")
-            except Exception:
-                pass
-        if getattr(self, "anomaly_detector", None):
-            try:
-                alerts = self.anomaly_detector.run_checks()
-                critical = [a for a in alerts if a.severity == "CRITICAL"]
-                if critical:
-                    lines.append(f"\n【異常検知】\U0001f534 重大アラート {len(critical)}件")
-                    for a in critical[:3]:
-                        lines.append(f"  → {a.message}")
-                else:
-                    lines.append("\n【異常検知】\u2705 異常なし")
-            except Exception:
-                pass
-        if getattr(self, "audit", None):
-            try:
-                chain = self.audit.verify_chain()
-                if chain["valid"]:
-                    lines.append(f"\n【監査ログ】\u2705 チェーン正常 ({chain['total']}件)")
-                else:
-                    lines.append(f"\n【監査ログ】\U0001f534 チェーン破損 (行{chain['broken_at']})")
-            except Exception:
-                pass
-        return "\n".join(lines)
+        from core.ops import security_ops
+        return security_ops.run_security_check(self)
 
     def _run_backup(self) -> str:
-        if not getattr(self, "backup", None):
-            return "バックアップ機能が初期化されていないよ。"
-        try:
-            result = self.backup.create_backup(label="manual")
-            return (
-                f"\u2705 バックアップ完了！\n"
-                f"サイズ: {result['size_mb']}MB、ファイル数: {result['files']}"
-            )
-        except Exception as e:
-            return f"バックアップに失敗したよ: {e}"
+        from core.ops import security_ops
+        return security_ops.run_backup(self)
 
     def _show_backup_list(self) -> str:
-        if not getattr(self, "backup", None):
-            return "バックアップ機能が初期化されていないよ。"
-        backups = self.backup.list_backups()
-        if not backups:
-            return "まだバックアップはないよ。「バックアップ作成」で作れるよ！"
-        lines = ["\U0001f4e6 バックアップ一覧："]
-        for b in backups[-5:]:
-            lines.append(f"  \u2022 {b['filename']} ({b['size_mb']}MB)")
-        return "\n".join(lines)
+        from core.ops import security_ops
+        return security_ops.show_backup_list(self)
 
     def _run_lockdown(self, reason: str) -> str:
-        if not getattr(self, "kill_switch", None):
-            return "キルスイッチが初期化されていないよ。"
-        try:
-            self.kill_switch.backup_and_halt(reason)
-            return (
-                f"\U0001f512 緊急ロックダウンを実行したよ！\n"
-                f"理由: {reason}\n"
-                f"外部通信を遮断し、バックアップを作成しました。\n"
-                f"解除するには「アイ解除」と話しかけてね。"
-            )
-        except Exception as e:
-            return f"ロックダウンに失敗: {e}"
+        from core.ops import security_ops
+        return security_ops.run_lockdown(self, reason)
 
     def _run_unlock(self) -> str:
-        if not getattr(self, "kill_switch", None):
-            return "キルスイッチが初期化されていないよ。"
-        result = self.kill_switch.unlock(confirm="アイ解除")
-        if result["unlocked"]:
-            return "\U0001f513 ロックダウンを解除したよ！通常モードに戻るね。"
-        return f"解除できなかったよ: {result['reason']}"
+        from core.ops import security_ops
+        return security_ops.run_unlock(self)
 
     # ──────────────────────────────────────────────────────────
-    # Sprint J: サーバー・自律行動メソッド
+    # Sprint J: サーバー系 — 実体は core/ops/server_ops.py
     # ──────────────────────────────────────────────────────────
 
     def _server_status(self) -> str:
-        sh = getattr(self, "server_home", None)
-        if sh is None or not sh.enabled:
-            return (
-                "\U0001f3e0 サーバー（アイの家）はまだ設定されていないよ。\n"
-                "「サーバー設定」で接続先を登録してね！"
-            )
-        lines: list[str] = ["\U0001f3e0 アイの家（サーバー）の状態だよ：\n"]
-        reachable = sh.is_reachable()
-        if not reachable:
-            lines.append("\u274c サーバーに接続できないよ…。電源やLANケーブルを確認してね。")
-            return "\n".join(lines)
-        lines.append("\u2705 サーバーに接続できたよ！")
-        try:
-            health = sh.health_check()
-            if health.get("ok"):
-                if health.get("uptime"):
-                    lines.append(f"\u23f1 稼働時間: {health['uptime'].strip()}")
-                if health.get("disk_usage"):
-                    lines.append(f"\U0001f4be ディスク: {health['disk_usage'].strip()}")
-                if health.get("memory"):
-                    lines.append(f"\U0001f9e0 メモリ: {health['memory'].strip()}")
-        except Exception:
-            pass
-        ai_env = getattr(self, "server_ai_env", None)
-        if ai_env:
-            lines.append(f"\n{ai_env.get_status_text()}")
-        prom = getattr(self, "prometheus", None)
-        if prom:
-            lines.append(f"\n{prom.get_summary_text()}")
-        ks = getattr(self, "knowledge_sync", None)
-        if ks:
-            lines.append(f"\n{ks.get_sync_status()}")
-        return "\n".join(lines)
+        from core.ops import server_ops
+        return server_ops.server_status(self)
 
     def _server_docker(self) -> str:
-        sh = getattr(self, "server_home", None)
-        if sh is None or not sh.enabled:
-            return "\U0001f3e0 サーバーがまだ設定されていないよ。「サーバー設定」で登録してね！"
-        try:
-            containers = sh.docker_ps()
-        except Exception as e:
-            return f"Docker情報を取得できなかったよ: {e}"
-        if not containers:
-            return "\U0001f433 サーバーにDockerコンテナはないみたい。"
-        lines = [f"\U0001f433 Dockerコンテナ一覧（{len(containers)}件）："]
-        for c in containers:
-            status_icon = "\U0001f7e2" if "Up" in c.get("status", "") else "\U0001f534"
-            lines.append(f"  {status_icon} {c.get('name', '?')} - {c.get('status', '?')}")
-        return "\n".join(lines)
+        from core.ops import server_ops
+        return server_ops.server_docker(self)
 
     def _server_sync(self) -> str:
-        ks = getattr(self, "knowledge_sync", None)
-        if ks is None:
-            return "\U0001f3e0 サーバーがまだ設定されていないよ。「サーバー設定」で登録してね！"
-        lines = ["\U0001f4e1 サーバーとの知識同期を開始するね…\n"]
-        push_result = ks.push_knowledge()
-        if push_result.get("ok"):
-            action = push_result.get("action", "")
-            if action == "no_changes":
-                lines.append("\u2b06 アップロード: 変更なし（最新状態）")
-            else:
-                lines.append("\u2b06 アップロード: \u2705 完了！")
-        else:
-            lines.append(f"\u2b06 アップロード: \u274c {push_result.get('error', '失敗')}")
-        pull_result = ks.pull_knowledge()
-        if pull_result.get("ok"):
-            pulled = pull_result.get("pulled", 0)
-            if pull_result.get("action") == "nothing_to_pull":
-                lines.append("\u2b07 ダウンロード: 新しいデータなし")
-            else:
-                lines.append(f"\u2b07 ダウンロード: \u2705 {pulled}件取得！")
-        else:
-            lines.append(f"\u2b07 ダウンロード: \u274c {pull_result.get('error', '失敗')}")
-        return "\n".join(lines)
+        from core.ops import server_ops
+        return server_ops.server_sync(self)
 
     def _server_setup_guide(self) -> str:
-        return (
-            "\U0001f3e0 サーバー（アイの家）の設定方法だよ：\n\n"
-            "config/settings.json の「server_home」セクションを編集してね：\n"
-            "  - enabled: true にする\n"
-            "  - host: サーバーのIPアドレス（例: 192.168.3.86）\n"
-            "  - port: SSHポート（通常22）\n"
-            "  - username: SSHユーザー名\n"
-            "  - password: SSHパスワード（暗号化して保存されるよ）\n\n"
-            "設定後、「サーバー状態」で接続テストできるよ！"
-        )
+        from core.ops import server_ops
+        return server_ops.server_setup_guide()
 
     def _proactive_talk(self) -> str:
         import random

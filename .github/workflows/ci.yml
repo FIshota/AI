@@ -127,3 +127,14 @@ jobs:
             -k "not llama and not mlx and not voice and not stt and not tts" \
             || echo "::warning::pytest has failures — IP-0 non-blocking"
         continue-on-error: true
+
+      # ─ J-1: Memory Honesty regression gate (BLOCKING) ─
+      # これらは G-1 / H-2 で固めた 4 軸採点の最低保証。
+      # 新規にハードコードされた honesty seed が消えたり、
+      # LocalJudge の H1..H4 パース互換性が壊れたら即落とす。
+      - name: pytest (memory-honesty — blocking)
+        run: |
+          pytest -q --tb=short \
+            tests/test_memory_phrasing.py \
+            tests/test_memory_honesty_integration.py \
+            tests/test_local_judge_honesty.py

@@ -144,7 +144,11 @@ class AutonomousConfig(BaseModel):
     allow_network: bool = True
     weather_city: str = "Tokyo"
     schedule_enabled: bool = True
-    clipboard_watch: bool = True
+    # B5 fix (2026-04-21): プライバシー侵害防止のためデフォルト OFF。
+    # 明示的に同意した家族のみ有効化する。
+    clipboard_watch: bool = False
+    screenshot_enabled: bool = False
+    consent_ts: str = ""  # ISO8601; 同意 UI で記録
 
 
 class TTSConfig(BaseModel):

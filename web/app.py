@@ -13,13 +13,68 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request, Depends
+import hmac
+import secrets
+
+from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+
+# ── B1 fix (2026-04-21): Bearer token 認証 ─────────────────────
+# 環境変数 AICHAN_API_TOKEN を設定すると全 /api/* ルートに認証必須。
+# 未設定時は localhost/127.0.0.1 からのリクエストのみ許可し、
+# 外部バインドを拒否する（fail-closed）。
+#
+# 運用:
+#   AICHAN_API_TOKEN=$(python -c 'import secrets;print(secrets.token_urlsafe(32))')
+#   curl -H "Authorization: Bearer $AICHAN_API_TOKEN" http://localhost:8080/api/health
+
+_LOCAL_ADDRS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+def _get_api_token() -> Optional[str]:
+    """環境変数から API token を取得する。未設定なら None。"""
+    token = os.environ.get("AICHAN_API_TOKEN", "").strip()
+    return token if token else None
+
+
+async def require_auth(
+    request: Request,
+    authorization: Optional[str] = Header(default=None),
+) -> None:
+    """Bearer token 認証。token 未設定時は localhost のみ許可。
+
+    - AICHAN_API_TOKEN 設定済み: `Authorization: Bearer <token>` 必須、
+      `hmac.compare_digest` で定時間比較。
+    - 未設定: リモート IP が localhost でなければ 401。
+    """
+    expected = _get_api_token()
+    if expected is None:
+        client_host = request.client.host if request.client else ""
+        if client_host not in _LOCAL_ADDRS:
+            logger.warning(
+                "AICHAN_API_TOKEN 未設定で非 localhost からのアクセス: %s",
+                client_host,
+            )
+            raise HTTPException(
+                status_code=401,
+                detail=(
+                    "API token 未設定のため localhost のみ許可されています。"
+                    "AICHAN_API_TOKEN 環境変数を設定してください。"
+                ),
+            )
+        return
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Bearer token 必須")
+    provided = authorization[len("Bearer "):].strip()
+    if not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="認証に失敗しました")
 
 WEB_DIR = Path(__file__).parent
 STATIC_DIR = WEB_DIR / "static"
@@ -233,7 +288,7 @@ def create_app(base_dir: str | Path = ".") -> FastAPI:
     # ── エンドポイント ────────────────────────────────────
 
     @app.get("/api/health", response_model=HealthResponse)
-    async def health():
+    async def health(_auth: None = Depends(require_auth)):
         b = app.state.bridge
         ai = b.ai
         return HealthResponse(
@@ -247,7 +302,7 @@ def create_app(base_dir: str | Path = ".") -> FastAPI:
     if _RATE_LIMIT_AVAILABLE and _limiter is not None:
         @app.post("/api/chat", response_model=ChatResponse)
         @_limiter.limit("30/minute")
-        async def chat(request: Request, req: ChatRequest):
+        async def chat(request: Request, req: ChatRequest, _auth: None = Depends(require_auth)):
             b = app.state.bridge
             if b.ai is None or not getattr(b.ai, "llm_loaded", False):
                 raise HTTPException(503, "アイはまだ準備中です")
@@ -259,7 +314,7 @@ def create_app(base_dir: str | Path = ".") -> FastAPI:
                 raise HTTPException(500, "内部エラーが発生しました")
     else:
         @app.post("/api/chat", response_model=ChatResponse)
-        async def chat(req: ChatRequest):  # type: ignore[misc]
+        async def chat(req: ChatRequest, _auth: None = Depends(require_auth)):  # type: ignore[misc]
             b = app.state.bridge
             if b.ai is None or not getattr(b.ai, "llm_loaded", False):
                 raise HTTPException(503, "アイはまだ準備中です")
@@ -271,7 +326,7 @@ def create_app(base_dir: str | Path = ".") -> FastAPI:
                 raise HTTPException(500, "内部エラーが発生しました")
 
     @app.get("/api/greeting", response_model=GreetingResponse)
-    async def greeting(trigger: str = "chat_open"):
+    async def greeting(trigger: str = "chat_open", _auth: None = Depends(require_auth)):
         b = app.state.bridge
         if b.ai is None or not getattr(b.ai, "llm_loaded", False):
             return GreetingResponse(greeting="もうちょっとだけ待ってね…", emotion={})
@@ -283,7 +338,7 @@ def create_app(base_dir: str | Path = ".") -> FastAPI:
             return GreetingResponse(greeting="どうしたの？", emotion={})
 
     @app.get("/api/emotion", response_model=EmotionResponse)
-    async def emotion():
+    async def emotion(_auth: None = Depends(require_auth)):
         b = app.state.bridge
         state, label, emoji = b.get_emotion()
         return EmotionResponse(state=state, label=label, emoji=emoji)
@@ -304,11 +359,11 @@ def create_app(base_dir: str | Path = ".") -> FastAPI:
     if _RATE_LIMIT_AVAILABLE and _limiter is not None:
         @app.post("/api/akashic", response_model=AkashicApiResponse)
         @_limiter.limit("10/minute")
-        async def akashic_endpoint(request: Request, req: AkashicRequest):
+        async def akashic_endpoint(request: Request, req: AkashicRequest, _auth: None = Depends(require_auth)):
             return await _run_akashic(req.text, req.depth, AkashicApiResponse)
     else:
         @app.post("/api/akashic", response_model=AkashicApiResponse)
-        async def akashic_endpoint(req: AkashicRequest):  # type: ignore[misc]
+        async def akashic_endpoint(req: AkashicRequest, _auth: None = Depends(require_auth)):  # type: ignore[misc]
             return await _run_akashic(req.text, req.depth, AkashicApiResponse)
 
     async def _run_akashic(text: str, depth: int, ResponseModel) -> object:

@@ -1,6 +1,6 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # ai-chan requirements
-# 更新: 2026-04-19 (Security sweep: Stage 1 bumps + vosk Py3.13 fix)
+# 更新: 2026-04-21 (H10: minor bumps — cryptography/fastapi/pydantic/requests)
 # 対応環境: Python 3.10+ (arm64 ネイティブ推奨、Py3.13 対応)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -8,8 +8,8 @@
 llama-cpp-python>=0.3.4
 
 # ── セキュリティ・暗号化 ────────────────────────────────
-# cryptography: 44.x で CVE 群修正、46.x は破壊的変更ありのため保留
-cryptography>=44.0.0
+# cryptography: 45.x 系で CVE-2025-xxxx 修正、46.x は ABI 変更のため保留
+cryptography>=45.0.0
 python-jose[cryptography]>=3.5.0
 
 # ── 記憶・ベクトル検索 ──────────────────────────────────
@@ -32,8 +32,9 @@ soundfile>=0.13.0
 librosa>=0.10.0
 
 # ── Web API ──────────────────────────────────────────────
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
+# H10 (2026-04-21): FastAPI 0.118+ で Starlette 依存の CVE 修正済
+fastapi>=0.118.0
+uvicorn[standard]>=0.34.0
 slowapi>=0.1.9
 
 # ── Web リサーチ ─────────────────────────────────────────
@@ -57,17 +58,23 @@ Pillow>=11.0.0
 pytesseract>=0.3.13
 
 # ── ML / NLP ─────────────────────────────────────────────
-# torch: Py3.12 以下は transformers 4.x 互換で 2.4 未満、Py3.13 は 2.6+ 必須
-torch>=2.2.0,<2.5; python_version < "3.13"
-torch>=2.6.0; python_version >= "3.13"
+# H6 fix (2026-04-21): torch はデフォルト依存から除外（~2GB 削減）。
+#   Moondream (core/vision_engine.py Tier 1) を使う場合のみ optional install:
+#     pip install "torch>=2.2.0,<2.5; python_version < '3.13'"
+#     pip install "torch>=2.6.0; python_version >= '3.13'"
+#   画像説明は Tier 2 (Tesseract OCR) / Tier 3 (ファイル情報) が既定。
+#   将来は ONNX Runtime 版 Moondream への切替を計画（H6 後続）。
 # transformers: 5.x は破壊的変更多数のため 4.x 止め
-transformers>=4.44.0,<5.0
+# H6 fix: transformers も torch 前提ため optional に移動。
+#   NLP 補助が必要な場合: pip install "transformers>=4.44.0,<5.0"
 sentencepiece>=0.1.99
 gguf>=0.10.0
 tiktoken>=0.8.0
 safetensors>=0.4.5
 scikit-learn>=1.5.0
 scipy>=1.13.0
+# ONNX Runtime: CPU 推論用（Moondream 代替候補）
+# onnxruntime>=1.18.0
 
 # ── サーバー接続 ─────────────────────────────────────────
 # paramiko: 4.x は API 変更あり、3.x で最新
@@ -88,12 +95,13 @@ google-auth-oauthlib>=1.2.0
 notion-client>=2.2.0,<3.0
 
 # ── ユーティリティ ───────────────────────────────────────
-rich>=13.9.0
-click>=8.1.8
-pydantic>=2.9.0
+# H10 (2026-04-21): rich/click/pydantic minor bumps
+rich>=14.0.0
+click>=8.2.0
+pydantic>=2.11.0
 python-dateutil>=2.9.0
-python-dotenv>=1.0.1
-PyYAML>=6.0.1
+python-dotenv>=1.1.0
+PyYAML>=6.0.2
 
 # ── macOS 固有 (Apple Silicon arm64 ネイティブ環境のみ) ──
 # mlx>=0.10.0

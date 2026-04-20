@@ -16,6 +16,9 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent
 sys.path.insert(0, str(BASE_DIR))
 
+# B10 fix: logger を最初に定義（dotenv ブロックより前）
+logger = logging.getLogger(__name__)
+
 # .env ファイルから環境変数をロード（存在する場合）
 try:
     from dotenv import load_dotenv
@@ -25,8 +28,6 @@ try:
         logger.debug(".env ファイルをロードしました: %s", _env_file)
 except ImportError:
     pass  # python-dotenv 未インストール時はスキップ
-
-logger = logging.getLogger(__name__)
 
 
 # ────────────────────────────────────────────────────────────

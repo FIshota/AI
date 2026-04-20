@@ -10,14 +10,31 @@ from datetime import datetime, date
 from typing import Optional
 
 from core.memory import MemoryManager
+from core.tenant import SELF_TENANT, TenantId, tenant_dir
+from utils.secure_store import load_json as _load_json_enc, save_json as _save_json_enc
 
 
 class DiaryManager:
-    def __init__(self, data_dir: Path, memory: MemoryManager):
+    def __init__(
+        self,
+        data_dir: Path,
+        memory: MemoryManager,
+        key: Optional[bytes] = None,
+        tenant: TenantId | None = None,
+    ):
+        """B2 fix (2026-04-21): key を渡すと全日記が AES-256-GCM で暗号化される。
+        H2 fix (2026-04-21): tenant ごとに `data/tenants/{tenant}/diary/` に書き込む。
+        旧パス `data/diary/` が存在すれば読み込み互換として fallback する。
+        """
         self.data_dir = Path(data_dir)
-        self.diary_dir = self.data_dir / "diary"
+        self._tenant = tenant or SELF_TENANT
+        # 新パス: data/tenants/{tenant}/diary/
+        self.diary_dir = tenant_dir(self.data_dir, self._tenant) / "diary"
         self.diary_dir.mkdir(parents=True, exist_ok=True)
+        # 旧パス (後方互換読み込み)
+        self._legacy_diary_dir = self.data_dir / "diary"
         self.memory = memory
+        self._key = key
 
     # ─── 書き込み ──────────────────────────────────────────────────
 
@@ -78,9 +95,7 @@ class DiaryManager:
         }
 
         path = self.diary_dir / f"{today_str}.json"
-        path.write_text(
-            json.dumps(entry, ensure_ascii=False, indent=2), "utf-8"
-        )
+        _save_json_enc(path, entry, self._key)
         return entry
 
     def _parse_memory_content(self, content: str) -> Optional[dict]:
@@ -100,17 +115,24 @@ class DiaryManager:
         if date_str is None:
             date_str = date.today().isoformat()
         path = self.diary_dir / f"{date_str}.json"
-        if path.exists():
-            try:
-                return json.loads(path.read_text("utf-8"))
-            except Exception:
-                pass
+        result = _load_json_enc(path, self._key, default=None)
+        if isinstance(result, dict):
+            return result
+        # H2 fix: 旧パス fallback
+        if self._legacy_diary_dir.exists():
+            legacy_path = self._legacy_diary_dir / f"{date_str}.json"
+            legacy = _load_json_enc(legacy_path, self._key, default=None)
+            if isinstance(legacy, dict):
+                return legacy
         return None
 
     def list_entries(self) -> list[str]:
         """日記がある日付の一覧を返します（新しい順）"""
-        dates = [p.stem for p in sorted(self.diary_dir.glob("*.json"), reverse=True)]
-        return dates
+        dates = {p.stem for p in self.diary_dir.glob("*.json")}
+        # H2 fix: 旧パスからも拾う
+        if self._legacy_diary_dir.exists():
+            dates.update(p.stem for p in self._legacy_diary_dir.glob("*.json"))
+        return sorted(dates, reverse=True)
 
     def format_for_display(self, entry: dict) -> str:
         """日記エントリを表示用テキストに変換"""

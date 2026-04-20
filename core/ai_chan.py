@@ -163,8 +163,29 @@ class AiChan:
     対話の受け取り・処理・応答生成を担当します。
     """
 
-    def __init__(self, base_dir: str | Path = "."):
+    def __init__(
+        self,
+        base_dir: str | Path = ".",
+        settings: dict | None = None,
+        deps: "AiChanDeps | None" = None,
+    ):
+        """
+        Parameters
+        ----------
+        base_dir : str | Path
+            プロジェクトルート。config/settings.json などの基準パス。
+        settings : dict | None
+            外部から注入する設定辞書。main.py `--voice` パス等で使用。
+            None の場合は `_load_config()` が `config/settings.json` を読む。
+        deps : AiChanDeps | None
+            H1 (2026-04-21): 依存注入コンテナ。
+            None のフィールドは従来通り内部で new される。
+            テストからは fake subsystem を差し替えられる。
+        """
+        from core.deps import AiChanDeps  # 遅延 import（循環回避）
         self.base_dir = Path(base_dir)
+        self._injected_settings = settings  # B10 fix: silent TypeError 回避
+        self._deps: AiChanDeps = deps if deps is not None else AiChanDeps()
         self._load_config()
 
         # E-08: settings.json ホットリロード
@@ -176,6 +197,10 @@ class AiChan:
         self.conversation_history: list[dict] = []
         self.turn_count = 0
 
+        # H5 fix (2026-04-21): 会話履歴変更のスレッド安全性確保
+        import threading as _threading
+        self._history_lock = _threading.Lock()
+
         # 分割モジュールのインスタンスを保持
         self._cmd_handler = CommandHandler(self)
         self._ctx_builder = MemoryContextBuilder(self)
@@ -183,6 +208,11 @@ class AiChan:
 
         # Item #19: 並列フェッチ用スレッドプール
         self._executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="aichan")
+        # H5 fix (2026-04-21): batch_updates 専用の単一ワーカー executor
+        # 複数の _batch_updates が並列実行されて emotion_history/diary に競合するのを防ぐ。
+        self._batch_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="aichan-batch"
+        )
 
         # Item #22: JSONL 会話ログのパス
         self._conv_log_path = self.base_dir / "data" / "conversation_log.jsonl"
@@ -217,7 +247,11 @@ class AiChan:
                     f"ファイルを修正するか、デフォルトを復元してください"
                 )
 
-        self.settings = _load_json(settings_path, "settings.json")
+        # B10 fix: 外部注入 settings があれば優先（main.py --voice 経由）
+        if self._injected_settings is not None:
+            self.settings = self._injected_settings
+        else:
+            self.settings = _load_json(settings_path, "settings.json")
         self.persona  = _load_json(persona_path,  "persona.json")
 
         # personality/*.yaml が存在すれば優先的に上書き
@@ -304,14 +338,17 @@ class AiChan:
         mem_cfg = cfg["memory"]
         sec_cfg = cfg["security"]
 
-        # 記憶管理
+        # 記憶管理 (H1: deps 注入があれば採用)
         db_path  = self.base_dir / mem_cfg["db_path"]
         key_file = self.base_dir / sec_cfg["key_file"]
-        self.memory = MemoryManager(
-            db_path=db_path,
-            key_file=key_file,
-            encrypt=sec_cfg["encrypt_database"],
-        )
+        if self._deps.memory is not None:
+            self.memory = self._deps.memory
+        else:
+            self.memory = MemoryManager(
+                db_path=db_path,
+                key_file=key_file,
+                encrypt=sec_cfg["encrypt_database"],
+            )
         self.memory.short_term_max = mem_cfg["short_term_max"]
 
         # personality/memories.yaml のコア記憶を絶対記憶として投入
@@ -327,13 +364,19 @@ class AiChan:
             except Exception as e:
                 print(f"[Memory] コア記憶 bootstrap 失敗: {e}", flush=True)
 
-        # 感情エンジン
+        # 感情エンジン (H1: deps 注入対応)
         emotion_state_file = self.base_dir / "data" / "emotion_state.json"
-        self.emotion = EmotionEngine(state_file=emotion_state_file)
+        if self._deps.emotion is not None:
+            self.emotion = self._deps.emotion
+        else:
+            self.emotion = EmotionEngine(state_file=emotion_state_file)
 
-        # LLMエンジン
+        # LLMエンジン (H1: deps 注入対応)
         model_path = self.base_dir / cfg["llm"]["model_path"]
-        self.llm = LLMEngine(model_path=model_path, config=cfg["llm"])
+        if self._deps.llm is not None:
+            self.llm = self._deps.llm
+        else:
+            self.llm = LLMEngine(model_path=model_path, config=cfg["llm"])
 
         # 擬似学習エンジン
         learning_dir = self.base_dir / "data" / "learning"
@@ -352,12 +395,45 @@ class AiChan:
         self.compressor      = MemoryCompressor(self.memory)
         self.topic_tracker   = TopicTracker(self.base_dir / "data")
         self.scheduler       = ScheduleManager(self.base_dir / "data")
-        self.anniversary     = AnniversaryManager(self.base_dir / "data")
-        self.diary           = DiaryManager(self.base_dir / "data", self.memory)
+        # B2/B3 fix (2026-04-21): マスター鍵を Keychain/passphrase から取得し
+        # diary/emotion_history/anniversary を暗号化する。
+        try:
+            from utils.keychain import get_master_key
+            _master_key: bytes | None = get_master_key(self.base_dir)
+        except Exception as exc:
+            logger.warning("マスター鍵取得失敗、平文モードにフォールバック: %s", exc)
+            _master_key = None
+
+        # H1: deps 注入があれば優先
+        self.anniversary = (
+            self._deps.anniversary
+            if self._deps.anniversary is not None
+            else AnniversaryManager(self.base_dir / "data", key=_master_key)
+        )
+        self.diary = (
+            self._deps.diary
+            if self._deps.diary is not None
+            else DiaryManager(self.base_dir / "data", self.memory, key=_master_key)
+        )
         self._last_diary_date = datetime.now().date()
 
-        # 成長記録系
-        self.emotion_history = EmotionHistory(self.base_dir / "data")
+        # 成長記録系 (H1: deps 注入対応)
+        self.emotion_history = (
+            self._deps.emotion_history
+            if self._deps.emotion_history is not None
+            else EmotionHistory(self.base_dir / "data", key=_master_key)
+        )
+
+        # B8 fix (2026-04-21): GDPR 17/20 条対応 (purge / export)
+        from core.subject_rights import SubjectRightsManager
+        self.subject_rights = SubjectRightsManager(
+            base_dir=self.base_dir,
+            memory=self.memory,
+            diary=self.diary,
+            emotion_history=self.emotion_history,
+            anniversary=self.anniversary,
+            audit_log=getattr(self, "audit_log", None),
+        )
         self.interest_map    = InterestMap(self.base_dir / "data")
         self.goal_tracker    = GoalTracker(self.base_dir / "data")
 
@@ -2105,12 +2181,14 @@ class AiChan:
                     except Exception:
                         pass
 
-            # Item #19: ThreadPoolExecutor で並列実行
-            self._executor.submit(_batch_updates)
+            # H5 fix (2026-04-21): 単一ワーカー executor で直列実行
+            # (ThreadPoolExecutor(max_workers=1) なのでキューに積まれる)
+            self._batch_executor.submit(_batch_updates)
 
-            # Item #1: 動的スライディングウィンドウでトリミング
-            if len(self.conversation_history) > 30:
-                self.conversation_history = self.conversation_history[-30:]
+            # Item #1: 動的スライディングウィンドウでトリミング (H5: lock で保護)
+            with self._history_lock:
+                if len(self.conversation_history) > 30:
+                    self.conversation_history = self.conversation_history[-30:]
         else:
             self.conversation_history = self.conversation_history[:-2]
 
@@ -2747,8 +2825,18 @@ class AiChan:
         return "\n".join(lines)
 
     def _handle_web_fetch(self, url: str) -> str:
+        # B4 fix (2026-04-20): url_guard で SSRF 防止
+        # 他モジュール (github_learner.py, image_gen.py) では呼んでいるのに
+        # 最も露出度の高いユーザーハンドラで呼び忘れていたため追加。
         if not url.startswith(("http://", "https://")):
             return "URLは http:// か https:// で始まる必要があるよ。"
+        try:
+            from utils.url_guard import assert_safe_http_url
+            assert_safe_http_url(url)
+        except ImportError:
+            pass  # url_guard が無ければ最低限のチェックのみ
+        except ValueError as exc:
+            return f"そのURLは安全でないため取得しないよ: {exc}"
         from core.web_fetcher import web_fetch_text
         try:
             text = web_fetch_text(url, max_chars=2000)

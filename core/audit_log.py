@@ -24,8 +24,17 @@ def _utcnow_iso() -> str:
 
 
 def _hash_line(line: str) -> str:
-    """SHA-256 の先頭16文字を返す"""
-    return hashlib.sha256(line.encode("utf-8")).hexdigest()[:16]
+    """SHA-256 full digest (64文字 / 256bit) を返す。
+
+    H4 fix (2026-04-20): 旧実装は先頭16文字(64bit)のみ返していたが、
+    誕生日攻撃で 2^32 試行で衝突可能であり、改ざん検知には不足。
+    full hash (256bit) に拡張し、衝突計算量を 2^128 に。
+
+    後方互換: 既存の 16 文字ハッシュを含む行は `_verify_line` 側で
+    prefix match 許容するか、migration script で再計算必要。
+    新規書き込みは常に full hash になる。
+    """
+    return hashlib.sha256(line.encode("utf-8")).hexdigest()
 
 
 class AuditLog:

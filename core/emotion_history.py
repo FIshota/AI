@@ -8,6 +8,10 @@ import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from collections import defaultdict
+from typing import Optional
+
+from core.tenant import SELF_TENANT, TenantId, tenant_dir
+from utils.secure_store import load_json as _load_json_enc, save_json as _save_json_enc
 
 logger = logging.getLogger(__name__)
 
@@ -16,25 +20,34 @@ EMOTION_KEYS = ["happiness", "curiosity", "affection", "energy", "anxiety"]
 
 
 class EmotionHistory:
-    def __init__(self, data_dir: Path):
-        self._path = Path(data_dir) / "emotion_history.json"
+    def __init__(
+        self,
+        data_dir: Path,
+        key: Optional[bytes] = None,
+        tenant: TenantId | None = None,
+    ):
+        """B2 fix (2026-04-21): key を渡すと履歴が暗号化される。
+        H2 fix (2026-04-21): tenant ごとに data/tenants/{tenant}/emotion_history.json に書き込む。
+        旧パス `data/emotion_history.json` は後方互換で読み込みのみ対応。
+        """
+        self._tenant = tenant or SELF_TENANT
+        self._path = tenant_dir(Path(data_dir), self._tenant) / "emotion_history.json"
+        self._legacy_path = Path(data_dir) / "emotion_history.json"
+        self._key = key
         self._records: list[dict] = []
         self._load()
 
     def _load(self):
-        if self._path.exists():
-            try:
-                self._records = json.loads(self._path.read_text("utf-8"))
-            except Exception:
-                self._records = []
+        loaded = _load_json_enc(self._path, self._key, default=None)
+        if loaded is None and self._legacy_path.exists():
+            # H2 fix: 旧パス fallback
+            loaded = _load_json_enc(self._legacy_path, self._key, default=[])
+        self._records = loaded if isinstance(loaded, list) else []
 
     def _save(self):
-        self._path.parent.mkdir(parents=True, exist_ok=True)
         # 最大1000件まで保持
         self._records = self._records[-1000:]
-        self._path.write_text(
-            json.dumps(self._records, ensure_ascii=False), "utf-8"
-        )
+        _save_json_enc(self._path, self._records, self._key)
 
     def record(self, emotion_state: dict):
         """現在の感情状態を記録"""

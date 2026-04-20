@@ -28,10 +28,25 @@ try:
     _CRYPTO_AVAILABLE = True
 except (ImportError, OSError) as _crypto_err:
     _CRYPTO_AVAILABLE = False
+    # H9 fix (2026-04-20): 本番での silent fallback は致命的。
+    # AICHAN_ALLOW_CRYPTO_FALLBACK=1 を明示設定した開発環境のみ継続。
+    # デフォルトは sys.exit(1) で即停止。
+    _allow_fallback = os.environ.get("AICHAN_ALLOW_CRYPTO_FALLBACK") == "1"
+    if not _allow_fallback:
+        import sys as _sys
+        logger.critical(
+            "cryptography ライブラリが利用できません (%s)。"
+            "本番環境ではフォールバック不可。"
+            "arm64 ネイティブ Python + pip install cryptography を実行してください。"
+            "開発環境で一時的に続行したい場合のみ "
+            "AICHAN_ALLOW_CRYPTO_FALLBACK=1 を設定してください。",
+            _crypto_err,
+        )
+        _sys.exit(1)
     logger.warning(
         "cryptography ライブラリが利用できません (%s)。"
-        "純粋 Python フォールバックを使用します（開発環境専用）。"
-        "本番環境では arm64 ネイティブ Python への移行を推奨します。",
+        "AICHAN_ALLOW_CRYPTO_FALLBACK=1 が設定されているため"
+        "純粋 Python フォールバックで続行します（開発環境専用・本番禁止）。",
         _crypto_err,
     )
     _AESGCM = None  # type: ignore[assignment,misc]

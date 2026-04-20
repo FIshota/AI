@@ -104,6 +104,19 @@ class MemoryManager:
     # セキュリティレベル定義
     SECURITY_LEVELS = frozenset({"public", "private", "secret"})
 
+    # B7 fix (2026-04-21): セキュリティレベルの順序関係。
+    # 呼び出し側の clearance がメモリの security_level 以上なら可視。
+    # 例: clearance=private は public/private を見られるが secret は見えない。
+    _LEVEL_ORDER = {"public": 0, "private": 1, "secret": 2}
+
+    @classmethod
+    def _can_access(cls, mem_level: str, clearance: str) -> bool:
+        """clearance が mem_level を閲覧可能か判定。"""
+        return (
+            cls._LEVEL_ORDER.get(clearance, 0)
+            >= cls._LEVEL_ORDER.get(mem_level or "public", 0)
+        )
+
     def __init__(self, db_path: str | Path, key_file: str | Path, encrypt: bool = True):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -539,18 +552,22 @@ class MemoryManager:
 
     # ─── 検索・取得 ──────────────────────────────────────────────
 
-    def search_hierarchical(self, query: str, limit: int = 5) -> list[Memory]:
+    def search_hierarchical(self, query: str, limit: int = 5, clearance: str = "private") -> list[Memory]:
         """
         Item #P5: 階層的メモリ検索。
 
         Hot tier (短期記憶, O(n)) → 足りなければ Warm tier (LIKE, indexed)
         → 足りなければ Cold tier (FTS / semantic)。
         各層で十分見つかれば早期 return してレイテンシを抑える。
+
+        B7 fix (2026-04-21): clearance でフィルタ。
         """
         results: list[Memory] = []
         seen_ids: set[int] = set()
 
         def _add(m: Memory) -> None:
+            if not self._can_access(getattr(m, "security_level", "public"), clearance):
+                return
             mid = getattr(m, "id", None)
             if mid is not None and mid in seen_ids:
                 return
@@ -569,7 +586,7 @@ class MemoryManager:
 
         # --- Warm tier: LIKE 検索 (indexed) ---
         try:
-            warm = self.search_by_keywords(query, limit=limit * 2)
+            warm = self.search_by_keywords(query, limit=limit * 2, clearance=clearance)
             for m in warm:
                 _add(m)
                 if len(results) >= limit:
@@ -580,7 +597,7 @@ class MemoryManager:
         # --- Cold tier: FTS（あれば） ---
         try:
             if hasattr(self, "search_fts"):
-                cold = self.search_fts(query, limit=limit * 2)
+                cold = self.search_fts(query, limit=limit * 2, clearance=clearance)
                 for m in cold:
                     _add(m)
                     if len(results) >= limit:
@@ -590,13 +607,20 @@ class MemoryManager:
 
         return results[:limit]
 
-    def search(self, query: str, limit: int = 5) -> list[Memory]:
-        """キーワードで記憶を検索します（短期＋DB）"""
+    def search(self, query: str, limit: int = 5, clearance: str = "private") -> list[Memory]:
+        """キーワードで記憶を検索します（短期＋DB）。
+
+        B7 fix (2026-04-21): clearance より高い security_level の記憶は除外。
+        デフォルト clearance='private' は public/private のみ可視。
+        'secret' を明示指定した場合のみ秘匿記憶にアクセス可能。
+        """
         results = []
 
         # 短期記憶を検索
         for mem in reversed(self._short_term):
-            if query.lower() in mem.content.lower():
+            if query.lower() in mem.content.lower() and self._can_access(
+                getattr(mem, "security_level", "public"), clearance
+            ):
                 results.append(mem)
 
         # DB検索
@@ -606,6 +630,9 @@ class MemoryManager:
             )
             rows = cur.fetchall()
             for row in rows:
+                row_level = row[13] if len(row) > 13 else "public"
+                if not self._can_access(row_level or "public", clearance):
+                    continue
                 content = self._dec(row[1])
                 if query.lower() in content.lower():
                     results.append(self._row_to_memory(row, content))
@@ -614,17 +641,21 @@ class MemoryManager:
 
         return results[:limit]
 
-    def search_by_keywords(self, query: str, limit: int = 5) -> list[Memory]:
+    def search_by_keywords(self, query: str, limit: int = 5, clearance: str = "private") -> list[Memory]:
         """
         クエリをキーワード分割し、SQL の LIKE で効率的に検索します。
         Sprint 2.0: 全件フェッチせず DB 側でフィルタリング。
+
+        B7 fix (2026-04-21): clearance でフィルタ。
         """
         results: list[Memory] = []
 
         # 短期記憶を検索
         q_lower = query.lower()
         for mem in reversed(self._short_term):
-            if q_lower in mem.content.lower():
+            if q_lower in mem.content.lower() and self._can_access(
+                getattr(mem, "security_level", "public"), clearance
+            ):
                 results.append(mem)
 
         # クエリを分かち書き（助詞を除く2文字以上のキーワード）
@@ -635,14 +666,22 @@ class MemoryManager:
         # SQL LIKE で絞り込み（暗号化時はフォールバック）
         if self.encrypt:
             # 暗号化時は復号しないと LIKE が使えないので従来ロジック
-            return self.search(query, limit=limit)
+            return self.search(query, limit=limit, clearance=clearance)
 
         with self._conn() as conn:
             # 各キーワードを OR 条件で検索
-            where_clauses = " OR ".join(["content LIKE ?"] * len(keywords))
-            params = [f"%{kw}%" for kw in keywords]
+            # B7 fix: security_level を SQL 側でも絞り込み
+            allowed = [
+                lvl for lvl, rank in self._LEVEL_ORDER.items()
+                if rank <= self._LEVEL_ORDER.get(clearance, 0)
+            ]
+            where_clauses = "(" + " OR ".join(["content LIKE ?"] * len(keywords)) + ")"
+            level_placeholders = ",".join(["?"] * len(allowed))
+            params: list = [f"%{kw}%" for kw in keywords]
+            params.extend(allowed)
             sql = (
-                f"SELECT * FROM memories WHERE ({where_clauses}) "
+                f"SELECT * FROM memories WHERE {where_clauses} "
+                f"AND COALESCE(security_level, 'public') IN ({level_placeholders}) "
                 f"ORDER BY importance DESC, accessed_at DESC LIMIT ?"
             )
             params.append(limit * 2)  # 余裕を持って取得
@@ -655,17 +694,39 @@ class MemoryManager:
 
         return results[:limit]
 
-    def get_recent(self, limit: int = 10, memory_type: str | None = None) -> list[Memory]:
-        """最近の記憶を取得します"""
-        results = list(reversed(self._short_term[-limit:]))
+    def get_recent(
+        self,
+        limit: int = 10,
+        memory_type: str | None = None,
+        clearance: str = "private",
+    ) -> list[Memory]:
+        """最近の記憶を取得します。
+
+        B7 fix (2026-04-21): clearance でフィルタ。
+        """
+        results = [
+            m for m in reversed(self._short_term[-limit:])
+            if self._can_access(getattr(m, "security_level", "public"), clearance)
+        ]
 
         if memory_type is None or memory_type != "short":
-            where = "WHERE memory_type = ?" if memory_type else ""
-            params = (memory_type,) if memory_type else ()
+            allowed = [
+                lvl for lvl, rank in self._LEVEL_ORDER.items()
+                if rank <= self._LEVEL_ORDER.get(clearance, 0)
+            ]
+            level_placeholders = ",".join(["?"] * len(allowed))
+            where_parts = [f"COALESCE(security_level, 'public') IN ({level_placeholders})"]
+            params: list = list(allowed)
+            if memory_type:
+                where_parts.append("memory_type = ?")
+                params.append(memory_type)
+            where_sql = " AND ".join(where_parts)
+            params.append(limit)
             with self._conn() as conn:
                 cur = conn.execute(
-                    f"SELECT * FROM memories {where} ORDER BY accessed_at DESC LIMIT ?",
-                    (*params, limit),
+                    f"SELECT * FROM memories WHERE {where_sql} "
+                    f"ORDER BY accessed_at DESC LIMIT ?",
+                    params,
                 )
                 for row in cur.fetchall():
                     content = self._dec(row[1])
@@ -738,30 +799,38 @@ class MemoryManager:
 
     # ─── Item #3: FTS5 全文検索 ────────────────────────────────────
 
-    def search_fts(self, query: str, limit: int = 10) -> list[Memory]:
+    def search_fts(self, query: str, limit: int = 10, clearance: str = "private") -> list[Memory]:
         """
         FTS5 全文検索で記憶を検索する。
         FTS5 非対応の場合は LIKE フォールバックを使用。
+
+        B7 fix (2026-04-21): clearance でフィルタ。
         """
         if not getattr(self, "_fts5_available", False) or self.encrypt:
             # FTS5 が使えない or 暗号化時は従来の search にフォールバック
-            return self.search(query, limit=limit)
+            return self.search(query, limit=limit, clearance=clearance)
 
         try:
+            allowed = [
+                lvl for lvl, rank in self._LEVEL_ORDER.items()
+                if rank <= self._LEVEL_ORDER.get(clearance, 0)
+            ]
+            placeholders = ",".join(["?"] * len(allowed))
             with self._conn() as conn:
                 cur = conn.execute(
-                    """SELECT m.* FROM memories m
-                       JOIN memories_fts f ON m.id = f.rowid
-                       WHERE memories_fts MATCH ?
-                       ORDER BY rank
-                       LIMIT ?""",
-                    (query, limit),
+                    f"""SELECT m.* FROM memories m
+                        JOIN memories_fts f ON m.id = f.rowid
+                        WHERE memories_fts MATCH ?
+                        AND COALESCE(m.security_level, 'public') IN ({placeholders})
+                        ORDER BY rank
+                        LIMIT ?""",
+                    (query, *allowed, limit),
                 )
                 rows = cur.fetchall()
                 return [self._row_to_memory(r, self._dec(r[1])) for r in rows]
         except sqlite3.OperationalError as e:
             logger.warning("[Memory] FTS5 検索エラー (LIKE フォールバック): %s", e)
-            return self.search(query, limit=limit)
+            return self.search(query, limit=limit, clearance=clearance)
 
     # ─── Item #21: Memory versioning ─────────────────────────────
 

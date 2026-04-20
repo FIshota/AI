@@ -7,25 +7,30 @@ Tier 1 (オプション): moondream ローカルビジョンモデル（~1.8GB, 
 Tier 2 (オプション): Tesseract OCR（テキスト抽出のみ）
 Tier 3 (常時): 画像ファイル情報のみ返す
 
-Tier 1 を有効にするには初回起動時にモデルがダウンロードされます。
+H6 fix (2026-04-21): torch/transformers はデフォルト依存から外れたので、
+                     Tier 1 が使えないときは黙って Tier 2/3 にフォールバック。
 """
 from __future__ import annotations
+import logging
 import subprocess
 import tempfile
 import os
 import platform
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 IS_MAC = platform.system() == "Darwin"
 
-# Tier 1: Moondream（ローカルビジョン LLM）
+# Tier 1: Moondream（ローカルビジョン LLM）— torch/transformers がある環境でのみ有効
 try:
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    from PIL import Image as PilImage
-    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer  # type: ignore
+    from PIL import Image as PilImage  # type: ignore
+    import torch  # type: ignore
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
+    torch = None  # type: ignore[assignment]
 
 # Tier 2: Tesseract OCR
 try:

@@ -154,6 +154,8 @@ class SettingsWindow(tk.Toplevel):
         self.v_weather_city   = tk.StringVar()
         self.v_schedule_en    = tk.BooleanVar()
         self.v_clipboard_watch = tk.BooleanVar()
+        # B5 fix (2026-04-21): screenshot も明示同意に
+        self.v_screenshot_en   = tk.BooleanVar()
 
         # アイドル
         _label(f, "放置タイマー（分）").grid(row=0, column=0, sticky="w", pady=6)
@@ -169,22 +171,68 @@ class SettingsWindow(tk.Toplevel):
                        activebackground=COLOR_PANEL, font=LABEL_FONT
                        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=4)
 
-        # クリップボード
-        tk.Checkbutton(f, text="クリップボード監視を有効にする（macOS）",
-                       variable=self.v_clipboard_watch,
-                       bg=COLOR_PANEL, fg=COLOR_TEXT, selectcolor=COLOR_INPUT,
-                       activebackground=COLOR_PANEL, font=LABEL_FONT
-                       ).grid(row=2, column=0, columnspan=2, sticky="w", pady=4)
+        # ── プライバシー影響の大きい項目（同意チェック付き）───────────
+        _label(f, "⚠ プライバシー設定（初期値 OFF・同意が必要）",
+               font=HEADER_FONT).grid(row=2, column=0, columnspan=2, sticky="w", pady=(10, 4))
+
+        tk.Checkbutton(
+            f,
+            text="クリップボード監視を有効にする（macOS）— コピー内容がアイの記憶に残ります",
+            variable=self.v_clipboard_watch,
+            command=lambda: self._confirm_privacy_consent("clipboard", self.v_clipboard_watch),
+            bg=COLOR_PANEL, fg=COLOR_TEXT, selectcolor=COLOR_INPUT,
+            activebackground=COLOR_PANEL, font=LABEL_FONT,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=4)
+
+        tk.Checkbutton(
+            f,
+            text="スクリーンショット解析を有効にする — 画面内容がアイに渡されます",
+            variable=self.v_screenshot_en,
+            command=lambda: self._confirm_privacy_consent("screenshot", self.v_screenshot_en),
+            bg=COLOR_PANEL, fg=COLOR_TEXT, selectcolor=COLOR_INPUT,
+            activebackground=COLOR_PANEL, font=LABEL_FONT,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=4)
 
         # ネットワーク
         tk.Checkbutton(f, text="ネットワーク取得を許可（天気・ニュース）",
                        variable=self.v_allow_network,
                        bg=COLOR_PANEL, fg=COLOR_TEXT, selectcolor=COLOR_INPUT,
                        activebackground=COLOR_PANEL, font=LABEL_FONT
-                       ).grid(row=3, column=0, columnspan=2, sticky="w", pady=4)
+                       ).grid(row=5, column=0, columnspan=2, sticky="w", pady=4)
 
-        _label(f, "天気の都市名").grid(row=4, column=0, sticky="w", pady=6)
-        _entry(f, self.v_weather_city, width=16).grid(row=4, column=1, sticky="w", padx=8)
+        _label(f, "天気の都市名").grid(row=6, column=0, sticky="w", pady=6)
+        _entry(f, self.v_weather_city, width=16).grid(row=6, column=1, sticky="w", padx=8)
+
+    # B5 fix (2026-04-21): プライバシー同意ダイアログ
+    def _confirm_privacy_consent(self, feature: str, var) -> None:
+        """ON にする瞬間に同意確認。OFF への変更は確認なしで通す。"""
+        from tkinter import messagebox
+        if not var.get():
+            return  # OFF への切替は確認不要
+        messages = {
+            "clipboard": (
+                "クリップボード監視の同意",
+                "この機能を有効にすると、あなたがコピーした文字列（パスワード・"
+                "2FA コード・クレジットカード番号などを含む可能性）が "
+                "アイの記憶 DB に保存されます。\n\n"
+                "・暗号化された記憶 DB に保存されますが、アイは内容を参照できます\n"
+                "・家庭内の他のユーザーには見えません\n"
+                "・無効化すると以降の監視は停止しますが、過去の記録は残ります\n\n"
+                "本当に有効化しますか？"
+            ),
+            "screenshot": (
+                "スクリーンショット解析の同意",
+                "この機能を有効にすると、あなたが「スクショ見て」と頼んだとき "
+                "画面全体がキャプチャされ、OCR と画像解析に渡されます。\n\n"
+                "・機密情報（Slack/銀行/メール）が写っていれば全て読み取られます\n"
+                "・キャプチャ画像は一時ファイルに保存され、処理後に削除されます\n"
+                "・明示的にコマンドを送ったときだけ動作します（常時監視ではない）\n\n"
+                "本当に有効化しますか？"
+            ),
+        }
+        title, body = messages.get(feature, ("同意確認", "この機能を有効にしますか？"))
+        if not messagebox.askyesno(title, body, icon="warning"):
+            var.set(False)
 
     # ── 記念日タブ
     def _build_anniversary_tab(self):
@@ -892,6 +940,7 @@ class SettingsWindow(tk.Toplevel):
         self.v_weather_city.set(auto.get("weather_city", "Tokyo"))
         self.v_schedule_en.set(auto.get("schedule_enabled", True))
         self.v_clipboard_watch.set(auto.get("clipboard_watch", False))
+        self.v_screenshot_en.set(auto.get("screenshot_enabled", False))
 
         self.v_short_max.set(mem.get("short_term_max", 20))
         self.v_encrypt.set(sec.get("encrypt_database", True))
@@ -972,6 +1021,11 @@ class SettingsWindow(tk.Toplevel):
         cfg["autonomous"]["weather_city"]   = self.v_weather_city.get()
         cfg["autonomous"]["schedule_enabled"] = self.v_schedule_en.get()
         cfg["autonomous"]["clipboard_watch"] = self.v_clipboard_watch.get()
+        cfg["autonomous"]["screenshot_enabled"] = self.v_screenshot_en.get()
+        # B5 fix (2026-04-21): 同意 timestamp を記録（どちらか ON なら更新）
+        if self.v_clipboard_watch.get() or self.v_screenshot_en.get():
+            from datetime import datetime as _dt, timezone as _tz
+            cfg["autonomous"]["consent_ts"] = _dt.now(_tz.utc).isoformat()
 
         cfg.setdefault("memory", {})
         cfg["memory"]["short_term_max"] = self.v_short_max.get()

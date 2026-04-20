@@ -129,6 +129,34 @@ class LearningProtocol(Protocol):
 
 
 @runtime_checkable
+class AuditLogProtocol(Protocol):
+    """監査ログのプロトコル (H1, 2026-04-21)"""
+
+    def info(self, event: str, detail: str = "") -> None:
+        """情報イベントを記録する"""
+        ...
+
+    def critical(self, event: str, detail: str = "") -> None:
+        """重大イベントを記録する (purge など)"""
+        ...
+
+
+@runtime_checkable
+class SubjectRightsProtocol(Protocol):
+    """GDPR 17/20 条対応 (H1, 2026-04-21)"""
+
+    def export_subject(self, subject_id: str = "self") -> Dict[str, Any]:
+        """subject の全データを辞書として返す (GDPR 20 条)"""
+        ...
+
+    def purge_subject(
+        self, subject_id: str = "self", dry_run: bool = False
+    ) -> Dict[str, Any]:
+        """subject の全データを削除する (GDPR 17 条)"""
+        ...
+
+
+@runtime_checkable
 class PluginProtocol(Protocol):
     """プラグインのプロトコル"""
 

@@ -10,6 +10,9 @@ from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from core.tenant import SELF_TENANT, TenantId, tenant_dir
+from utils.secure_store import load_json as _load_json_enc, save_json as _save_json_enc
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,24 +20,33 @@ DEFAULT_ANNIVERSARIES: list[dict] = []
 
 
 class AnniversaryManager:
-    def __init__(self, data_dir: Path):
+    def __init__(
+        self,
+        data_dir: Path,
+        key: Optional[bytes] = None,
+        tenant: TenantId | None = None,
+    ):
+        """B2 fix (2026-04-21): key を渡すと記念日データが暗号化される。
+        H2 fix (2026-04-21): tenant ごとに data/tenants/{tenant}/anniversaries.json に保存。
+        旧パス `data/anniversaries.json` は後方互換で読み込みのみ対応。
+        """
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.file = self.data_dir / "anniversaries.json"
+        self._tenant = tenant or SELF_TENANT
+        self.file = tenant_dir(self.data_dir, self._tenant) / "anniversaries.json"
+        self._legacy_file = self.data_dir / "anniversaries.json"
+        self._key = key
         self.items: list[dict] = self._load()
 
     def _load(self) -> list[dict]:
-        if self.file.exists():
-            try:
-                return json.loads(self.file.read_text("utf-8"))
-            except Exception:
-                pass
-        return []
+        loaded = _load_json_enc(self.file, self._key, default=None)
+        if loaded is None and self._legacy_file.exists():
+            # H2 fix: 旧パス fallback
+            loaded = _load_json_enc(self._legacy_file, self._key, default=[])
+        return loaded if isinstance(loaded, list) else []
 
     def _save(self):
-        self.file.write_text(
-            json.dumps(self.items, ensure_ascii=False, indent=2), "utf-8"
-        )
+        _save_json_enc(self.file, self.items, self._key)
 
     def add(self, label: str, month: int, day: int,
             is_birthday: bool = False) -> dict:

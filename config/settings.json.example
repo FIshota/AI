@@ -55,7 +55,10 @@
     "allow_network": true,
     "weather_city": "Tokyo",
     "schedule_enabled": true,
-    "clipboard_watch": true
+    "_privacy_note": "clipboard_watch と screenshot_enabled はプライバシー影響が大きいためデフォルト OFF。利用する場合は同意 UI で明示的に有効化してください。",
+    "clipboard_watch": false,
+    "screenshot_enabled": false,
+    "consent_ts": ""
   },
   "tts": {
     "enabled": true,

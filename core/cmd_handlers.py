@@ -415,9 +415,22 @@ class CommandHandler:
         # ─── Sprint 3.0-A: マルチモーダルコマンド ────────────────
 
         if CMD_SCREENSHOT.match(user_input) and getattr(ai, "multimodal", None):
+            # B5 fix (2026-04-21): screenshot は明示同意なしには撮らない
+            _auto = (getattr(ai, "settings", {}) or {}).get("autonomous", {})
+            if not _auto.get("screenshot_enabled", False):
+                return (
+                    "スクリーンショット機能は OFF になってるよ。"
+                    "設定ウィンドウ → プライバシーで同意して有効化してね。"
+                )
             return ai.multimodal.describe_screenshot()
 
         if CMD_CLIPBOARD_IMG.match(user_input) and getattr(ai, "multimodal", None):
+            _auto = (getattr(ai, "settings", {}) or {}).get("autonomous", {})
+            if not _auto.get("clipboard_watch", False):
+                return (
+                    "クリップボードのぞき見は OFF になってるよ。"
+                    "設定ウィンドウ → プライバシーで同意してね。"
+                )
             return ai.multimodal.describe_clipboard_image()
 
         if CMD_IMAGE_ANALYZE.match(user_input) and getattr(ai, "multimodal", None):

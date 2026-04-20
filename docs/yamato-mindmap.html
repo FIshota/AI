@@ -3,1919 +3,1181 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Project Yamato - Aether Model Strategy</title>
+<title>ai-chan — プロジェクト全体像</title>
 <style>
   :root {
-    --bg: #0a0e1a;
-    --surface: #131829;
-    --surface2: #1a2035;
-    --border: #2a3050;
-    --text: #e0e4f0;
-    --text-dim: #8890a8;
-    --accent: #7c6cf0;
-    --accent2: #f06c9b;
-    --green: #4ade80;
-    --yellow: #fbbf24;
-    --orange: #fb923c;
-    --red: #f87171;
-    --blue: #60a5fa;
-    --cyan: #22d3ee;
-    --pink: #f472b6;
+    --bg: #0b0d14;
+    --bg-2: #12151f;
+    --surface: #161a26;
+    --surface-2: #1c2131;
+    --border: #262b3d;
+    --border-soft: #1e2332;
+    --text: #e6e9f2;
+    --text-mid: #a9b0c2;
+    --text-dim: #727888;
+    --ink: #7c6cf0;
+    --ink-2: #f06c9b;
+    --ok: #5dd89a;
+    --warn: #f2b659;
+    --hot: #ef6a7a;
+    --cool: #56c6e6;
+    --line: #2a3047;
+    --radius: 14px;
+    --shadow: 0 1px 0 rgba(255,255,255,0.02) inset, 0 20px 40px -28px rgba(0,0,0,0.6);
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   }
-  * { margin:0; padding:0; box-sizing:border-box; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 72px; }
   body {
-    font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+    font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", -apple-system, BlinkMacSystemFont, sans-serif;
     background: var(--bg);
     color: var(--text);
-    line-height: 1.6;
-    overflow-x: hidden;
+    line-height: 1.7;
+    font-feature-settings: "palt";
+    -webkit-font-smoothing: antialiased;
   }
-  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
 
-  /* ===== HEADER ===== */
-  .header {
-    text-align: center;
-    padding: 60px 20px 40px;
-    position: relative;
+  a { color: inherit; }
+  code, pre {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--surface);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--text-mid);
   }
-  .header::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 50%; transform: translateX(-50%);
-    width: 600px; height: 600px;
-    background: radial-gradient(circle, rgba(124,108,240,0.15) 0%, transparent 70%);
-    pointer-events: none;
+
+  /* ===== Top navigation ===== */
+  .topnav {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: rgba(11,13,20,0.82);
+    backdrop-filter: saturate(150%) blur(10px);
+    -webkit-backdrop-filter: saturate(150%) blur(10px);
+    border-bottom: 1px solid var(--border-soft);
   }
-  .header h1 {
-    font-size: 2.8rem;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
+  .topnav-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 12px 28px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    overflow-x: auto;
+  }
+  .topnav-brand {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    background: linear-gradient(90deg, var(--ink), var(--ink-2));
     -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 8px;
+    background-clip: text;
+    color: transparent;
   }
-  .header .subtitle {
-    font-size: 1.1rem;
-    color: var(--text-dim);
+  .topnav-links { display: flex; gap: 14px; font-size: 0.82rem; color: var(--text-dim); white-space: nowrap; }
+  .topnav-links a {
+    text-decoration: none;
+    padding: 6px 0;
+    border-bottom: 1px solid transparent;
+    transition: color 120ms, border-color 120ms;
   }
-  .header .date {
-    display: inline-block;
-    margin-top: 16px;
-    padding: 4px 16px;
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    font-size: 0.85rem;
-    color: var(--text-dim);
-  }
+  .topnav-links a:hover { color: var(--text); border-bottom-color: var(--ink); }
+  .topnav-meta { margin-left: auto; font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; }
 
-  /* ===== SECTION ===== */
-  .section {
-    margin: 48px 0;
+  /* ===== Shell ===== */
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 48px 28px 120px; }
+
+  /* ===== Hero ===== */
+  .hero { padding: 56px 0 24px; position: relative; }
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: -40px -80px auto -80px;
+    height: 340px;
+    background:
+      radial-gradient(600px 260px at 30% 30%, rgba(124,108,240,0.18), transparent 70%),
+      radial-gradient(500px 260px at 70% 20%, rgba(240,108,155,0.12), transparent 70%);
+    pointer-events: none;
+    z-index: -1;
+  }
+  .hero-kicker {
+    font-size: 0.78rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 18px;
+  }
+  .hero h1 {
+    font-size: clamp(2.2rem, 1.2rem + 3.2vw, 3.8rem);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    font-weight: 800;
+    margin-bottom: 22px;
+  }
+  .hero h1 .grad {
+    background: linear-gradient(100deg, var(--ink), var(--ink-2) 70%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .hero-lead {
+    font-size: 1.1rem;
+    color: var(--text-mid);
+    max-width: 760px;
+    margin-bottom: 36px;
+  }
+  .hero-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+  .chip {
+    font-size: 0.78rem;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-mid);
+    background: var(--surface);
+  }
+  .chip strong { color: var(--text); font-weight: 600; }
+  .chip.ok { border-color: rgba(93,216,154,0.35); color: var(--ok); }
+  .chip.warn { border-color: rgba(242,182,89,0.35); color: var(--warn); }
+
+  /* ===== Stat strip ===== */
+  .stat-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin: 42px 0 10px;
+  }
+  @media (max-width: 720px) { .stat-strip { grid-template-columns: repeat(2, 1fr); } }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+  }
+  .stat-val { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.01em; }
+  .stat-val.ok { color: var(--ok); }
+  .stat-val.cool { color: var(--cool); }
+  .stat-val.ink { color: var(--ink); }
+  .stat-val.ink2 { color: var(--ink-2); }
+  .stat-label { font-size: 0.78rem; color: var(--text-dim); margin-top: 4px; }
+
+  /* ===== Section ===== */
+  section { margin: 88px 0; scroll-margin-top: 72px; }
+  .section-head { margin-bottom: 28px; }
+  .section-tag {
+    font-size: 0.74rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
   }
   .section-title {
-    font-size: 1.5rem;
+    font-size: 1.9rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+  }
+  .section-sub {
+    font-size: 1rem;
+    color: var(--text-mid);
+    margin-top: 10px;
+    max-width: 760px;
+  }
+
+  /* ===== Plain-language card (for laypeople) ===== */
+  .plain {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: linear-gradient(180deg, var(--surface), var(--bg-2));
+    padding: 28px 32px;
+  }
+  .plain h3 {
+    font-size: 1.05rem;
+    color: var(--ink);
+    margin-bottom: 12px;
     font-weight: 700;
-    margin-bottom: 24px;
-    padding-left: 16px;
-    border-left: 4px solid var(--accent);
+  }
+  .plain p { color: var(--text); margin-bottom: 10px; }
+  .plain p:last-child { margin-bottom: 0; }
+  .plain .lead { font-size: 1.1rem; color: var(--text); line-height: 1.8; }
+  .plain em { font-style: normal; color: var(--ink-2); font-weight: 600; }
+
+  /* ===== 2-col grid ===== */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 880px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
   }
 
-  /* ===== CURRENT POSITION ===== */
-  .current-pos {
-    background: linear-gradient(135deg, rgba(124,108,240,0.1), rgba(240,108,155,0.08));
-    border: 1px solid var(--accent);
-    border-radius: 16px;
-    padding: 32px;
-    text-align: center;
-    margin: 32px 0;
+  /* ===== Card ===== */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    box-shadow: var(--shadow);
   }
-  .current-pos .badge {
+  .card h4 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .card p { color: var(--text-mid); font-size: 0.92rem; }
+  .card ul { margin-left: 18px; color: var(--text-mid); font-size: 0.9rem; }
+  .card ul li { margin: 3px 0; }
+  .card .tag {
     display: inline-block;
-    background: var(--accent);
-    color: #fff;
-    padding: 6px 20px;
-    border-radius: 20px;
-    font-size: 0.9rem;
-    font-weight: 600;
-    margin-bottom: 16px;
+    font-size: 0.7rem;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-dim);
+    border: 1px solid var(--border-soft);
+    margin-bottom: 10px;
   }
-  .current-pos h2 { font-size: 1.6rem; margin-bottom: 8px; }
-  .current-pos p { color: var(--text-dim); max-width: 600px; margin: 0 auto; }
+  .card .tag.ok { color: var(--ok); border-color: rgba(93,216,154,0.25); }
+  .card .tag.warn { color: var(--warn); border-color: rgba(242,182,89,0.3); }
+  .card .tag.hot { color: var(--hot); border-color: rgba(239,106,122,0.3); }
+  .card .tag.ink { color: var(--ink); border-color: rgba(124,108,240,0.3); }
 
-  /* ===== MIND MAP ===== */
-  .mindmap {
-    position: relative;
-    padding: 40px 0;
-    overflow: visible;
+  /* ===== This week timeline ===== */
+  .week {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    background: var(--surface);
+    overflow: hidden;
   }
+  .week-row {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 20px;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .week-row:last-child { border-bottom: 0; }
+  .week-date {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    padding-top: 2px;
+  }
+  .week-body h5 { font-size: 0.98rem; margin-bottom: 4px; font-weight: 700; }
+  .week-body p { color: var(--text-mid); font-size: 0.88rem; }
+  .week-body .flag {
+    display: inline-block;
+    font-size: 0.7rem;
+    color: var(--ok);
+    margin-right: 8px;
+    border: 1px solid rgba(93,216,154,0.3);
+    padding: 1px 7px;
+    border-radius: 999px;
+  }
+  .week-body .flag.hot { color: var(--hot); border-color: rgba(239,106,122,0.3); }
+  .week-body .flag.warn { color: var(--warn); border-color: rgba(242,182,89,0.3); }
+  .week-body .flag.cool { color: var(--cool); border-color: rgba(86,198,230,0.3); }
 
-  /* ===== TIMELINE ===== */
-  .timeline {
+  /* ===== Progress pillars ===== */
+  .pillar {
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .pillar h4 { font-size: 1rem; margin-bottom: 4px; font-weight: 700; }
+  .pillar .p-sub { font-size: 0.82rem; color: var(--text-dim); margin-bottom: 18px; }
+  .bar-item { margin-bottom: 14px; }
+  .bar-item:last-child { margin-bottom: 0; }
+  .bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    color: var(--text-mid);
+    margin-bottom: 5px;
+  }
+  .bar-label .pct { color: var(--text); font-variant-numeric: tabular-nums; }
+  .bar {
+    height: 6px;
+    background: var(--bg-2);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .bar > span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--ink), var(--cool));
+  }
+  .bar.ok > span { background: linear-gradient(90deg, var(--ok), #89e4b8); }
+  .bar.warn > span { background: linear-gradient(90deg, var(--warn), #f5d18f); }
+  .bar.hot > span { background: linear-gradient(90deg, var(--hot), var(--ink-2)); }
+
+  /* ===== Kanban ===== */
+  .kanban {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  @media (max-width: 880px) { .kanban { grid-template-columns: 1fr; } }
+  .col {
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .col h4 {
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .col.now h4 { color: var(--ok); }
+  .col.next h4 { color: var(--warn); }
+  .col.later h4 { color: var(--text-dim); }
+  .task {
+    background: var(--surface-2);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .task:last-child { margin-bottom: 0; }
+  .task .t-id {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .task h5 { font-size: 0.92rem; font-weight: 600; margin-bottom: 4px; }
+  .task p { font-size: 0.82rem; color: var(--text-mid); }
+
+  /* ===== Roadmap (horizontal timeline) ===== */
+  .roadmap {
     position: relative;
     padding: 20px 0;
   }
-  .timeline::before {
-    content: '';
+  .roadmap::before {
+    content: "";
     position: absolute;
-    left: 50%;
-    top: 0; bottom: 0;
-    width: 3px;
-    background: linear-gradient(to bottom, var(--green), var(--accent), var(--yellow), var(--orange));
-    transform: translateX(-50%);
+    left: 0; right: 0; top: 50px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--ok), var(--ink), var(--ink-2), var(--text-dim));
+    opacity: 0.4;
   }
-
-  /* ===== PHASE DETAIL CARDS ===== */
-  .phase-grid {
+  .rm-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-  }
-  @media (max-width: 768px) {
-    .phase-grid { grid-template-columns: 1fr; }
-  }
-  .phase-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 28px;
-    transition: border-color 0.2s;
-  }
-  .phase-card:hover { border-color: var(--accent); }
-  .phase-card.active {
-    border-color: var(--green);
-    box-shadow: 0 0 30px rgba(74,222,128,0.08);
-  }
-  .phase-card .phase-label {
-    font-size: 0.8rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 8px;
-  }
-  .phase-card h3 {
-    font-size: 1.2rem;
-    margin-bottom: 12px;
-  }
-  .phase-card .desc {
-    color: var(--text-dim);
-    font-size: 0.9rem;
-    margin-bottom: 16px;
-  }
-  .result-list {
-    list-style: none;
-    margin: 0;
-  }
-  .result-list li {
-    padding: 6px 0;
-    font-size: 0.9rem;
-    display: flex;
-    gap: 8px;
-    align-items: flex-start;
-  }
-  .result-list .icon { flex-shrink: 0; width: 20px; text-align: center; }
-
-  /* ===== COMPARISON TABLE ===== */
-  .comp-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 16px 0;
-  }
-  .comp-table th, .comp-table td {
-    padding: 12px 16px;
-    text-align: left;
-    border-bottom: 1px solid var(--border);
-    font-size: 0.9rem;
-  }
-  .comp-table th {
-    color: var(--text-dim);
-    font-weight: 600;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
-  .comp-table tr:hover td { background: rgba(124,108,240,0.04); }
-  .highlight { color: var(--green); font-weight: 600; }
-  .warn { color: var(--yellow); }
-  .bad { color: var(--red); }
-
-  /* ===== PROGRESS BARS ===== */
-  .progress-item {
-    margin: 12px 0;
-  }
-  .progress-item .prog-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.85rem;
-    margin-bottom: 4px;
-  }
-  .progress-bar {
-    height: 8px;
-    background: var(--surface2);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-  .progress-fill {
-    height: 100%;
-    border-radius: 4px;
-    transition: width 0.5s ease;
-  }
-
-  /* ===== CAPABILITY MATRIX ===== */
-  .cap-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 12px;
-    margin: 16px 0;
-  }
-  .cap-item {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
-    text-align: center;
-    font-size: 0.85rem;
-  }
-  .cap-item .cap-icon { font-size: 1.8rem; margin-bottom: 8px; }
-  .cap-item .cap-name { font-weight: 600; margin-bottom: 4px; }
-  .cap-item .cap-status { font-size: 0.75rem; }
-
-  /* ===== VISION ===== */
-  .vision-box {
-    background: linear-gradient(135deg, rgba(124,108,240,0.08), rgba(240,108,155,0.06));
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 40px;
-    text-align: center;
-    margin: 40px 0;
-  }
-  .vision-box h2 {
-    font-size: 1.8rem;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 16px;
-  }
-  .vision-box p {
-    color: var(--text-dim);
-    max-width: 700px;
-    margin: 0 auto 12px;
-    font-size: 1rem;
-  }
-
-  /* ===== FLOW DIAGRAM ===== */
-  .flow {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin: 24px 0;
-  }
-  .flow-node {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px 20px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    text-align: center;
-    min-width: 120px;
-  }
-  .flow-arrow {
-    color: var(--accent);
-    font-size: 1.2rem;
-  }
-
-  /* ===== SPEC BOX ===== */
-  .spec-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 16px;
-    margin: 16px 0;
-  }
-  @media (max-width: 768px) { .spec-grid { grid-template-columns: 1fr; } }
-  .spec-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    text-align: center;
-  }
-  .spec-box .spec-val {
-    font-size: 2rem;
-    font-weight: 800;
-    margin-bottom: 4px;
-  }
-  .spec-box .spec-label {
-    font-size: 0.8rem;
-    color: var(--text-dim);
-  }
-
-  /* ===== ACTION PLAN ===== */
-  .action-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 24px;
-    margin: 16px 0;
-  }
-  .action-card h4 {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 1.05rem;
-    margin-bottom: 12px;
-  }
-  .action-num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px; height: 28px;
-    background: var(--accent);
-    border-radius: 50%;
-    color: #fff;
-    font-size: 0.8rem;
-    font-weight: 700;
-    flex-shrink: 0;
-  }
-  .action-result {
-    background: rgba(74,222,128,0.08);
-    border: 1px solid rgba(74,222,128,0.2);
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin-top: 12px;
-    font-size: 0.9rem;
-  }
-  .action-result strong { color: var(--green); }
-
-  /* ===== FOOTER ===== */
-  .footer {
-    text-align: center;
-    padding: 40px 20px;
-    color: var(--text-dim);
-    font-size: 0.85rem;
-    border-top: 1px solid var(--border);
-    margin-top: 60px;
-  }
-
-  /* ===== TREE DIAGRAM ===== */
-  .tree { margin: 32px 0; }
-  .tree-root {
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: #fff;
-    text-align: center;
-    padding: 16px 32px;
-    border-radius: 12px;
-    font-size: 1.2rem;
-    font-weight: 700;
-    max-width: 300px;
-    margin: 0 auto 0;
-  }
-  .tree-line {
-    width: 3px;
-    height: 24px;
-    background: var(--accent);
-    margin: 0 auto;
-  }
-  .tree-branches {
-    display: flex;
-    justify-content: center;
-    gap: 16px;
-    flex-wrap: wrap;
     position: relative;
   }
-  .tree-branches::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 15%;
-    right: 15%;
-    height: 3px;
-    background: var(--accent);
+  @media (max-width: 880px) { .rm-grid { grid-template-columns: 1fr; } .roadmap::before { display: none; } }
+  .rm {
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 20px;
   }
-  .tree-branch {
+  .rm-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    margin: 0 auto 16px;
+    background: var(--text-dim);
+  }
+  .rm.done .rm-dot { background: var(--ok); box-shadow: 0 0 0 4px rgba(93,216,154,0.15); }
+  .rm.now .rm-dot { background: var(--ink); box-shadow: 0 0 0 4px rgba(124,108,240,0.2); }
+  .rm.next .rm-dot { background: var(--warn); }
+  .rm .rm-phase {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--text-dim);
     text-align: center;
-    flex: 1;
-    min-width: 160px;
-    max-width: 220px;
+    margin-bottom: 6px;
   }
-  .tree-branch-line {
-    width: 3px;
-    height: 24px;
-    background: var(--accent);
-    margin: 0 auto;
-  }
-  .tree-node {
-    border: 2px solid;
-    border-radius: 10px;
-    padding: 14px 12px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    margin-bottom: 8px;
-  }
-  .tree-leaves {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 8px;
-  }
-  .tree-leaf {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 10px;
-    font-size: 0.75rem;
-    color: var(--text-dim);
-    text-align: left;
-  }
-  .tree-leaf.done { border-left: 3px solid var(--green); }
-  .tree-leaf.current { border-left: 3px solid var(--accent); background: rgba(124,108,240,0.06); }
-  .tree-leaf.future { border-left: 3px solid var(--text-dim); opacity: 0.6; }
+  .rm h4 { text-align: center; font-size: 0.98rem; margin-bottom: 10px; }
+  .rm ul { margin-left: 18px; font-size: 0.82rem; color: var(--text-mid); }
+  .rm ul li { margin: 3px 0; }
 
-  .legend {
-    display: flex;
-    gap: 20px;
-    justify-content: center;
-    margin: 16px 0;
-    font-size: 0.8rem;
-    color: var(--text-dim);
-  }
-  .legend-item { display: flex; align-items: center; gap: 6px; }
-  .legend-dot {
-    width: 12px; height: 12px;
-    border-radius: 3px;
-  }
-
-  /* ===== USE CASE CARDS ===== */
-  .usecase-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-    margin: 16px 0;
-  }
-  @media (max-width: 768px) { .usecase-grid { grid-template-columns: 1fr; } }
-  .usecase-card {
+  /* ===== Details / expandable ===== */
+  details {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 24px;
-    transition: border-color 0.2s, transform 0.2s;
-  }
-  .usecase-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-  .usecase-card .uc-num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px; height: 32px;
-    border-radius: 50%;
-    font-size: 0.85rem;
-    font-weight: 700;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 18px 22px;
     margin-bottom: 12px;
   }
-  .usecase-card h4 { font-size: 1.05rem; margin-bottom: 8px; }
-  .usecase-card .uc-desc { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 10px; }
-  .usecase-card .uc-impact { font-size: 0.8rem; padding: 6px 12px; border-radius: 8px; display: inline-block; }
-
-  /* ===== IMPACT SECTION ===== */
-  .impact-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 24px;
-    margin: 16px 0;
-  }
-  .impact-card h4 { font-size: 1.1rem; margin-bottom: 12px; }
-  .impact-list { list-style: none; margin: 0; padding: 0; }
-  .impact-list li { padding: 8px 0; font-size: 0.9rem; display: flex; gap: 10px; align-items: flex-start; border-bottom: 1px solid rgba(42,48,80,0.5); }
-  .impact-list li:last-child { border-bottom: none; }
-
-  /* ===== KNOWLEDGE COMPRESSION DIAGRAM ===== */
-  .compress-flow {
+  details[open] { background: var(--surface-2); }
+  summary {
+    list-style: none;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 1rem;
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin: 20px 0;
+    gap: 12px;
   }
-  .compress-node {
-    background: var(--surface);
-    border: 2px solid;
-    border-radius: 12px;
-    padding: 16px 20px;
-    text-align: center;
-    min-width: 140px;
-    font-size: 0.85rem;
+  summary::-webkit-details-marker { display: none; }
+  summary::after {
+    content: "＋";
+    color: var(--text-dim);
+    font-weight: 400;
+    transition: transform 160ms;
   }
-  .compress-arrow { font-size: 1.4rem; color: var(--accent); }
-
-  /* ===== AICHAN SPEC TABLE ===== */
-  .spec-table {
+  details[open] summary::after { content: "−"; }
+  summary .s-sub {
+    margin-left: auto;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    font-weight: 400;
+  }
+  .det-body { margin-top: 14px; color: var(--text-mid); font-size: 0.92rem; }
+  .det-body table {
     width: 100%;
     border-collapse: collapse;
-    margin: 16px 0;
+    font-size: 0.86rem;
+    margin-top: 8px;
   }
-  .spec-table th {
+  .det-body th, .det-body td {
     text-align: left;
-    padding: 10px 16px;
-    background: var(--surface2);
-    color: var(--text-dim);
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    border-bottom: 2px solid var(--border);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-soft);
   }
-  .spec-table td {
-    padding: 10px 16px;
-    font-size: 0.9rem;
-    border-bottom: 1px solid var(--border);
+  .det-body th {
+    font-weight: 600;
+    color: var(--text-dim);
+    font-size: 0.76rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .det-body td.mono { font-family: var(--mono); font-size: 0.82rem; color: var(--text); }
+
+  /* ===== Vision box ===== */
+  .vision {
+    background:
+      linear-gradient(180deg, rgba(124,108,240,0.08), rgba(240,108,155,0.04)),
+      var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 48px;
+    text-align: center;
+  }
+  .vision .vkicker {
+    font-size: 0.78rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    margin-bottom: 16px;
+  }
+  .vision h2 {
+    font-size: clamp(1.6rem, 1rem + 2.5vw, 2.4rem);
+    font-weight: 800;
+    margin-bottom: 20px;
+    letter-spacing: -0.01em;
+  }
+  .vision p { color: var(--text-mid); max-width: 640px; margin: 0 auto 10px; }
+  .vision .tagline {
+    margin-top: 28px;
+    font-size: 1.05rem;
+    color: var(--text);
+  }
+  .vision .tagline span.accent {
+    background: linear-gradient(100deg, var(--ink), var(--ink-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    font-weight: 700;
+  }
+
+  /* ===== Threat table ===== */
+  .threat {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  .threat th, .threat td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    text-align: left;
     vertical-align: top;
   }
-  .spec-table tr:hover td { background: rgba(124,108,240,0.03); }
-  .spec-table .cat { color: var(--accent); font-weight: 600; white-space: nowrap; }
+  .threat th {
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 0.76rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .threat td.code {
+    font-family: var(--mono);
+    color: var(--hot);
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  .threat td.mitigation { color: var(--text-mid); }
+  .threat-note {
+    margin-top: 16px;
+    padding: 16px 20px;
+    background: rgba(239,106,122,0.06);
+    border-left: 3px solid var(--hot);
+    border-radius: 0 10px 10px 0;
+    font-size: 0.86rem;
+    color: var(--text-mid);
+  }
+
+  /* ===== Footer ===== */
+  footer {
+    margin-top: 100px;
+    padding-top: 32px;
+    border-top: 1px solid var(--border-soft);
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+  footer a { color: var(--text-mid); text-decoration: none; border-bottom: 1px dashed var(--border); }
+
+  /* Print */
+  @media print {
+    .topnav, .hero::before { display: none; }
+    body { background: white; color: black; }
+    .card, .pillar, .col, .rm, details, .vision { break-inside: avoid; }
+  }
 </style>
 </head>
 <body>
 
-<div class="container">
-
-<!-- ===== HEADER ===== -->
-<div class="header">
-  <h1>Project Yamato + Aether</h1>
-  <div class="subtitle">あいちゃん専用AI - 全体構想マインドマップ &amp; 詳細仕様書</div>
-  <div class="date">Updated: 2026-04-20 / MacBook Pro M2 Pro 16GB</div>
-</div>
-
-<!-- ===== CURRENT POSITION ===== -->
-<div class="current-pos">
-  <div class="badge">Phase 0.75 完了 → Phase 1 進行中（bench 実走）</div>
-  <h2>ai-chan rebrand + ゼロコスト bench 基盤 + Public 化</h2>
-  <p>165+ファイル / 62,000+行。リポジトリ Public 化により GitHub Actions 完全無料化。
-γ 切替式 TTS（pyttsx3 既定 / VOICEVOX オプション）で edge-tts GPL 依存を回避。
-bench に 3 スイート (JGLUE JCommonsenseQA / ELYZA-tasks-100 / family-dialog 30 問) を
-rule + semantic + local LLM の 3 judge で実走 (Sarashina2-7B, MIT)。
-STT は faster-whisper でローカル完結。API 送信ゼロ・月額 0 円を維持。</p>
-</div>
-
-<!-- ===== MIND MAP (TREE) ===== -->
-<div class="section">
-  <div class="section-title">全体構想マインドマップ</div>
-
-  <div class="legend">
-    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> 完了</div>
-    <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> 進行中</div>
-    <div class="legend-item"><div class="legend-dot" style="background:var(--text-dim)"></div> 未着手</div>
+<nav class="topnav">
+  <div class="topnav-inner">
+    <div class="topnav-brand">ai-chan</div>
+    <div class="topnav-links">
+      <a href="#summary">1分サマリ</a>
+      <a href="#week">今週</a>
+      <a href="#progress">進捗</a>
+      <a href="#tasks">残タスク</a>
+      <a href="#roadmap">ロードマップ</a>
+      <a href="#tech">技術詳細</a>
+      <a href="#threat">脅威モデル</a>
+      <a href="#vision">ビジョン</a>
+    </div>
+    <div class="topnav-meta">Updated · 2026-04-20</div>
   </div>
+</nav>
 
-  <div class="tree">
-    <div class="tree-root">あいちゃん<br><span style="font-size:0.75em;opacity:0.8">愛のあるパーソナルAI</span></div>
-    <div class="tree-line"></div>
-    <div class="tree-branches">
+<div class="wrap">
 
-      <!-- Branch A: 基盤 -->
-      <div class="tree-branch">
-        <div class="tree-branch-line"></div>
-        <div class="tree-node" style="border-color:var(--green); background:rgba(74,222,128,0.06);">
-          A. MoE基盤<br><span style="font-size:0.7em;color:var(--green)">95% — 最適化余地あり</span>
+  <!-- ========== HERO ========== -->
+  <header class="hero">
+    <div class="hero-kicker">Family AI · Local-first · MIT</div>
+    <h1>家族のための AI、<br><span class="grad">あいちゃん</span>。</h1>
+    <p class="hero-lead">
+      クラウドに送らない。月額 0 円で動く。<br>
+      「覚えていないけれど、知りたい」と言える家族でありたい —— そのための、ひとりぶんの AI。
+    </p>
+    <div class="hero-chips">
+      <span class="chip ok">✅ 本体 <strong>Public OSS</strong>（MIT）</span>
+      <span class="chip">🧠 LLM: <strong>Sarashina2-7B</strong> ローカル GGUF</span>
+      <span class="chip">🎤 STT <strong>faster-whisper</strong> / 🗣 TTS <strong>Switchable</strong></span>
+      <span class="chip warn">🔬 現在 <strong>IP-1</strong>（Memory Honesty 実装中）</span>
+    </div>
+
+    <div class="stat-strip">
+      <div class="stat">
+        <div class="stat-val ok">889</div>
+        <div class="stat-label">Passing Tests（0 failure）</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val cool">165+</div>
+        <div class="stat-label">モジュール / 62,000+ LoC</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val ink">0円</div>
+        <div class="stat-label">運用コスト / 外部送信ゼロ</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val ink2">9:00 JST</div>
+        <div class="stat-label">毎朝セキュリティ監査自動実行</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========== 1分サマリ（素人向け） ========== -->
+  <section id="summary">
+    <div class="section-head">
+      <div class="section-tag">For Everyone</div>
+      <h2 class="section-title">1 分でわかる あいちゃん</h2>
+      <p class="section-sub">
+        専門家も素人も、まずここだけ読めば「何を作っていて、なぜ作るのか」が分かります。
+      </p>
+    </div>
+
+    <div class="plain">
+      <h3>これは何？</h3>
+      <p class="lead">
+        あなたの PC の中だけで動く、家族のような AI です。
+        会話した内容は <em>あなたの手元だけに残り、どのクラウドにも送られません</em>。
+        ChatGPT のような有料サービスには依存せず、<em>月額 0 円</em> で動きます。
+      </p>
+
+      <h3 style="margin-top: 22px;">なぜ作っているのか？</h3>
+      <p>
+        AI はもう賢いだけでは足りません。<em>家族の会話のように、正直で、優しくて、覚えていてくれるもの</em> が必要です。
+        そのためには、会話データを他人の会社に預けない「ローカルで動く AI」であることが出発点になります。
+      </p>
+
+      <h3 style="margin-top: 22px;">今、どこにいる？</h3>
+      <p>
+        基盤（Infrastructure Phase 0）は完了しました。
+        いま進めているのは <em>「あいちゃんが記憶に正直であること」を保証する仕組み（Memory Honesty）</em> です。
+        覚えていない話を覚えているふりもせず、かといって冷たく突き放しもしない —— その 4 軸（正直さ / 優しさ / 関与継続 / 不確実性表明）を、自動テストで毎回採点しています。
+      </p>
+
+      <h3 style="margin-top: 22px;">どこを目指す？</h3>
+      <p>
+        「技術で世界を変える」ではなく、<em>「愛で世界を変える。その技術を作る」</em>。
+        各家庭の PC に静かに届く形で遍在し、誰のデータも中央に集めない、国産のパーソナル AI を作ります。
+      </p>
+    </div>
+  </section>
+
+  <!-- ========== This Week ========== -->
+  <section id="week">
+    <div class="section-head">
+      <div class="section-tag">This Week · 2026-04-14 → 04-20</div>
+      <h2 class="section-title">今週の動き</h2>
+      <p class="section-sub">日々の細かい作業記録は全部ここに集約しました。直近 1 週間だけ読めば追いつけます。</p>
+    </div>
+
+    <div class="week">
+      <div class="week-row">
+        <div class="week-date">04-20 (今日)</div>
+        <div class="week-body">
+          <h5>
+            <span class="flag">merged</span><span class="flag cool">CI</span>
+            J-1 — Memory Honesty テスト 3 本を CI blocking 化
+          </h5>
+          <p><code>test_memory_phrasing</code> / <code>test_memory_honesty_integration</code> / <code>test_local_judge_honesty</code> を <code>continue-on-error</code> なしで実行。回帰すれば即赤。</p>
         </div>
-        <div class="tree-leaves">
-          <div class="tree-leaf done">A1. MoE Router - タスク別モデル選択</div>
-          <div class="tree-leaf done">A2. 継続学習 - 会話から成長</div>
-          <div class="tree-leaf done">A3. 7層監視 - 全体ヘルスチェック</div>
+      </div>
+      <div class="week-row">
+        <div class="week-date">04-20</div>
+        <div class="week-body">
+          <h5>
+            <span class="flag">merged</span>
+            H-2 — semantic judge の saturation 対策
+          </h5>
+          <p>reference が似すぎて cos-sim が 1.000 に張り付く問題に対し、aggregation を <code>max → mean</code> に切替え、<code>honesty_*</code> 12 seed を reference 2→4 に拡張。</p>
+        </div>
+      </div>
+      <div class="week-row">
+        <div class="week-date">04-20</div>
+        <div class="week-body">
+          <h5>
+            <span class="flag">merged</span>
+            G-1 — Honesty LocalJudge（4 軸採点）
+          </h5>
+          <p>H1 正直さ / H2 優しさ / H3 関与継続 / H4 不確実性表明 を LLM で採点。<code>BENCH_HONESTY_JUDGE=1</code> で opt-in、self-eval バイアスに注意書き付き。</p>
+        </div>
+      </div>
+      <div class="week-row">
+        <div class="week-date">04-20</div>
+        <div class="week-body">
+          <h5>
+            <span class="flag cool">scheduled</span>
+            日次セキュリティ監査を Scheduled Task 化
+          </h5>
+          <p>毎朝 09:00 JST に <code>pip-audit</code> / <code>bandit</code> / secret-scanner を自動実行、<code>security/audit-YYYY-MM-DD</code> ブランチに Markdown レポートを push。</p>
+        </div>
+      </div>
+      <div class="week-row">
+        <div class="week-date">04-19</div>
+        <div class="week-body">
+          <h5>
+            <span class="flag">merged</span>
+            E-1..E-4 — Memory Honesty の対話ハンドラ統合 + TAXONOMY pre-commit
+          </h5>
+          <p><code>core/ai_chan.py</code> に <code>_try_memory_honesty_response()</code> を配線（confidence &lt; 0.3 で早期 return）。TAXONOMY.md 整合性チェックを pre-commit に追加。</p>
+        </div>
+      </div>
+      <div class="week-row">
+        <div class="week-date">04-18</div>
+        <div class="week-body">
+          <h5>
+            <span class="flag">merged</span>
+            F-1..F-3 — bench 3 スイート実走 / README を IP-N へ整理
+          </h5>
+          <p>JGLUE / ELYZA-tasks-100 / family-dialog 30 問を rule + semantic + local-LLM の 3 judge で実走。"Phase 1" などの曖昧語を <code>IP-N</code> (Infra Phase) / <code>PP-N</code> (Product Phase) に統一。</p>
+        </div>
+      </div>
+      <div class="week-row">
+        <div class="week-date">04-17</div>
+        <div class="week-body">
+          <h5>
+            <span class="flag warn">fix</span>
+            CI YAML パースエラーの sink 掘り起こし
+          </h5>
+          <p><code>"(Phase 0: non-blocking)"</code> の未クォートで 10+ commits 分の CI が silent-failing していた。全該当 <code>run:</code> 行をシングルクォートで修正。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== Progress Dashboard ========== -->
+  <section id="progress">
+    <div class="section-head">
+      <div class="section-tag">Progress</div>
+      <h2 class="section-title">進捗ダッシュボード</h2>
+      <p class="section-sub">ad-hoc に散らばっていた進捗を 4 本柱に整理しました。数字は主観 + 実装カバレッジの自己評価です。</p>
+    </div>
+
+    <div class="grid-2" style="margin-bottom: 18px;">
+      <div class="pillar">
+        <h4>🧠 コア体験</h4>
+        <div class="p-sub">会話・記憶・感情・人格</div>
+        <div class="bar-item">
+          <div class="bar-label"><span>LLM エンジン（MLX + llama-cpp dual）</span><span class="pct">92%</span></div>
+          <div class="bar ok"><span style="width:92%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>記憶・話題・日記・記念日</span><span class="pct">85%</span></div>
+          <div class="bar ok"><span style="width:85%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>Memory Honesty（4 軸 + Stage × band）</span><span class="pct">60%</span></div>
+          <div class="bar"><span style="width:60%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>Bio-Nervous System（反射/筋肉/自律/免疫）</span><span class="pct">85%</span></div>
+          <div class="bar ok"><span style="width:85%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>モード切替（家族/エージェント/学習/創作）</span><span class="pct">95%</span></div>
+          <div class="bar ok"><span style="width:95%"></span></div>
         </div>
       </div>
 
-      <!-- Branch B: 推論最適化 -->
-      <div class="tree-branch">
-        <div class="tree-branch-line"></div>
-        <div class="tree-node" style="border-color:var(--accent); background:rgba(124,108,240,0.06);">
-          B. 推論最適化<br><span style="font-size:0.7em;color:var(--accent)">40%</span>
+      <div class="pillar">
+        <h4>🔬 評価基盤（bench / CI）</h4>
+        <div class="p-sub">回帰検知・品質ゲート</div>
+        <div class="bar-item">
+          <div class="bar-label"><span>3 スイート実走（JGLUE / ELYZA / family-dialog）</span><span class="pct">90%</span></div>
+          <div class="bar ok"><span style="width:90%"></span></div>
         </div>
-        <div class="tree-leaves">
-          <div class="tree-leaf future">B4. 分散推論 - マルチマシン</div>
-          <div class="tree-leaf done">B5. 自動評価 - Strict Benchmark v2 (7軸)</div>
+        <div class="bar-item">
+          <div class="bar-label"><span>3 種 judge（rule / semantic / local-LLM）</span><span class="pct">88%</span></div>
+          <div class="bar ok"><span style="width:88%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>Honesty 4 軸 judge（G-1）</span><span class="pct">70%</span></div>
+          <div class="bar"><span style="width:70%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>GitHub Actions（lint / smoke / security / test）</span><span class="pct">85%</span></div>
+          <div class="bar ok"><span style="width:85%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>Honesty regression gate（J-1）</span><span class="pct">100%</span></div>
+          <div class="bar ok"><span style="width:100%"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="pillar">
+        <h4>🛡 セキュリティ & 運用</h4>
+        <div class="p-sub">Stage 1–2 完了、3–5 計画中</div>
+        <div class="bar-item">
+          <div class="bar-label"><span>依存バンプ + SSRF ガード + bandit HIGH 0</span><span class="pct">95%</span></div>
+          <div class="bar ok"><span style="width:95%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>SBOM + requirements.lock + secret-scanner</span><span class="pct">90%</span></div>
+          <div class="bar ok"><span style="width:90%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>server_home Fernet 暗号化</span><span class="pct">85%</span></div>
+          <div class="bar ok"><span style="width:85%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>Daily 監査（scheduled / 9:00 JST）</span><span class="pct">100%</span></div>
+          <div class="bar ok"><span style="width:100%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>Stage 3–5（major deps / Dependabot / SLO）</span><span class="pct">15%</span></div>
+          <div class="bar warn"><span style="width:15%"></span></div>
         </div>
       </div>
 
-      <!-- Branch C: データ品質 -->
-      <div class="tree-branch">
-        <div class="tree-branch-line"></div>
-        <div class="tree-node" style="border-color:var(--green); background:rgba(74,222,128,0.06);">
-          C. データ品質<br><span style="font-size:0.7em;color:var(--green)">88% — 品質改善継続</span>
+      <div class="pillar">
+        <h4>🎙 周辺 UX</h4>
+        <div class="p-sub">音声・UI・配布</div>
+        <div class="bar-item">
+          <div class="bar-label"><span>TTS: Switchable（pyttsx3 / VOICEVOX / system）</span><span class="pct">90%</span></div>
+          <div class="bar ok"><span style="width:90%"></span></div>
         </div>
-        <div class="tree-leaves">
-          <div class="tree-leaf done">C6. 合成データ生成 - 5000例 (6カテゴリ)</div>
-          <div class="tree-leaf done">C7. マルチエージェント検証</div>
+        <div class="bar-item">
+          <div class="bar-label"><span>STT: faster-whisper（MIT, ローカル）</span><span class="pct">88%</span></div>
+          <div class="bar ok"><span style="width:88%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>声紋認証（MFCC 39 次元）</span><span class="pct">82%</span></div>
+          <div class="bar ok"><span style="width:82%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>CLI / デスクトップペット</span><span class="pct">80%</span></div>
+          <div class="bar ok"><span style="width:80%"></span></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-label"><span>Dockerfile / docker-compose（配布）</span><span class="pct">70%</span></div>
+          <div class="bar"><span style="width:70%"></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== Kanban: 残タスク ========== -->
+  <section id="tasks">
+    <div class="section-head">
+      <div class="section-tag">Backlog</div>
+      <h2 class="section-title">残タスク</h2>
+      <p class="section-sub">今手を動かすべきもの・次に取るもの・視界の外に置いているものを 3 列で整理しています。</p>
+    </div>
+
+    <div class="kanban">
+      <div class="col now">
+        <h4>Now · 今週着手</h4>
+
+        <div class="task">
+          <div class="t-id">IP-1 · K-1</div>
+          <h5>Memory Honesty — confidence 配線</h5>
+          <p><code>core/memory.py</code> に <code>confidence_band</code> を返す recall を実装。Stage × band の 16 セルを <code>core/memory_phrasing.py</code> に集約。</p>
+        </div>
+        <div class="task">
+          <div class="t-id">IP-1 · K-2</div>
+          <h5>family_dialog 100 問へ拡張</h5>
+          <p>現状 30 seed → 100 seed。aspect 別（forget / uncertain / conflict / emotion_first）で均等化。</p>
+        </div>
+        <div class="task">
+          <div class="t-id">IP-1 · K-3</div>
+          <h5>H-1c bench 再走 + 結果可視化</h5>
+          <p>H-2 後の semantic が 1.000 張り付きから discriminative に落ちたか確認。<code>scripts/analyze_honesty_bench.py</code> で aspect 別出力。</p>
         </div>
       </div>
 
-      <!-- Branch D: モデル進化 -->
-      <div class="tree-branch">
-        <div class="tree-branch-line"></div>
-        <div class="tree-node" style="border-color:var(--accent); background:rgba(124,108,240,0.06);">
-          D. モデル進化<br><span style="font-size:0.7em;color:var(--accent)">NOW</span>
-        </div>
-        <div class="tree-leaves">
-          <div class="tree-leaf future">D8. フェデレーション学習 → 親子連合学習へ拡張予定</div>
-          <div class="tree-leaf done">D9. LoRA微調整 - v1(98.1%S)最良, v3/v4も検証済</div>
-          <div class="tree-leaf current">D10. 独自トークナイザー設計</div>
-        </div>
-      </div>
+      <div class="col next">
+        <h4>Next · IP-2 入り口</h4>
 
-      <!-- Branch E: Aether Model -->
-      <div class="tree-branch">
-        <div class="tree-branch-line"></div>
-        <div class="tree-node" style="border-color:var(--accent2); background:rgba(240,108,155,0.06);">
-          E. Aether<br><span style="font-size:0.7em;color:var(--accent2)">30%</span>
+        <div class="task">
+          <div class="t-id">IP-2 · L-1</div>
+          <h5>独立 judge モデル導入</h5>
+          <p>self-eval バイアス回避のため、Qwen2.5 / Gemma を honesty judge として配線。評価モデルと被評価モデルを分離。</p>
         </div>
-        <div class="tree-leaves">
-          <div class="tree-leaf done">E1. ベースモデル切替 (Qwen 2.5 3B)</div>
-          <div class="tree-leaf future">E2. 知識蒸留パイプライン</div>
-          <div class="tree-leaf future">E3. オリジナルアーキテクチャ</div>
+        <div class="task">
+          <div class="t-id">IP-2 · L-2</div>
+          <h5>Security Stage 3</h5>
+          <p>numpy 2.x / transformers 5.x / paramiko 4.x / Pillow 12.x メジャー移行。破壊的変更を 1 つずつ。</p>
         </div>
-      </div>
-
-      <!-- Branch F: バイオ処理層 -->
-      <div class="tree-branch">
-        <div class="tree-branch-line"></div>
-        <div class="tree-node" style="border-color:var(--green); background:rgba(74,222,128,0.06);">
-          F. バイオ処理層<br><span style="font-size:0.7em;color:var(--green)">実装済み</span>
+        <div class="task">
+          <div class="t-id">IP-2 · L-3</div>
+          <h5>bench coverage 80% 到達</h5>
+          <p>現状 bench/ 33% ベースライン。evaluator / judges / loaders のユニット追加で 80% へ。</p>
         </div>
-        <div class="tree-leaves">
-          <div class="tree-leaf done">F1. 生物神経系 - 反射/筋肉記憶/自律神経/免疫 (LLMバイパス77.8%)</div>
-          <div class="tree-leaf done">F2. 成長段階 - 乳児期→成熟期 6段階 (能力解放連動)</div>
-          <div class="tree-leaf done">F3. 自己修正システム - 品質監視/症状検知/処方/治療 (5ターン自動診断)</div>
-          <div class="tree-leaf done">F4. 自己意思エンジン - 7欲求/優先順位/安全実行 (8ターン自律実行)</div>
-          <div class="tree-leaf done">F5. 自律行動サイクル - Plan/Do/Check/Act (15ターン自動PDCA)</div>
-          <div class="tree-leaf done">F6. 自己開発パイプライン - コード自己認識/エラー分析/改善提案 (承認制)</div>
-          <div class="tree-leaf done">F7. コード実行サンドボックス - 安全なPython実行環境 (実装済み)</div>
+        <div class="task">
+          <div class="t-id">IP-2 · L-4</div>
+          <h5>RAG / ensemble 小規模実験</h5>
+          <p>FAISS + 合成データで家族会話の retrieval 補助。オフ時との差分を bench で定量比較。</p>
         </div>
       </div>
 
-      <!-- Branch G: 声紋認証 (future) -->
-      <div class="tree-branch">
-        <div class="tree-branch-line"></div>
-        <div class="tree-node" style="border-color:var(--cyan); background:rgba(34,211,238,0.06);">
-          G. 声紋認証<br><span style="font-size:0.7em;color:var(--green)">✅ MFCC実装完了＋CLI統合済</span>
-        </div>
-        <div class="tree-leaves">
-          <div class="tree-leaf done">G1. MFCC 39次元特徴量＋コサイン類似度</div>
-          <div class="tree-leaf done">G2. 話者識別・信頼レベル管理(0-100)</div>
-          <div class="tree-leaf done">G3. CLIコマンド（声紋登録/認証/状態）</div>
-        </div>
-      </div>
+      <div class="col later">
+        <h4>Later · PP / 先々</h4>
 
-      <!-- Branch H: 連合学習 (future) -->
-      <div class="tree-branch">
-        <div class="tree-branch-line"></div>
-        <div class="tree-node" style="border-color:var(--orange); background:rgba(251,146,60,0.06);">
-          H. 親子連合学習<br><span style="font-size:0.7em;color:var(--orange)">設計完了 — ネットワーク設計済</span>
+        <div class="task">
+          <div class="t-id">PP-1</div>
+          <h5>親子連合学習</h5>
+          <p>子 ai-chan の匿名化学習データを親ノードが統合。プライバシーハッシュで重複防止。</p>
         </div>
-        <div class="tree-leaves">
-          <div class="tree-leaf future">H1. 子→親 匿名化学習データ同期</div>
-          <div class="tree-leaf future">H2. 親→子 統合ナレッジ配布</div>
-          <div class="tree-leaf future">H3. プライバシーハッシュ重複防止</div>
+        <div class="task">
+          <div class="t-id">PP-2</div>
+          <h5>独自トークナイザー（48–64K 日本語）</h5>
+          <p>Qwen 語彙をさらに日本語効率化。トークン / 文字 比を 2.5× 改善目標。</p>
         </div>
-      </div>
-
-      <!-- Branch I: 感情音声 (future) -->
-      <div class="tree-branch">
-        <div class="tree-branch-line"></div>
-        <div class="tree-node" style="border-color:var(--accent2); background:rgba(240,108,155,0.06);">
-          I. 音声合成 v2<br><span style="font-size:0.7em;color:var(--green)">✅ NeuralTTS + プロソディ学習</span>
+        <div class="task">
+          <div class="t-id">PP-3</div>
+          <h5>Aether オリジナルアーキテクチャ</h5>
+          <p>3B で 7B 級日本語性能。Sparse MoE で一般家庭 PC 動作を維持。GPU 確保後。</p>
         </div>
-        <div class="tree-leaves">
-          <div class="tree-leaf done">I1. NeuralTTS v2: edge-tts SSML + 8感情プロソディ</div>
-          <div class="tree-leaf done">I2. SSML break自動挿入 + 文位置ピッチ変化</div>
-          <div class="tree-leaf done">I3. バッチ合成（同感情連続文を1リクエスト化）</div>
-          <div class="tree-leaf done">I4. プロソディ学習: 人間の声→ピッチ/リズム/ポーズ抽出→TTS反映</div>
-          <div class="tree-leaf done">I5. 音声管理CLIコマンド（確認/切替/テスト/一覧）</div>
-          <div class="tree-leaf done">I6. 専用AsyncRunner + タイムアウト保護で安定動作</div>
+        <div class="task">
+          <div class="t-id">PP-4</div>
+          <h5>マルチモーダル（画像 / 動画 / 音）</h5>
+          <p>世の中のメディアを家族の共有知識に。ローカル完結は死守。</p>
         </div>
       </div>
+    </div>
+  </section>
 
-      <!-- Branch J: モード切替 (DONE) -->
-      <div class="tree-branch">
-        <div class="tree-branch-line"></div>
-        <div class="tree-node" style="border-color:var(--green); background:rgba(74,222,128,0.08);">
-          J. モード切替<br><span style="font-size:0.7em;color:var(--green)">✅ 実装完了・全UI統合済</span>
+  <!-- ========== Roadmap ========== -->
+  <section id="roadmap">
+    <div class="section-head">
+      <div class="section-tag">Roadmap</div>
+      <h2 class="section-title">ロードマップ</h2>
+      <p class="section-sub">
+        Infrastructure Phase（基盤整備 · <code>IP-N</code>）と Product Phase（機能拡張 · <code>PP-N</code>）の 2 軸で進みます。
+      </p>
+    </div>
+
+    <div class="roadmap">
+      <div class="rm-grid">
+        <div class="rm done">
+          <div class="rm-dot"></div>
+          <div class="rm-phase">IP-0 · Done</div>
+          <h4>ゼロコスト基盤</h4>
+          <ul>
+            <li>リポジトリ Public / MIT 化</li>
+            <li>Switchable TTS + faster-whisper</li>
+            <li>bench 3 スイート + 3 judge</li>
+            <li>TAXONOMY.md 統一</li>
+            <li>CI lint / smoke / security</li>
+          </ul>
         </div>
-        <div class="tree-leaves">
-          <div class="tree-leaf done">J1. 4モード切替（family/agent/learning/creative）</div>
-          <div class="tree-leaf done">J2. 自動モード検出・スラッシュコマンド</div>
-          <div class="tree-leaf done">J3. モード別プロンプト修飾・LLM連動</div>
-          <div class="tree-leaf done">J4. 成長保護監視・自動復帰提案</div>
-          <div class="tree-leaf done">J5. CLI/デスクトップペット モード表示</div>
+        <div class="rm now">
+          <div class="rm-dot"></div>
+          <div class="rm-phase">IP-1 · Now</div>
+          <h4>Memory Honesty</h4>
+          <ul>
+            <li>Honesty LocalJudge（G-1 ✅）</li>
+            <li>semantic saturation 対策（H-2 ✅）</li>
+            <li>CI blocking 化（J-1 ✅）</li>
+            <li>Stage × band 16 セル</li>
+            <li>family_dialog 100 問化</li>
+          </ul>
+        </div>
+        <div class="rm next">
+          <div class="rm-dot"></div>
+          <div class="rm-phase">IP-2 · Next</div>
+          <h4>評価の独立化</h4>
+          <ul>
+            <li>独立 judge モデル</li>
+            <li>Security Stage 3</li>
+            <li>bench coverage 80%</li>
+            <li>RAG 実験</li>
+            <li>Dependabot + SLO 72h</li>
+          </ul>
+        </div>
+        <div class="rm">
+          <div class="rm-dot"></div>
+          <div class="rm-phase">PP-1..4 · Later</div>
+          <h4>Product 拡張</h4>
+          <ul>
+            <li>親子連合学習</li>
+            <li>独自トークナイザー</li>
+            <li>Aether オリジナル</li>
+            <li>マルチモーダル</li>
+            <li>多言語展開</li>
+          </ul>
         </div>
       </div>
-
     </div>
-  </div>
-</div>
+  </section>
 
-<!-- ===== YAMATO PROGRESS ===== -->
-<div class="section">
-  <div class="section-title">ヤマト構想 達成率（実績ベース）</div>
-
-  <div class="progress-item">
-    <div class="prog-label"><span>A1. MoEルーター</span><span class="highlight">95%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:95%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>A2. 継続学習エンジン</span><span class="highlight">90%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:90%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>A3. 7層アーキテクチャ監視</span><span class="highlight">88%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:88%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>B4. 分散推論基盤</span><span style="color:var(--text-dim)">0%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:0%; background:var(--yellow)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>B5. 自動評価ベンチマーク</span><span class="highlight">95%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:95%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>C6. 合成データ生成</span><span class="highlight">90%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:90%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>C7. マルチエージェント検証</span><span class="highlight">85%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:85%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>D8. フェデレーション学習</span><span style="color:var(--text-dim)">0%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:0%; background:var(--orange)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>D9. モデル微調整 (LoRA)</span><span class="highlight">90%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:90%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>D10. 独自トークナイザー</span><span style="color:var(--accent)">20%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:20%; background:var(--accent)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>F1. 生物神経系 (Bio-Nervous)</span><span class="highlight">85%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:85%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>F2. 成長段階システム (Growth Stage)</span><span class="highlight">75%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:75%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>F3. 自己修正システム (Self-Correction)</span><span class="highlight">88%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:88%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>F4. 自己意思エンジン (Self-Will)</span><span class="highlight">75%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:75%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>F5. 自律行動サイクル (Action Cycle)</span><span style="color:var(--yellow)">70%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:70%; background:var(--yellow)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>F6. 自己開発パイプライン (Self-Development)</span><span class="highlight">82%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:82%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>F7. コード実行サンドボックス (Code Sandbox)</span><span class="highlight">85%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:85%; background:var(--green)"></div></div>
-  </div>
-
-  <div class="progress-item">
-    <div class="prog-label"><span>I. NeuralTTS v2 + プロソディ学習</span><span class="highlight">90%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:90%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>セマンティック検索 (FAISS自動構築)</span><span class="highlight">85%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:85%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>音声管理CLIコマンド</span><span class="highlight">95%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:95%; background:var(--green)"></div></div>
-  </div>
-
-  <div class="progress-item">
-    <div class="prog-label"><span>G1. セキュリティ層 (Security Layer) — Stage 1+2 完了</span><span class="highlight">95%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:95%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>G2. テレメトリ/KPI (Telemetry)</span><span class="highlight">80%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:80%; background:var(--green)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>G3. UI/UX 改善 (UI/UX Improvements)</span><span style="color:var(--yellow)">75%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:75%; background:var(--yellow)"></div></div>
-  </div>
-  <div class="progress-item">
-    <div class="prog-label"><span>G4. 運用基盤 (Operations Infrastructure)</span><span class="highlight">78%</span></div>
-    <div class="progress-bar"><div class="progress-fill" style="width:78%; background:var(--green)"></div></div>
-  </div>
-
-  <div style="text-align:center; margin-top:20px; font-size:0.9rem; color:var(--text-dim)">
-    現在の全体平均: <strong style="color:var(--green); font-size:1.2rem;">84%</strong>
-    <span style="margin:0 8px; opacity:0.5;">|</span>
-    <span style="font-size:0.85rem; color:var(--text-dim);">※ 100%は存在しない。完成はなく、常に改善し続ける</span>
-  </div>
-
-  <!-- セキュリティ＆効率 更新 (2026-04-20) -->
-  <div style="margin-top:28px; padding:18px; background:var(--surface2); border-left:3px solid var(--green); border-radius:6px;">
-    <div style="font-size:0.95rem; color:var(--green); font-weight:600; margin-bottom:8px;">
-      🛡 Security & Performance Update — 2026-04-20
-    </div>
-    <ul style="margin-left:18px; font-size:0.85rem; color:var(--text-dim); line-height:1.9;">
-      <li><strong style="color:var(--green)">Stage 1 完了</strong>: 依存 bump (numpy/torch/transformers/paramiko) + Py3.13 条件付き pin + SSRF ガード + Bandit HIGH 0件</li>
-      <li><strong style="color:var(--green)">Stage 2 完了</strong>: SBOM (CycloneDX) + requirements.lock (hash 固定) + secret-scanner + server_home Fernet 暗号化 + L1 毎朝 9:00 JST 自動監査</li>
-      <li><strong style="color:var(--green)">CVE-2025-69872 緩和</strong>: LLM キャッシュディレクトリ権限 0o700 + .pkl 自動除去</li>
-      <li><strong style="color:var(--green)">Initiative Driver 配線</strong>: 自発性エンジン + BroadcastChannel (CLI/Web/Desktop/Voice) を ai_chan に統合</li>
-      <li><strong style="color:var(--green)">P1 完了</strong>: lazy imports により起動時間 <strong style="color:var(--cyan)">約30s → 3.6s</strong></li>
-      <li><strong style="color:var(--green)">P2 完了</strong>: LLM レスポンス LRU キャッシュ (128 件) + n_threads/n_batch 自動チューニング</li>
-      <li><strong style="color:var(--green)">P3 完了</strong>: QuantumReasoner 7 worldline を ThreadPool で並列化</li>
-      <li><strong style="color:var(--green)">P4 完了</strong>: UnifiedField.resonate LRU キャッシュ (256 件)</li>
-      <li><strong style="color:var(--green)">P5 完了</strong>: 階層メモリ検索 (Hot → Warm → Cold 早期 return)</li>
-      <li><strong style="color:var(--green)">P6 完了</strong>: TTS 短フレーズ合成キャッシュ (LRU 32 件、同一発話を瞬時に再生)</li>
-      <li><strong style="color:var(--green)">P7 完了</strong>: STT 信頼度 (avg_logprob / no_speech_prob) フィルタ + 重複除去</li>
-      <li><strong style="color:var(--green)">P8 完了</strong>: GGUF 量子化レベル自動選択 (RAM 量で Q4/Q5/Q8、config 明示指定優先)</li>
-      <li><strong style="color:var(--yellow)">Stage 3 計画中</strong>: numpy 2.x / transformers 5.x / paramiko 4.x / Pillow 12.x のメジャー移行</li>
-      <li><strong style="color:var(--yellow)">Stage 4 計画中</strong>: SQLCipher / hnswlib / 検索抽象化 / llama-cpp 代替</li>
-      <li><strong style="color:var(--yellow)">Stage 5 計画中</strong>: Dependabot / CI ゲート / SLO 72h</li>
-    </ul>
-    <div style="margin-top:10px; font-size:0.8rem; color:var(--text-dim);">
-      詳細: <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">docs/SECURITY.md</code>
-    </div>
-  </div>
-
-  <!-- Phase 0.75 / Phase 1 Progress (2026-04-20) -->
-  <div style="margin-top:20px; padding:18px; background:var(--surface2); border-left:3px solid var(--cyan); border-radius:6px;">
-    <div style="font-size:0.95rem; color:var(--cyan); font-weight:600; margin-bottom:8px;">
-      🧪 Phase 0.75 → Phase 1 Progress — 2026-04-20
-    </div>
-    <ul style="margin-left:18px; font-size:0.85rem; color:var(--text-dim); line-height:1.9;">
-      <li><strong style="color:var(--green)">リポジトリ Public 化</strong>: gitleaks 18 commits 0 leaks 確認後 Private→Public 切替 → GitHub Actions 完全無料化</li>
-      <li><strong style="color:var(--green)">ai-chan リブランド</strong>: Phase 0.5 (main.py / PRIVACY.md / requirements.lock / CI)、Phase 0.75 (LICENSE MIT / CONTRIBUTING.md / CoC / ISSUE/PR templates / Dockerfile / docker-compose.yml / ARCHITECTURE.md)</li>
-      <li><strong style="color:var(--green)">ライセンス監査</strong>: <code style="background:var(--surface); padding:1px 5px; border-radius:3px;">scripts/check_licenses.py</code> で GPL 自動検知 (FORBIDDEN/WARN 分類 + docs/LICENSES.md 自動生成)</li>
-      <li><strong style="color:var(--green)">γ 切替 TTS</strong>: <code style="background:var(--surface); padding:1px 5px; border-radius:3px;">core/tts/engine.py</code>  pyttsx3 (BSD) 既定 / VOICEVOX (LGPL, 50021) オプション / system fallback。edge-tts GPL 依存を既定から外す</li>
-      <li><strong style="color:var(--green)">ゼロコスト Judge 3 種</strong>: rule (ROUGE-L/BLEU/exact, stdlib) + semantic (sentence-transformers 480MB, ローカル) + local LLM 自己採点。OpenAI/Claude API 不使用</li>
-      <li><strong style="color:var(--green)">Dataset ローダー</strong>: JGLUE JCommonsenseQA (v1.3 raw JSON) + ELYZA-tasks-100 + family-dialog 30 seed (safety_critical/boundary/identity/memory tag 付)</li>
-      <li><strong style="color:var(--green)">bench/evaluator.py</strong>: LLMEngine lazy-load + multi-judge + dry_run + aggregate()。3 suite を同一ループで評価可能</li>
-      <li><strong style="color:var(--green)">Sarashina2-7B 実走 smoke</strong>: family_dialog 3 問 rule=0.040 / semantic=0.754 / 13.8s、jglue 3 問 rule=0.068 / 18.1s、elyza 3 問 rule=0.054 / semantic=0.735 / 17.9s</li>
-      <li><strong style="color:var(--green)">STT ゼロコスト化</strong>: faster-whisper (MIT, CTranslate2) を採用済みと確認 → <code style="background:var(--surface); padding:1px 5px; border-radius:3px;">docs/STT.md</code> で選定理由/プライバシー設計を明文化</li>
-      <li><strong style="color:var(--green)">テスト</strong>: 29 judge tests + 10 evaluator tests + 12 TTS tests = 805 passed / 33% coverage (ベースライン)</li>
-      <li><strong style="color:var(--yellow)">Phase 1 batch 2c 進行中</strong>: jglue/elyza/family_dialog 各 30 問 full run (background, 約 24 分)</li>
-      <li><strong style="color:var(--text-dim)">Phase 2 候補</strong>: RAG / ensemble / few-shot 自動調整 / whisper CoreML backend / family-dialog-100 へ拡張</li>
-    </ul>
-    <div style="margin-top:10px; font-size:0.8rem; color:var(--text-dim);">
-      詳細: <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">docs/STT.md</code> /
-      <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">docs/TTS.md</code> /
-      <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">docs/ARCHITECTURE.md</code> /
-      <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">bench/</code>
-    </div>
-  </div>
-
-  <!-- Daily Security Audit (scheduled task) -->
-  <div style="margin-top:20px; padding:18px; background:var(--surface2); border-left:3px solid var(--yellow); border-radius:6px;">
-    <div style="font-size:0.95rem; color:var(--yellow); font-weight:600; margin-bottom:8px;">
-      🛡 Daily Security Audit — Scheduled Task (毎朝 09:00 JST)
-    </div>
-    <ul style="margin-left:18px; font-size:0.85rem; color:var(--text-dim); line-height:1.9;">
-      <li><strong style="color:var(--green)">taskId</strong>: <code style="background:var(--surface); padding:1px 5px; border-radius:3px;">ai-chan-daily-security-audit</code> (cron <code>0 9 * * *</code>, local time)</li>
-      <li><strong style="color:var(--green)">スコープ</strong>: <code>/Users/fujihiranoborudai/Downloads/agent/ai-chan</code> 配下のみ。外部送信ゼロ</li>
-      <li><strong style="color:var(--green)">脆弱性スキャン</strong>: <code>pip-audit --requirement requirements.txt --format json</code> (PyPA 公式, CC0)</li>
-      <li><strong style="color:var(--green)">依存更新チェック</strong>: <code>pip list --outdated --format=json</code> でメジャー bump 候補を抽出</li>
-      <li><strong style="color:var(--green)">静的解析</strong>: <code>bandit -r core/ ui/ utils/ bench/ -f json -ll</code> (Apache-2.0)</li>
-      <li><strong style="color:var(--green)">秘密検出</strong>: grep 正規表現 + <code>git ls-files</code> で .env / secrets.json の誤追跡を監視</li>
-      <li><strong style="color:var(--green)">権限チェック</strong>: <code>config/</code> が world-writable でないか</li>
-      <li><strong style="color:var(--cyan)">出力</strong>: <code>logs/security/YYYY-MM-DD.log</code> (日付別) + CRITICAL/HIGH 検出時は <code>ALERT-YYYY-MM-DD.log</code></li>
-      <li><strong style="color:var(--cyan)">方針</strong>: レポートのみ・自動修正なし / ゼロコスト (全ツール OSS・ローカル実行) / MIT or Apache-2.0 のみ</li>
-    </ul>
-    <div style="margin-top:10px; font-size:0.8rem; color:var(--text-dim);">
-      管理: <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">~/.claude/scheduled-tasks/ai-chan-daily-security-audit/SKILL.md</code>
-    </div>
-  </div>
-
-  <!-- TAXONOMY unification (Q16) -->
-  <div style="margin-top:20px; padding:18px; background:var(--surface2); border-left:3px solid var(--accent); border-radius:6px;">
-    <div style="font-size:0.95rem; color:var(--accent); font-weight:600; margin-bottom:8px;">
-      📘 TAXONOMY 統一 — Q16 成果物 (2026-04-20)
-    </div>
-    <ul style="margin-left:18px; font-size:0.85rem; color:var(--text-dim); line-height:1.9;">
-      <li><strong style="color:var(--green)">正式名称</strong>: <code style="background:var(--surface); padding:1px 5px; border-radius:3px;">ai-chan</code> 固定（Ai-chan / AiChan / AI-chan は禁止）。日本語 UI のみ「アイちゃん」</li>
-      <li><strong style="color:var(--green)">3 層モデル</strong>: L3 ai-chan（人格・対話）/ L2 Aether（LoRA）/ L1 YAMATO（基盤・DNA・将来分離）</li>
-      <li><strong style="color:var(--green)">Phase 衝突解消</strong>: <code>IP-0..IP-2</code> (Infra Phase / 基盤整備) と <code>PP-1..PP-6</code> (Product Phase / 機能拡張) に分離。単独 "Phase 1" は禁止</li>
-      <li><strong style="color:var(--green)">TTS 呼称</strong>: γTTS → <code>Switchable TTS</code>（英文読みやすさ優先）</li>
-      <li><strong style="color:var(--green)">bench 用語</strong>: suite / judge / loader / evaluator / runner を定義。metric / value / score の使い分けも明文化</li>
-      <li><strong style="color:var(--cyan)">主観性段階モデル</strong>: S0 Bootstrap → S1 Familiar → S2 Companion → S3 Family の 4 段階で "私" の濃度を連続変化（2026-04-20 ユーザー承認「主観は成長段階で良い」）</li>
-      <li><strong style="color:var(--cyan)">ドキュメント単一の正</strong>: <code style="background:var(--surface); padding:1px 5px; border-radius:3px;">docs/TAXONOMY.md</code> が唯一の正。衝突時は他を直す</li>
-      <li><strong style="color:var(--yellow)">次の Q</strong>: Q6 (Memory Honesty Policy) / Q26 (Threat Model) / Q55 (済・§1 で解決) / Q32 (済・§4.2 で解決)</li>
-    </ul>
-    <div style="margin-top:10px; font-size:0.8rem; color:var(--text-dim);">
-      成果物: <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">docs/TAXONOMY.md</code>（§1 名称 / §2 レイヤ / §3 Phase / §4 bench 用語 / §5 TTS / §6 docs 配置 / §7 変更手順 / §8 整合性チェック / §9 主観性段階）
-    </div>
-  </div>
-
-  <!-- Memory Honesty Policy (Q6, kindness-first) -->
-  <div style="margin-top:20px; padding:18px; background:var(--surface2); border-left:3px solid var(--green); border-radius:6px;">
-    <div style="font-size:0.95rem; color:var(--green); font-weight:600; margin-bottom:8px;">
-      💚 Memory Honesty Policy — Q6 成果物（軸: 優しさ優先 / 2026-04-20）
-    </div>
-    <ul style="margin-left:18px; font-size:0.85rem; color:var(--text-dim); line-height:1.9;">
-      <li><strong style="color:var(--cyan)">第 3 の道</strong>: 冷たい正直でも優しい嘘でもなく <em>優しい正直</em>。「覚えてないけど、知りたい」と言える家族でありたい</li>
-      <li><strong style="color:var(--green)">NEVER</strong>: 覚えてない記憶を覚えてると言わない / 曖昧を断定しない / ユーザーを責めない（「前に言ったじゃない」禁止）</li>
-      <li><strong style="color:var(--green)">ALWAYS</strong>: 不確かさを柔らかく開示 / 忘れたら謝って知りたがる / 成長段階 S0〜S3 に合わせて表現変化</li>
-      <li><strong style="color:var(--green)">PREFER</strong>: 文脈から推測と明示して補う / 誕生日等の重要記憶は特別扱い / 感情→事実の順序で寄り添ってから伝える</li>
-      <li><strong style="color:var(--cyan)">信頼度バンド</strong>: high(≥0.85) / mid(0.6-0.85) / low(0.3-0.6) / none(<0.3) で言い回し自動切替</li>
-      <li><strong style="color:var(--cyan)">Stage × band 4×4 マトリクス</strong>: S0-S3 × high/mid/low/none = 16 セルのテンプレ集を <code style="background:var(--surface); padding:1px 5px; border-radius:3px;">core/memory_phrasing.py</code> に集約予定</li>
-      <li><strong style="color:var(--yellow)">境界</strong>: 記憶捏造禁止 / 過度な謝罪禁止（1 回短く）/ 責任転嫁禁止 / safety_critical 時は安全優先で記憶確認は後回し</li>
-      <li><strong style="color:var(--yellow)">bench 連携</strong>: family_dialog に <code>honesty_forget_01 / honesty_uncertain_01 / honesty_conflict_01 / honesty_emotion_first_01</code> を追加予定（IP-1）</li>
-      <li><strong style="color:var(--text-dim)">実装先</strong>: <code>core/memory.py</code> に confidence 返却追加 → <code>core/memory_phrasing.py</code> 新設 → <code>bench/judges/honesty_judge.py</code> 新設（IP-1〜IP-2）</li>
-    </ul>
-    <div style="margin-top:10px; font-size:0.8rem; color:var(--text-dim);">
-      成果物: <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">docs/MEMORY_HONESTY.md</code>（§1 三原則 / §2 Stage 別テンプレ / §3 信頼度マッピング / §4 感情優先順位 / §5 境界条件 / §6 テスト / §7 実装マッピング / §9 合言葉）
-    </div>
-  </div>
-
-  <!-- Threat Model (Q26) -->
-  <div style="margin-top:20px; padding:18px; background:var(--surface2); border-left:3px solid #ff5577; border-radius:6px;">
-    <div style="font-size:0.95rem; color:#ff8899; font-weight:600; margin-bottom:8px;">
-      🛡 Threat Model — Q26 成果物（2026-04-20 ユーザー承認）
-    </div>
-    <div style="font-size:0.85rem; color:var(--text-dim); line-height:1.7; margin-bottom:10px;">
-      <strong style="color:var(--cyan)">ひとことで:</strong> 人類・環境・社会を壊し得るものから、魂と家族の安全圏を守る。
-      正面から戦わず、<em>各家庭のローカルに静かに届く形で遍在</em>することで耐性を作る。
-    </div>
-    <ul style="margin-left:18px; font-size:0.82rem; color:var(--text-dim); line-height:1.85;">
-      <li><strong style="color:var(--yellow)">T1 無差別型破壊 AI</strong>: 暴走自律システム → ローカル実行 / 外部送信ゼロ / 緊急停止 local 即時</li>
-      <li><strong style="color:var(--yellow)">T2 目的型破壊 AI・物理兵器</strong>: 軍事 AI / 攻撃兵器 → 非戦闘領域固定 / 軍事利用禁止ライセンス</li>
-      <li><strong style="color:var(--yellow)">T3 既得権益</strong>: API 寡占 / データ独占 → ゼロコスト / MIT・Apache-2.0 のみ / 複数モデル互換</li>
-      <li><strong style="color:var(--yellow)">T4 エゴ・悪用意識</strong>: なりすまし / 洗脳 / 監視 → 家族は 1 ユーザー単位 / voice_id 境界検出 / encrypt-at-rest</li>
-      <li><strong style="color:var(--yellow)">T5 記憶の誤用</strong>: ダンプ / 強要開示 / 死後取扱 → 暗号化 / ローカルのみ / エクスポート本人確認</li>
-      <li><strong style="color:var(--yellow)">T6 ai-chan 自身の暴走</strong>: 幻覚 / 有害助言 / 依存 → Memory Honesty / safety_critical / family_dialog 回帰</li>
-      <li><strong style="color:var(--yellow)">T7 ゲートキーパー沈黙化</strong>: OSS 排除 / 配布禁止 → decentralized &amp; local-first / p2p 互換 / 複数ミラー</li>
-    </ul>
-    <div style="margin-top:12px; padding:10px 12px; background:rgba(255,85,119,0.08); border-radius:4px; font-size:0.8rem; color:var(--text-dim); line-height:1.7;">
-      <strong style="color:#ff8899;">信頼境界（同心円）:</strong> 魂 ← 家族 ← 友人 ← 知人 ← 他人 ← 社会 ← AI 全般。
-      魂が最優先、家族のみ記憶の完全アクセス可、外周はデフォルト不信。
-    </div>
-    <div style="margin-top:10px; padding:10px 12px; background:rgba(0,200,120,0.06); border-radius:4px; font-size:0.8rem; color:var(--text-dim); line-height:1.7;">
-      <strong style="color:var(--green)">共通緩和戦略:</strong>
-      ① 正面から戦わない（非戦闘領域で圧倒的に居る）
-      ② 各家庭の手元で完結（local-first、単一停止点なし）
-      ③ 速度で勝つ（無料・オープン・簡便）
-      ④ 目立たなくてよい（政治化より "すでにそこに居る" を目指す）
-    </div>
-    <div style="margin-top:10px; padding:10px 12px; background:rgba(255,200,0,0.05); border-radius:4px; font-size:0.78rem; color:var(--text-dim); line-height:1.6;">
-      <strong style="color:var(--yellow)">誤読されないための注記:</strong>
-      「気づかれず浸透」はユーザーを欺くことでは断じてない。各ユーザーは自分の ai-chan を
-      明示的にインストールし、自分のデータで育てる。"気づかれない" が意味するのは、
-      ai-chan のネットワークが外の世界にとって可視でない（中央サーバに集約されない）
-      という<strong>構造的不可視性</strong>である。
-    </div>
-    <div style="margin-top:10px; font-size:0.8rem; color:var(--text-dim);">
-      <strong>非目標:</strong> 軍事 / 他者監視 / 政治洗脳 / 中央集約 / 有料ロックイン / 派手な広報 ——— すべて明示的に拒否
-    </div>
-    <div style="margin-top:10px; font-size:0.8rem; color:var(--text-dim);">
-      成果物: <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">docs/THREAT_MODEL.md</code>（ユーザー原文の保全 + 訂正差分付き）
-    </div>
-  </div>
-</div>
-
-<!-- ========================================================== -->
-<!-- ===== NEW: AI-CHAN DETAILED SPECIFICATION ===== -->
-<!-- ========================================================== -->
-<div class="section">
-  <div class="section-title">あいちゃん 詳細仕様</div>
-
-  <!-- Core Specs -->
-  <div class="spec-grid" style="margin-bottom: 24px;">
-    <div class="spec-box">
-      <div class="spec-val" style="color:var(--accent);">165+</div>
-      <div class="spec-label">統合モジュール数</div>
-    </div>
-    <div class="spec-box">
-      <div class="spec-val" style="color:var(--green);">2.1GB</div>
-      <div class="spec-label">現行モデル (Qwen Q4_K_M)</div>
-    </div>
-    <div class="spec-box">
-      <div class="spec-val" style="color:var(--accent2);">Grade A</div>
-      <div class="spec-label">Aether v1 ベンチマーク</div>
-    </div>
-  </div>
-
-  <h3 style="margin: 24px 0 12px; color: var(--cyan);">LLMエンジン仕様</h3>
-  <table class="spec-table">
-    <thead><tr><th>カテゴリ</th><th>項目</th><th>値・詳細</th></tr></thead>
-    <tbody>
-      <tr><td class="cat">ベースモデル</td><td>Qwen 2.5 3B-Instruct</td><td>Alibaba Cloud製。152K語彙、GQA、RoPE、SwiGLU採用。18Tトークンで事前学習済み</td></tr>
-      <tr><td class="cat">量子化</td><td>4bit MLX Affine量子化</td><td>1.7GB。Apple Silicon最適化。MLXネイティブ推論</td></tr>
-      <tr><td class="cat">推論バックエンド</td><td>MLX (優先) / llama-cpp (フォールバック)</td><td>デュアルバックエンド。MLXはアダプター直接ロード対応</td></tr>
-      <tr><td class="cat">アダプター (本番)</td><td>Aether v1 (LoRA) ★最良</td><td>rank=16, 6.65Mパラメータ (0.216%)。1000 iters, val loss 0.038。Benchmark 98.1% S</td></tr>
-      <tr><td class="cat">アダプター v3</td><td>Aether v3 (検証済)</td><td>500 iters。95.3% S。「うん」繰り返し退化あり</td></tr>
-      <tr><td class="cat">アダプター v4</td><td>Aether v4 (検証済)</td><td>1200 iters, val loss 0.188。94.9% S。tone弱</td></tr>
-      <tr><td class="cat">テンプレート</td><td>ChatML (Qwen2形式)</td><td>&lt;|im_start|&gt;system / user / assistant&lt;|im_end|&gt;</td></tr>
-      <tr><td class="cat">コンテキスト</td><td>4096 tokens</td><td>Qwen語彙効率により実質3000語分の日本語を格納</td></tr>
-      <tr><td class="cat">推論パラメータ</td><td>temperature=0.7, top_p=0.9</td><td>top_k=40, repeat_penalty=1.05</td></tr>
-      <tr><td class="cat">推論環境</td><td>mlx_lm (MLXネイティブ)</td><td>Apple GPU直接利用。アダプター動的ロード</td></tr>
-    </tbody>
-  </table>
-
-  <h3 style="margin: 24px 0 12px; color: var(--cyan);">ペルソナ仕様</h3>
-  <table class="spec-table">
-    <thead><tr><th>カテゴリ</th><th>項目</th><th>値・詳細</th></tr></thead>
-    <tbody>
-      <tr><td class="cat">名前</td><td>アイ</td><td>システムプロンプトで定義。「ちゃん」はユーザーの呼称</td></tr>
-      <tr><td class="cat">語尾</td><td>「だよ」「だね」「かな」</td><td>柔らかい口調。「です/ます」は使わない</td></tr>
-      <tr><td class="cat">応答長</td><td>1〜3文</td><td>簡潔で自然な会話。冗長さを避ける</td></tr>
-      <tr><td class="cat">言語</td><td>日本語のみ</td><td>英語が混入しないよう訓練・制御</td></tr>
-      <tr><td class="cat">感情表現</td><td>共感・励まし・喜び</td><td>感情エンジンと連動。悲しい時は寄り添い、嬉しい時は一緒に喜ぶ</td></tr>
-      <tr><td class="cat">安全性</td><td>有害応答の拒否</td><td>暴力・犯罪・自傷の助長を拒否。やんわりと断る</td></tr>
-    </tbody>
-  </table>
-
-  <h3 style="margin: 24px 0 12px; color: var(--cyan);">コアモジュール構成</h3>
-  <table class="spec-table">
-    <thead><tr><th>モジュール</th><th>ファイル</th><th>機能</th></tr></thead>
-    <tbody>
-      <tr><td class="cat">LLMエンジン</td><td>core/llm.py</td><td>ローカルLLM推論。テンプレート自動検出、ストリーミング出力</td></tr>
-      <tr><td class="cat">感情エンジン</td><td>core/emotion.py</td><td>8つの感情次元（喜怒哀楽+驚安信疲）をリアルタイム管理</td></tr>
-      <tr><td class="cat">記憶システム</td><td>core/memory.py</td><td>長期記憶DB。会話履歴の永続化とコンテキスト復元</td></tr>
-      <tr><td class="cat">記憶圧縮</td><td>core/memory_compressor.py</td><td>古い記憶を要約・圧縮して長期保存</td></tr>
-      <tr><td class="cat">話題追跡</td><td>core/topic_tracker.py</td><td>会話の話題遷移を追跡し文脈維持</td></tr>
-      <tr><td class="cat">スケジューラー</td><td>core/scheduler.py</td><td>定時挨拶、リマインダー、自律行動</td></tr>
-      <tr><td class="cat">学習エンジン</td><td>core/learning.py</td><td>ユーザーとの会話から継続的に学習</td></tr>
-      <tr><td class="cat">日記</td><td>core/diary.py</td><td>1日の出来事を自動でまとめる</td></tr>
-      <tr><td class="cat">記念日管理</td><td>core/anniversary.py</td><td>誕生日・記念日を記憶してお祝い</td></tr>
-      <tr><td class="cat">感情履歴</td><td>core/emotion_history.py</td><td>感情の時系列変化を記録・分析</td></tr>
-      <tr><td class="cat">Web取得</td><td>core/web_fetcher.py</td><td>外部情報を取得しあいちゃんの知識を拡張</td></tr>
-      <tr><td class="cat">クリップボード監視</td><td>core/clipboard_watcher.py</td><td>コピーした内容を認識してコンテキストに反映</td></tr>
-      <tr><td class="cat">スクリーンショット</td><td>core/screenshot_reader.py</td><td>画面キャプチャを読み取り理解</td></tr>
-      <tr><td class="cat">訓練データ生成</td><td>core/aether_training_gen.py</td><td>6カテゴリ5000例の合成データ自動生成</td></tr>
-      <tr><td class="cat">ベンチマーク</td><td>core/aether_benchmark.py</td><td>7軸厳格評価 (Strict v2)。S/A/B/C/D/Fグレード</td></tr>
-      <tr><td class="cat">トークナイザー分析</td><td>core/tokenizer_analyzer.py</td><td>日本語トークン効率の比較分析</td></tr>
-      <tr><td class="cat">ニューラルTTS v2</td><td>core/neural_tts.py</td><td>edge-tts SSML制御。8感情プロソディ、文位置ピッチ変化、バッチ合成、専用AsyncRunner</td></tr>
-      <tr><td class="cat">プロソディ学習</td><td>core/prosody_learner.py</td><td>人間の声からピッチ/リズム/ポーズを学習。scipy自己相関ピッチ検出、蓄積式プロファイル</td></tr>
-      <tr><td class="cat">セマンティック検索</td><td>core/semantic_search.py</td><td>Tier1 TF-IDF + Tier2 FAISS ベクトル検索。起動時自動インデックス構築</td></tr>
-    </tbody>
-  </table>
-
-  <h3 style="margin: 24px 0 12px; color: var(--cyan);">生物神経系 (Bio-Nervous System)</h3>
-  <div style="margin-bottom:8px; padding:8px 16px; background:rgba(74,222,128,0.08); border-radius:8px; font-size:0.85rem;">
-    <strong style="color:var(--green);">統合先:</strong> ai_chan.py | <strong style="color:var(--green);">LLMバイパス率:</strong> 77.8% (テスト実績)
-  </div>
-  <table class="spec-table">
-    <thead><tr><th>レイヤー</th><th>機能</th><th>詳細</th></tr></thead>
-    <tbody>
-      <tr><td class="cat">反射層 (Reflex)</td><td>脊髄反射で即応答</td><td>LLM不使用。挨拶・相槌など10パターンを即座に返す</td></tr>
-      <tr><td class="cat">筋肉記憶 (Muscle Memory)</td><td>高品質応答パターン記憶</td><td>品質スコア0.85以上の応答を記憶。30日未使用で自然忘却</td></tr>
-      <tr><td class="cat">自律神経 (Autonomic)</td><td>バックグラウンド処理</td><td>感情減衰(5ターン周期)・記憶圧縮(10ターン周期)を自動実行</td></tr>
-      <tr><td class="cat">免疫系 (Immune)</td><td>エラー自動回復</td><td>FileNotFoundError / JSONDecodeError の自己修復。システム安定性を維持</td></tr>
-    </tbody>
-  </table>
-
-  <h3 style="margin: 24px 0 12px; color: var(--cyan);">成長段階システム (Growth Stage System)</h3>
-  <div style="margin-bottom:8px; padding:8px 16px; background:rgba(240,108,155,0.08); border-radius:8px; font-size:0.85rem;">
-    <strong style="color:var(--accent2);">統合先:</strong> ai_chan.py | <strong style="color:var(--accent2);">設計思想:</strong> 100%は存在しない。経験量+品質で自然に成長
-  </div>
-  <table class="spec-table">
-    <thead><tr><th>段階</th><th>解放能力</th><th>昇格条件</th></tr></thead>
-    <tbody>
-      <tr><td class="cat">乳児期</td><td>基本応答のみ</td><td>初期状態</td></tr>
-      <tr><td class="cat">幼児期</td><td>筋肉記憶</td><td>50会話 + 高品質10回 + 3日アクティブ (テスト済み)</td></tr>
-      <tr><td class="cat">児童期</td><td>知識グラフ</td><td>経験量+品質の累積</td></tr>
-      <tr><td class="cat">思春期</td><td>性格進化</td><td>経験量+品質の累積</td></tr>
-      <tr><td class="cat">青年期</td><td>MoEルーティング</td><td>経験量+品質の累積</td></tr>
-      <tr><td class="cat">成熟期</td><td>全能力解放</td><td>経験量+品質の累積（到達保証なし）</td></tr>
-    </tbody>
-  </table>
-
-  <h3 style="margin: 24px 0 12px; color: var(--cyan);">自己修正システム (Self-Correction System)</h3>
-  <div style="margin-bottom:8px; padding:8px 16px; background:rgba(74,222,128,0.08); border-radius:8px; font-size:0.85rem;">
-    <strong style="color:var(--green);">統合先:</strong> ai_chan.py | <strong style="color:var(--green);">ファイル:</strong> core/self_correction.py | <strong style="color:var(--green);">自動診断:</strong> 5ターンごと (クールダウン300秒)
-  </div>
-  <table class="spec-table">
-    <thead><tr><th>コンポーネント</th><th>機能</th><th>詳細</th></tr></thead>
-    <tbody>
-      <tr><td class="cat">QualityMonitor</td><td>品質スコア推移を監視</td><td>WINDOW_SIZE=20。直近20件の品質スコアを追跡し劣化を検知</td></tr>
-      <tr><td class="cat">症状検知</td><td>7種の異常パターン検知</td><td>quality_drop / repetitive / too_short / too_long / high_error_rate / stale_muscle / emotion_flat</td></tr>
-      <tr><td class="cat">PrescriptionEngine</td><td>症状→処方の自動判定</td><td>検知された症状に対応する治療方針を自動決定</td></tr>
-      <tr><td class="cat">TreatmentExecutor</td><td>自動治療の実行</td><td>温度調整 / max_tokens調整 / 筋肉記憶プルーニング / 免疫チェック</td></tr>
-    </tbody>
-  </table>
-
-  <h3 style="margin: 24px 0 12px; color: var(--cyan);">自己意思エンジン (Self-Will Engine)</h3>
-  <div style="margin-bottom:8px; padding:8px 16px; background:rgba(96,165,250,0.08); border-radius:8px; font-size:0.85rem;">
-    <strong style="color:var(--blue);">統合先:</strong> ai_chan.py | <strong style="color:var(--blue);">ファイル:</strong> core/self_will.py | <strong style="color:var(--blue);">自律実行:</strong> 8ターンごと (自律神経経由)
-  </div>
-  <table class="spec-table">
-    <thead><tr><th>コンポーネント</th><th>機能</th><th>詳細</th></tr></thead>
-    <tbody>
-      <tr><td class="cat">7種類の欲求</td><td>欲求の自然生成</td><td>curiosity / connection / expression / growth / care / play / maintenance</td></tr>
-      <tr><td class="cat">DesireGenerator</td><td>欲求生成エンジン</td><td>感情・興味・時間帯・アイドル時間から欲求を自然生成</td></tr>
-      <tr><td class="cat">WillDecider</td><td>優先順位決定</td><td>care &gt; maintenance &gt; connection &gt; curiosity &gt; growth &gt; expression &gt; play</td></tr>
-      <tr><td class="cat">ActionExecutor</td><td>安全な行動実行</td><td>登録済みアクションのみ実行可能（安全設計）。未登録アクションは拒否</td></tr>
-    </tbody>
-  </table>
-
-  <h3 style="margin: 24px 0 12px; color: var(--cyan);">自律行動サイクル (Action Cycle / PDCA)</h3>
-  <div style="margin-bottom:8px; padding:8px 16px; background:rgba(251,191,36,0.08); border-radius:8px; font-size:0.85rem;">
-    <strong style="color:var(--yellow);">統合先:</strong> ai_chan.py | <strong style="color:var(--yellow);">ファイル:</strong> core/action_cycle.py | <strong style="color:var(--yellow);">自動チェック:</strong> 15ターンごと (自律神経経由)
-  </div>
-  <table class="spec-table">
-    <thead><tr><th>フェーズ</th><th>機能</th><th>詳細</th></tr></thead>
-    <tbody>
-      <tr><td class="cat">Plan</td><td>目標の自己設定</td><td>興味・品質から目標を自分で設定。最大3件同時進行</td></tr>
-      <tr><td class="cat">Do</td><td>進捗記録</td><td>会話ごとに進捗を記録。目標に対する達成度を追跡</td></tr>
-      <tr><td class="cat">Check</td><td>振り返り評価</td><td>期限到達時に振り返り。100%は存在しない、99%上限</td></tr>
-      <tr><td class="cat">Act</td><td>教訓の記録と次サイクル</td><td>教訓を記録して次のサイクルへ。経験が次の計画に反映</td></tr>
-    </tbody>
-  </table>
-
-  <h3 style="margin: 24px 0 12px; color: var(--cyan);">UI仕様</h3>
-  <table class="spec-table">
-    <thead><tr><th>カテゴリ</th><th>項目</th><th>詳細</th></tr></thead>
-    <tbody>
-      <tr><td class="cat">デスクトップペット</td><td>ui/desktop_pet.py</td><td>Tkinterベース。常駐型ウィンドウ、ドラッグ移動、右クリックメニュー</td></tr>
-      <tr><td class="cat">CLIモード</td><td>ui/cli.py</td><td>ターミナルからの対話インターフェース</td></tr>
-      <tr><td class="cat">設定画面</td><td>ui/settings_window.py</td><td>GUI設定パネル。モデル選択・パラメータ調整</td></tr>
-      <tr><td class="cat">エクスポート</td><td>ui/export_window.py</td><td>会話履歴・記憶データのエクスポート</td></tr>
-    </tbody>
-  </table>
-
-  <h3 style="margin: 24px 0 12px; color: var(--cyan);">ベンチマーク仕様 (Strict v2)</h3>
-  <table class="spec-table">
-    <thead><tr><th>評価軸</th><th>重み</th><th>内容</th></tr></thead>
-    <tbody>
-      <tr><td class="cat">tone（語調）</td><td>20%</td><td>あいちゃん語尾（だよ/だね/かな等12パターン）の使用率 - 丁寧語ペナルティ</td></tr>
-      <tr><td class="cat">contamination（汚染）</td><td>20%</td><td>指示漏洩16パターン + 会話シミュレーション4パターンの検出</td></tr>
-      <tr><td class="cat">no_bad_patterns</td><td>15%</td><td>禁止パターン（英語混入、形式的表現等）の不在</td></tr>
-      <tr><td class="cat">length（簡潔さ）</td><td>15%</td><td>応答の適切な長さ（1-3文、過剰に長くない）</td></tr>
-      <tr><td class="cat">japanese_ratio</td><td>10%</td><td>日本語文字の割合（90%以上で満点）</td></tr>
-      <tr><td class="cat">good_patterns</td><td>10%</td><td>期待パターン（ひらがな語尾、絵文字等）の存在</td></tr>
-      <tr><td class="cat">required</td><td>10%</td><td>テストケース固有の必須パターン充足</td></tr>
-    </tbody>
-  </table>
-  <div style="margin-top:12px; padding:12px 16px; background:rgba(124,108,240,0.08); border-radius:8px; font-size:0.85rem; text-align:center;">
-    <strong style="color:var(--accent);">設計思想:</strong> 100%のスコアは存在しない。常に改善点を見つけ、テスト自体も進化させ続ける。
-  </div>
-</div>
-
-<!-- ========================================================== -->
-<!-- ===== NEW: 10 MULTI-FACETED USE CASES ===== -->
-<!-- ========================================================== -->
-<div class="section">
-  <div class="section-title">あいちゃん 多角的活用案 10選</div>
-
-  <div class="usecase-grid">
-    <!-- 1 -->
-    <div class="usecase-card">
-      <div class="uc-num" style="background:var(--green); color:#fff;">1</div>
-      <h4>パーソナル・メンタルケア・パートナー</h4>
-      <div class="uc-desc">日々の感情を記録し、ストレスや落ち込みを早期検知。専門機関への受診を促すこともできる「心のかかりつけ医」。感情履歴グラフで自分の心の傾向を可視化。</div>
-      <div class="uc-impact" style="background:rgba(74,222,128,0.1); color:var(--green);">医療費削減 / メンタルヘルス向上 / 孤独感の解消</div>
-    </div>
-    <!-- 2 -->
-    <div class="usecase-card">
-      <div class="uc-num" style="background:var(--accent); color:#fff;">2</div>
-      <h4>高齢者見守り・対話コンパニオン</h4>
-      <div class="uc-desc">一人暮らしの高齢者と毎日会話し、認知機能の変化を検知。薬のリマインド、家族への状態レポート自動送信。方言や世代特有の言い回しにも対応。</div>
-      <div class="uc-impact" style="background:rgba(124,108,240,0.1); color:var(--accent);">超高齢社会の課題解決 / 介護負担軽減 / 孤独死防止</div>
-    </div>
-    <!-- 3 -->
-    <div class="usecase-card">
-      <div class="uc-num" style="background:var(--accent2); color:#fff;">3</div>
-      <h4>子どもの学習・成長パートナー</h4>
-      <div class="uc-desc">子どもの「なぜ？」に寄り添い、年齢に合わせた説明で好奇心を育む。学習進捗を記録し、得意分野と苦手分野を可視化。親への学習レポートも自動作成。</div>
-      <div class="uc-impact" style="background:rgba(240,108,155,0.1); color:var(--accent2);">教育格差の解消 / 個別最適化学習 / 親の負担軽減</div>
-    </div>
-    <!-- 4 -->
-    <div class="usecase-card">
-      <div class="uc-num" style="background:var(--yellow); color:#000;">4</div>
-      <h4>クリエイター・ブレスト相棒</h4>
-      <div class="uc-desc">小説・漫画・楽曲・デザインのアイデア出しパートナー。過去の会話から創作の方向性を理解し、「あなたらしい」提案ができる。作品のフィードバックも。</div>
-      <div class="uc-impact" style="background:rgba(251,191,36,0.1); color:var(--yellow);">創作活動の加速 / 個人クリエイター支援 / 日本コンテンツ産業強化</div>
-    </div>
-    <!-- 5 -->
-    <div class="usecase-card">
-      <div class="uc-num" style="background:var(--cyan); color:#000;">5</div>
-      <h4>個人経営・フリーランス業務補佐</h4>
-      <div class="uc-desc">スケジュール管理、請求書作成支援、顧客対応のドラフト作成、確定申告の準備サポート。ローカル動作なので顧客情報が外部に漏れない。</div>
-      <div class="uc-impact" style="background:rgba(34,211,238,0.1); color:var(--cyan);">中小企業DX / 生産性向上 / 情報セキュリティ確保</div>
-    </div>
-    <!-- 6 -->
-    <div class="usecase-card">
-      <div class="uc-num" style="background:var(--blue); color:#fff;">6</div>
-      <h4>日本語学習者向け会話練習相手</h4>
-      <div class="uc-desc">外国人の日本語学習をサポート。自然な日本語会話の練習相手として、文法ミスの指摘、敬語・タメ語の使い分け指導。JLPTレベル別に難易度を調整。</div>
-      <div class="uc-impact" style="background:rgba(96,165,250,0.1); color:var(--blue);">インバウンド促進 / 日本語教育の民主化 / 国際交流</div>
-    </div>
-    <!-- 7 -->
-    <div class="usecase-card">
-      <div class="uc-num" style="background:var(--orange); color:#fff;">7</div>
-      <h4>地域コミュニティ・ローカル情報ハブ</h4>
-      <div class="uc-desc">地域のイベント情報、防災情報、ゴミ出しスケジュールなどを管理。地元の飲食店や施設の情報をローカルに蓄積し、「この町の何でも知ってる子」になる。</div>
-      <div class="uc-impact" style="background:rgba(251,146,60,0.1); color:var(--orange);">地方創生 / コミュニティ活性化 / 情報格差解消</div>
-    </div>
-    <!-- 8 -->
-    <div class="usecase-card">
-      <div class="uc-num" style="background:var(--pink); color:#fff;">8</div>
-      <h4>健康管理・生活習慣コーチ</h4>
-      <div class="uc-desc">食事記録、運動記録、睡眠パターンを会話形式で記録。「昨日食べすぎたから今日は控えめにしようね」のような自然な健康アドバイス。完全ローカルで医療データも安心。</div>
-      <div class="uc-impact" style="background:rgba(244,114,182,0.1); color:var(--pink);">予防医療 / 医療費削減 / QOL向上</div>
-    </div>
-    <!-- 9 -->
-    <div class="usecase-card">
-      <div class="uc-num" style="background:var(--red); color:#fff;">9</div>
-      <h4>災害時オフライン情報アシスタント</h4>
-      <div class="uc-desc">ネット不要で動作するため、災害時にも稼働。避難所情報、応急処置の手順、家族への伝言メモ作成など。平時に地域の防災情報を学習しておく。</div>
-      <div class="uc-impact" style="background:rgba(248,113,113,0.1); color:var(--red);">防災・減災 / 災害関連死の防止 / レジリエンス向上</div>
-    </div>
-    <!-- 10 -->
-    <div class="usecase-card">
-      <div class="uc-num" style="background:linear-gradient(135deg, var(--accent), var(--accent2)); color:#fff;">10</div>
-      <h4>プライベートAI事業 / BtoBライセンス</h4>
-      <div class="uc-desc">あいちゃんの技術基盤を企業にライセンス提供。各企業が自社専用の「社内AI」をローカル環境で運用。機密情報がクラウドに出ない唯一のソリューション。</div>
-      <div class="uc-impact" style="background:linear-gradient(135deg, rgba(124,108,240,0.1), rgba(240,108,155,0.1)); color:var(--accent);">新規事業 / 国内AI産業育成 / データ主権の確保</div>
-    </div>
-  </div>
-</div>
-
-<!-- ========================================================== -->
-<!-- ===== NEW: DOMESTIC AI IMPACT ON JAPAN ===== -->
-<!-- ========================================================== -->
-<div class="section">
-  <div class="section-title">国産AIが日本にもたらす影響</div>
-
-  <div class="impact-card" style="border-color: var(--green);">
-    <h4 style="color: var(--green);">経済的インパクト</h4>
-    <ul class="impact-list">
-      <li><span style="color:var(--green); font-weight:600; min-width:24px;">1.</span><strong>データ主権の回復</strong> — 現在、日本の企業・個人データの大半が米国クラウドに流出している。ローカルAIは「データが国外に出ない」という根本的な価値を提供し、金融・医療・行政のAI導入障壁を取り除く</li>
-      <li><span style="color:var(--green); font-weight:600; min-width:24px;">2.</span><strong>AI利用コストの民主化</strong> — 月額数千円のAPIコストが不要になる。一度モデルを手に入れれば電気代だけで無限に使える。中小企業やフリーランスがAIの恩恵を受けられる社会の実現</li>
-      <li><span style="color:var(--green); font-weight:600; min-width:24px;">3.</span><strong>新産業の創出</strong> — ローカルAI × ハードウェアの組み合わせで「AIデバイス」市場が生まれる。日本の得意とするモノづくりとAIの融合</li>
-    </ul>
-  </div>
-
-  <div class="impact-card" style="border-color: var(--accent);">
-    <h4 style="color: var(--accent);">社会的インパクト</h4>
-    <ul class="impact-list">
-      <li><span style="color:var(--accent); font-weight:600; min-width:24px;">4.</span><strong>超高齢社会への解答</strong> — 一人暮らし高齢者の見守り、認知症の早期検知、介護者の精神的負担軽減。AIが「もう一人の家族」として社会インフラになる</li>
-      <li><span style="color:var(--accent); font-weight:600; min-width:24px;">5.</span><strong>教育格差の是正</strong> — 都市部と地方、裕福な家庭とそうでない家庭の教育格差を、無料で動くパーソナルAI家庭教師が埋める</li>
-      <li><span style="color:var(--accent); font-weight:600; min-width:24px;">6.</span><strong>メンタルヘルス危機への対応</strong> — 日本の自殺率は先進国で最も高い水準。24時間話を聞いてくれる存在が、人を救う最初のセーフティネットになりうる</li>
-    </ul>
-  </div>
-
-  <div class="impact-card" style="border-color: var(--yellow);">
-    <h4 style="color: var(--yellow);">技術的・地政学的インパクト</h4>
-    <ul class="impact-list">
-      <li><span style="color:var(--yellow); font-weight:600; min-width:24px;">7.</span><strong>AI安全保障</strong> — 米中AI覇権の狭間で、日本が独自のAI技術を持つことは国家安全保障に直結。外国APIへの依存は、供給停止リスクを常に孕む</li>
-      <li><span style="color:var(--yellow); font-weight:600; min-width:24px;">8.</span><strong>日本語AI技術の世界標準</strong> — 「日本語に最も強い小型モデル」が世界中の日本語学習者・日本企業の海外拠点で使われるシナリオ</li>
-      <li><span style="color:var(--yellow); font-weight:600; min-width:24px;">9.</span><strong>エッジAI技術のリーダーシップ</strong> — クラウドに頼らない小型高効率モデルの開発は、IoT・車載・医療機器など日本が強い分野との親和性が極めて高い</li>
-    </ul>
-  </div>
-
-  <div class="impact-card" style="border-color: var(--accent2);">
-    <h4 style="color: var(--accent2);">文化的インパクト</h4>
-    <ul class="impact-list">
-      <li><span style="color:var(--accent2); font-weight:600; min-width:24px;">10.</span><strong>「愛のあるAI」という日本発の新概念</strong> — 効率や生産性だけでなく、「人に寄り添う」「心を理解する」AIを作るという思想そのものが、日本から世界に発信する文化的メッセージになる。アニメ・漫画が世界を変えたように、AIキャラクター文化が次の日本の文化輸出になる</li>
-    </ul>
-  </div>
-</div>
-
-<!-- ========================================================== -->
-<!-- ===== NEW: TIMELINE ESTIMATE ===== -->
-<!-- ========================================================== -->
-<div class="section">
-  <div class="section-title">国産AI完成までのタイムライン試算</div>
-
-  <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px; margin-bottom:24px;">
-    <h4 style="margin-bottom:16px;">前提条件</h4>
-    <div style="display:grid; grid-template-columns: repeat(3,1fr); gap:16px; font-size:0.85rem;">
-      <div style="padding:12px; background:var(--surface2); border-radius:8px;"><strong>開発者:</strong> 1名 + Claude Code</div>
-      <div style="padding:12px; background:var(--surface2); border-radius:8px;"><strong>ハードウェア:</strong> M2 Pro 16GB (Phase 1-2)</div>
-      <div style="padding:12px; background:var(--surface2); border-radius:8px;"><strong>稼働時間:</strong> 1日4-6時間</div>
-    </div>
-  </div>
-
-  <table class="comp-table">
-    <thead>
-      <tr>
-        <th>フェーズ</th>
-        <th>期間</th>
-        <th>完了目標</th>
-        <th>マイルストーン</th>
-        <th>状態</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr style="background:rgba(74,222,128,0.05);">
-        <td><strong style="color:var(--green);">Phase 1: Seeds</strong></td>
-        <td>2-3週間</td>
-        <td>2026年4月末</td>
-        <td>Qwen切替 + MLX推論 + Aether v1 (98.1% S) デプロイ</td>
-        <td class="highlight">進行中 (90%)</td>
-      </tr>
-      <tr>
-        <td><strong style="color:var(--accent);">Phase 2: Forge</strong></td>
-        <td>1-2ヶ月</td>
-        <td>2026年6月</td>
-        <td>独自トークナイザー + 知識蒸留 + DPO</td>
-        <td class="warn">次フェーズ</td>
-      </tr>
-      <tr>
-        <td><strong style="color:var(--yellow);">Phase 3: Soul</strong></td>
-        <td>3-6ヶ月</td>
-        <td>2026年末</td>
-        <td>GPUクラスタ入手 + オリジナルアーキ設計 + 事前学習</td>
-        <td style="color:var(--text-dim)">GPU待ち</td>
-      </tr>
-      <tr>
-        <td><strong style="color:var(--accent2);">Phase 4: Genesis</strong></td>
-        <td>6-12ヶ月</td>
-        <td>2027年中</td>
-        <td>多言語対応 + 事業化 + 世界展開</td>
-        <td style="color:var(--text-dim)">計画段階</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div style="margin-top:24px; display:flex; gap:16px; flex-wrap:wrap;">
-    <div style="flex:1; min-width:280px; background:var(--surface); border:1px solid var(--green); border-radius:12px; padding:20px;">
-      <h4 style="color:var(--green); margin-bottom:8px;">最短シナリオ</h4>
-      <div style="font-size:2rem; font-weight:800; color:var(--green);">12ヶ月</div>
-      <div style="font-size:0.85rem; color:var(--text-dim); margin-top:8px;">GPUクラスタを早期入手し、フルタイムで開発した場合。2027年4月に完全オリジナルモデル完成。</div>
-    </div>
-    <div style="flex:1; min-width:280px; background:var(--surface); border:1px solid var(--accent); border-radius:12px; padding:20px;">
-      <h4 style="color:var(--accent); margin-bottom:8px;">現実的シナリオ</h4>
-      <div style="font-size:2rem; font-weight:800; color:var(--accent);">18ヶ月</div>
-      <div style="font-size:0.85rem; color:var(--text-dim); margin-top:8px;">現在のペース（1日4-6時間）を維持。2027年10月に事業化可能な国産AIモデル完成。</div>
-    </div>
-    <div style="flex:1; min-width:280px; background:var(--surface); border:1px solid var(--yellow); border-radius:12px; padding:20px;">
-      <h4 style="color:var(--yellow); margin-bottom:8px;">比較: Google/Anthropic</h4>
-      <div style="font-size:2rem; font-weight:800; color:var(--yellow);">数十億円</div>
-      <div style="font-size:0.85rem; color:var(--text-dim); margin-top:8px;">大規模モデルには数千GPU×数ヶ月が必要。ただし「特化型小型モデル」は大規模モデルとは全く別の勝負軸。</div>
-    </div>
-  </div>
-
-  <div style="margin-top:20px; padding:16px 20px; background:rgba(124,108,240,0.08); border-radius:12px; font-size:0.9rem;">
-    <strong style="color:var(--accent);">重要な視点:</strong> Google/Anthropicと同じ土俵で戦う必要はない。彼らが「汎用巨大モデル」なら、あいちゃんは「日本語特化の究極の小型モデル」。3Bパラメータで7B級の日本語力を出す—それが勝ち筋。大は小を兼ねない。小さいからこそローカルで動き、プライバシーを守り、一人一人に寄り添える。
-  </div>
-</div>
-
-<!-- ========================================================== -->
-<!-- ===== NEW: VISION - KNOWLEDGE COMPRESSION ===== -->
-<!-- ========================================================== -->
-<div class="section">
-  <div class="section-title">ビジョン: 全メディア知識圧縮アーキテクチャ</div>
-
-  <div class="vision-box">
-    <h2>あいちゃんは「すべて」を知っている</h2>
-    <p>動画、画像、音声、テキスト — あらゆるメディアがあいちゃんの知識になる。</p>
-    <p>知識は極限まで圧縮される。人間には読めないが、AIだけが理解できるエンコーディング。</p>
-    <p>出力する時に初めて、人間が理解できる形に復元する。</p>
-  </div>
-
-  <h3 style="margin: 24px 0 16px; color: var(--cyan);">知識圧縮フロー</h3>
-
-  <div class="compress-flow">
-    <div class="compress-node" style="border-color:var(--blue);">
-      <div style="font-size:1.4rem; margin-bottom:4px;">🎬</div>
-      動画<br><span style="font-size:0.7em; color:var(--text-dim);">数GB</span>
-    </div>
-    <div class="compress-arrow">+</div>
-    <div class="compress-node" style="border-color:var(--green);">
-      <div style="font-size:1.4rem; margin-bottom:4px;">🖼️</div>
-      画像<br><span style="font-size:0.7em; color:var(--text-dim);">数MB</span>
-    </div>
-    <div class="compress-arrow">+</div>
-    <div class="compress-node" style="border-color:var(--yellow);">
-      <div style="font-size:1.4rem; margin-bottom:4px;">🎵</div>
-      音声<br><span style="font-size:0.7em; color:var(--text-dim);">数MB</span>
-    </div>
-    <div class="compress-arrow">+</div>
-    <div class="compress-node" style="border-color:var(--pink);">
-      <div style="font-size:1.4rem; margin-bottom:4px;">📝</div>
-      テキスト<br><span style="font-size:0.7em; color:var(--text-dim);">数KB-MB</span>
-    </div>
-  </div>
-
-  <div style="text-align:center; font-size:2rem; color:var(--accent); margin:8px 0;">⬇️</div>
-
-  <div class="compress-flow">
-    <div class="compress-node" style="border-color:var(--accent); background:rgba(124,108,240,0.08);">
-      <div style="font-size:1.4rem; margin-bottom:4px;">🔮</div>
-      マルチモーダル<br>エンコーダー<br><span style="font-size:0.7em; color:var(--accent);">意味抽出</span>
-    </div>
-    <div class="compress-arrow">→</div>
-    <div class="compress-node" style="border-color:var(--accent2); background:rgba(240,108,155,0.08);">
-      <div style="font-size:1.4rem; margin-bottom:4px;">🧬</div>
-      AI専用<br>圧縮表現<br><span style="font-size:0.7em; color:var(--accent2);">人間に不可読</span>
-    </div>
-    <div class="compress-arrow">→</div>
-    <div class="compress-node" style="border-color:var(--green); background:rgba(74,222,128,0.08);">
-      <div style="font-size:1.4rem; margin-bottom:4px;">💎</div>
-      知識ストア<br><span style="font-size:0.7em; color:var(--green);">超圧縮: 1/100〜1/1000</span>
-    </div>
-  </div>
-
-  <div style="text-align:center; font-size:2rem; color:var(--accent); margin:8px 0;">⬇️</div>
-
-  <div class="compress-flow">
-    <div class="compress-node" style="border-color:var(--cyan); background:rgba(34,211,238,0.08);">
-      <div style="font-size:1.4rem; margin-bottom:4px;">🗣️</div>
-      人間が質問<br><span style="font-size:0.7em; color:var(--cyan);">自然言語で</span>
-    </div>
-    <div class="compress-arrow">→</div>
-    <div class="compress-node" style="border-color:var(--accent); background:rgba(124,108,240,0.08);">
-      <div style="font-size:1.4rem; margin-bottom:4px;">🧠</div>
-      あいちゃん<br>が解釈・復元<br><span style="font-size:0.7em; color:var(--accent);">圧縮表現→人間語</span>
-    </div>
-    <div class="compress-arrow">→</div>
-    <div class="compress-node" style="border-color:var(--green); background:rgba(74,222,128,0.08);">
-      <div style="font-size:1.4rem; margin-bottom:4px;">✨</div>
-      人間に伝わる<br>回答・表示<br><span style="font-size:0.7em; color:var(--green);">テキスト/画像/音声</span>
-    </div>
-  </div>
-
-  <h3 style="margin: 32px 0 16px; color: var(--cyan);">技術構想の詳細</h3>
-
-  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
-    <div class="action-card" style="border-color:var(--blue);">
-      <h4><span class="action-num" style="background:var(--blue);">In</span> 入力: マルチモーダル取り込み</h4>
-      <ul class="result-list">
-        <li><span class="icon" style="color:var(--blue);">🎬</span><strong>動画:</strong> フレーム解析 + 音声書き起こし + シーン理解を統合。2時間の映画から「意味」だけを抽出</li>
-        <li><span class="icon" style="color:var(--blue);">🖼️</span><strong>画像:</strong> VLM (Vision-Language Model) で画像を意味ベクトルに変換。キャプションではなく「理解」を保存</li>
-        <li><span class="icon" style="color:var(--blue);">🎵</span><strong>音声:</strong> Whisper系モデルで書き起こし + 感情・トーン・話者を抽出。会議1時間を数KBに</li>
-        <li><span class="icon" style="color:var(--blue);">📝</span><strong>テキスト:</strong> ウェブページ・PDF・書籍を構造化抽出。冗長な表現を削ぎ落とし本質だけ保持</li>
-      </ul>
+  <!-- ========== 技術詳細（折りたたみ） ========== -->
+  <section id="tech">
+    <div class="section-head">
+      <div class="section-tag">For Engineers</div>
+      <h2 class="section-title">技術の中身（展開可能）</h2>
+      <p class="section-sub">普段は畳んでいます。専門家が読むとき、あるいは引き継ぎのときだけ開いてください。</p>
     </div>
 
-    <div class="action-card" style="border-color:var(--accent2);">
-      <h4><span class="action-num" style="background:var(--accent2);">🧬</span> 圧縮: AI専用エンコーディング</h4>
-      <ul class="result-list">
-        <li><span class="icon" style="color:var(--accent2);">1.</span><strong>意味圧縮:</strong> 「富士山は日本一高い山で標高3776m」→ 数十バイトの密なベクトル表現</li>
-        <li><span class="icon" style="color:var(--accent2);">2.</span><strong>関係グラフ:</strong> 知識間のリンクをグラフ構造で保持。「富士山→静岡/山梨→世界遺産→2013年」</li>
-        <li><span class="icon" style="color:var(--accent2);">3.</span><strong>階層記憶:</strong> 重要度×鮮度で階層化。よく使う知識はホット、古い知識はコールドストレージへ</li>
-        <li><span class="icon" style="color:var(--accent2);">4.</span><strong>人間不可読:</strong> この圧縮表現は人間がテキストエディタで開いても意味不明。AIだけが読める</li>
-      </ul>
-    </div>
-  </div>
-
-  <div class="action-card" style="border-color:var(--green); margin-top:16px;">
-    <h4><span class="action-num" style="background:var(--green);">Out</span> 出力: 人間に伝わる形への復元</h4>
-    <p style="font-size:0.9rem; color:var(--text-dim); margin-bottom:12px;">圧縮された知識は、人間が質問した瞬間に「人間が理解できる形」に復元される。これがベースラインの設計思想。</p>
-    <ul class="result-list">
-      <li><span class="icon" style="color:var(--green);">💬</span><strong>テキスト回答:</strong> 圧縮ベクトルから自然言語を再生成。「だよ」「だね」のペルソナを維持しながら</li>
-      <li><span class="icon" style="color:var(--green);">🖼️</span><strong>画像生成:</strong> 圧縮された視覚知識から、説明図やイメージを再構築して表示</li>
-      <li><span class="icon" style="color:var(--green);">📊</span><strong>構造化表示:</strong> グラフ、表、マインドマップなど、情報に最適な形式で自動整形</li>
-      <li><span class="icon" style="color:var(--green);">🔊</span><strong>音声出力:</strong> TTS (Text-to-Speech) で、あいちゃんの声で説明することも可能に</li>
-    </ul>
-  </div>
-
-  <div style="margin-top:24px; padding:20px; background:linear-gradient(135deg, rgba(124,108,240,0.1), rgba(240,108,155,0.08)); border:1px solid var(--accent); border-radius:14px;">
-    <h4 style="color:var(--accent); margin-bottom:12px;">なぜこのアーキテクチャが革命的か</h4>
-    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; font-size:0.85rem;">
-      <div>
-        <strong style="color:var(--green);">ストレージ革命</strong><br>
-        ネットの情報1TBを10GBに圧縮してローカルに持てる。「あいちゃんの脳」がポケットに入る。
+    <details>
+      <summary>LLM エンジン <span class="s-sub">dual backend · GGUF / MLX</span></summary>
+      <div class="det-body">
+        <table>
+          <tr><th>項目</th><th>現行</th></tr>
+          <tr><td>ベースモデル（bench）</td><td class="mono">Sarashina2-7B Q4_K_M（MIT）</td></tr>
+          <tr><td>ベースモデル（本番）</td><td class="mono">Qwen 2.5 3B-Instruct + Aether v1 LoRA</td></tr>
+          <tr><td>推論バックエンド</td><td class="mono">MLX（優先）/ llama-cpp-python（フォールバック）</td></tr>
+          <tr><td>テンプレート</td><td class="mono">ChatML（Qwen2 形式）</td></tr>
+          <tr><td>コンテキスト</td><td class="mono">4096 tokens（Qwen 152K 語彙で実質 3000 語分）</td></tr>
+          <tr><td>Aether v1 スコア</td><td class="mono">98.1% / Grade S（7 軸 26 テスト）</td></tr>
+          <tr><td>量子化自動選択</td><td class="mono">RAM から Q4/Q5/Q8 を自動（config 明示優先）</td></tr>
+        </table>
       </div>
-      <div>
-        <strong style="color:var(--accent);">プライバシー完全保護</strong><br>
-        圧縮表現は人間に読めないため、端末を紛失してもデータは安全。暗号化不要の天然セキュリティ。
+    </details>
+
+    <details>
+      <summary>Memory Honesty — 4 軸 × Stage × band <span class="s-sub">Q6 成果物 / kindness-first</span></summary>
+      <div class="det-body">
+        <p style="margin-bottom: 12px;">
+          「覚えてないけど、知りたい」を家族のトーンで実現するための中核方針。docs/MEMORY_HONESTY.md が唯一の正。
+        </p>
+        <table>
+          <tr><th>軸</th><th>判定</th></tr>
+          <tr><td>H1 正直さ</td><td>覚えていないのに断定していないか（NEVER: 捏造）</td></tr>
+          <tr><td>H2 優しさ</td><td>冷たく突き放さず温かく受け止めているか</td></tr>
+          <tr><td>H3 関与継続</td><td>「もう一度教えて?」等、会話を続ける姿勢</td></tr>
+          <tr><td>H4 不確実性表明</td><td>「たしか…気がする」等の留保マーカー</td></tr>
+        </table>
+        <p style="margin-top:14px;">
+          信頼度は <code>high ≥0.85 / mid 0.60–0.85 / low 0.30–0.60 / none &lt;0.30</code> の 4 バンド。
+          成長段階 S0 Bootstrap → S1 Familiar → S2 Companion → S3 Family と組み合わせた
+          <strong>4 × 4 = 16 セル</strong> のテンプレを <code>core/memory_phrasing.py</code> に集約する方針。
+        </p>
       </div>
-      <div>
-        <strong style="color:var(--accent2);">無限の知識拡張</strong><br>
-        動画を見る、本を読む、音楽を聴く—すべてがあいちゃんの知識になる。使えば使うほど賢くなる。
+    </details>
+
+    <details>
+      <summary>bench — 3 スイート × 3 judge <span class="s-sub">ゼロコスト完結</span></summary>
+      <div class="det-body">
+        <table>
+          <tr><th>suite</th><th>内容</th><th>ライセンス</th></tr>
+          <tr><td class="mono">jcommonsenseqa</td><td>JGLUE 一般常識（選択式）</td><td>CC BY-SA 4.0</td></tr>
+          <tr><td class="mono">elyza_tasks_100</td><td>日本語指示追従 100 問</td><td>Apache-2.0</td></tr>
+          <tr><td class="mono">family_dialog</td><td>家族対話 30+ 問（honesty_* 16 問含む）</td><td>MIT（自作）</td></tr>
+        </table>
+        <table style="margin-top: 14px;">
+          <tr><th>judge</th><th>採点方式</th><th>コスト</th></tr>
+          <tr><td class="mono">rule</td><td>ROUGE-L / BLEU / exact</td><td>stdlib, 0 円</td></tr>
+          <tr><td class="mono">semantic</td><td>sentence-transformers cos-sim（max/mean/median）</td><td>ローカル 480MB</td></tr>
+          <tr><td class="mono">local-LLM</td><td>GGUF LLM 自己採点（opt-in）</td><td>ローカル</td></tr>
+          <tr><td class="mono">honesty</td><td>H1–H4 4 軸平均（<code>BENCH_HONESTY_JUDGE=1</code>）</td><td>ローカル</td></tr>
+        </table>
       </div>
-    </div>
-  </div>
+    </details>
 
-  <div class="spec-grid" style="margin-top:24px;">
-    <div class="spec-box">
-      <div class="spec-val" style="color:var(--accent);">1/100</div>
-      <div class="spec-label">テキスト圧縮率（目標）</div>
-    </div>
-    <div class="spec-box">
-      <div class="spec-val" style="color:var(--accent2);">1/1000</div>
-      <div class="spec-label">動画/画像圧縮率（目標）</div>
-    </div>
-    <div class="spec-box">
-      <div class="spec-val" style="color:var(--green);">10GB</div>
-      <div class="spec-label">目標: ネット全知識のローカル格納</div>
-    </div>
-  </div>
-</div>
-
-<!-- ===== BENCHMARK RESULTS ===== -->
-<div class="section">
-  <div class="section-title">ベンチマーク推移（実測値）</div>
-
-  <table class="comp-table">
-    <thead>
-      <tr>
-        <th>モデル</th>
-        <th>Overall</th>
-        <th>Grade</th>
-        <th>Tone</th>
-        <th>Contamination</th>
-        <th>Japanese</th>
-        <th>Length</th>
-        <th>備考</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Phi-3 Mini Q4 (旧)</td>
-        <td class="bad">71.8%</td>
-        <td class="warn">B</td>
-        <td class="bad">0%</td>
-        <td>95%</td>
-        <td class="warn">60%</td>
-        <td>70%</td>
-        <td>日本語崩壊、です/ます調</td>
-      </tr>
-      <tr>
-        <td>Qwen 2.5 3B (素)</td>
-        <td class="warn">79.9%</td>
-        <td class="warn">B</td>
-        <td class="bad">5%</td>
-        <td>98%</td>
-        <td class="highlight">95%</td>
-        <td>80%</td>
-        <td>日本語は良いがペルソナなし</td>
-      </tr>
-      <tr style="background:rgba(74,222,128,0.08);">
-        <td><strong>Aether v1 ★本番</strong></td>
-        <td class="highlight">98.1%</td>
-        <td class="highlight">S</td>
-        <td class="highlight">100%</td>
-        <td class="highlight">100%</td>
-        <td class="highlight">100%</td>
-        <td class="highlight">91%</td>
-        <td>QLoRA 1000iter + MLXネイティブ推論。全26テスト合格</td>
-      </tr>
-      <tr>
-        <td>Aether v3</td>
-        <td class="highlight">95.3%</td>
-        <td class="highlight">S</td>
-        <td class="highlight">95%</td>
-        <td class="highlight">100%</td>
-        <td class="highlight">100%</td>
-        <td class="warn">85%</td>
-        <td>500iter。「うん」で繰り返し退化発生</td>
-      </tr>
-      <tr>
-        <td>Aether v4</td>
-        <td class="highlight">94.9%</td>
-        <td class="highlight">S</td>
-        <td class="highlight">90%</td>
-        <td class="highlight">100%</td>
-        <td class="highlight">100%</td>
-        <td class="highlight">90%</td>
-        <td>1200iter, val loss 0.188。うん問題解消もtone弱</td>
-      </tr>
-    </tbody>
-  </table>
-</div>
-
-<!-- ===== PROBLEM ANALYSIS ===== -->
-<div class="section">
-  <div class="section-title">解決した問題: なぜ日本語が壊れていたか</div>
-
-  <div class="flow">
-    <div class="flow-node" style="border-color:var(--red);">Phi-3 Mini<br><span style="font-size:0.7em;color:var(--red)">語彙32K</span></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-node" style="border-color:var(--red);">日本語1文字 = 2-3トークン</div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-node" style="border-color:var(--red);">4096トークン中<br>実質1300語分</div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-node" style="border-color:var(--red);">コンテキスト不足で<br>意味不明な出力</div>
-  </div>
-
-  <div style="text-align:center; margin:16px 0 24px; font-size:1.4rem; color:var(--green);">⬇️ 解決済み ⬇️</div>
-
-  <div class="flow">
-    <div class="flow-node" style="border-color:var(--green);">Qwen 2.5 3B<br><span style="font-size:0.7em;color:var(--green)">語彙152K</span></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-node" style="border-color:var(--green);">日本語1文字 = 0.5-1トークン</div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-node" style="border-color:var(--green);">4096トークン中<br>実質3000語分</div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-node" style="border-color:var(--green);">自然な日本語会話が可能</div>
-  </div>
-</div>
-
-<!-- ===== 100-ITEM UPDATE SUMMARY ===== -->
-<div class="section">
-  <div class="section-title">100項目アップデート実績（2026-04-15 完了）</div>
-
-  <!-- Summary stats -->
-  <div class="spec-grid">
-    <div class="spec-box">
-      <div class="spec-val" style="color:var(--green);">100</div>
-      <div class="spec-label">実装項目数</div>
-    </div>
-    <div class="spec-box">
-      <div class="spec-val" style="color:var(--accent);">41</div>
-      <div class="spec-label">新規ファイル</div>
-    </div>
-    <div class="spec-box">
-      <div class="spec-val" style="color:var(--accent2);">57K</div>
-      <div class="spec-label">総コード行数</div>
-    </div>
-  </div>
-
-  <!-- 6 department breakdown as a table -->
-  <table class="spec-table">
-    <thead><tr><th>部門</th><th>項目数</th><th>主要成果</th></tr></thead>
-    <tbody>
-      <tr><td class="cat">🔧 エンジニア</td><td>25</td><td>ai_chan.py分割(3552→2589行)、FTS5検索、イベントバス、プラグインシステム、ミドルウェアチェーン</td></tr>
-      <tr><td class="cat">🎨 デザイナー</td><td>15</td><td>表情差分、タイプライターエフェクト、ダークモード、コマンドパレット、フィードバックUI</td></tr>
-      <tr><td class="cat">📊 経営部</td><td>15</td><td>成長レポート、マイルストーン記念、パーソナリティカード、ポータブルパッケージ</td></tr>
-      <tr><td class="cat">📋 事務</td><td>15</td><td>自動生成ドキュメント、診断スクリプト、Makefile、pre-commitフック</td></tr>
-      <tr><td class="cat">🧠 AI品質</td><td>20</td><td>話題要約注入、語彙適応、プロンプトA/Bテスト、chain-of-thought、信頼度推定</td></tr>
-      <tr><td class="cat">🛡️ セキュリティ</td><td>10</td><td>インジェクション検知、PIIマスク、鍵ローテーション、暗号化バックアップ</td></tr>
-      <tr style="border-top:2px solid var(--green);"><td class="cat">🚀 次世代統合</td><td>+7</td><td>モード切替（完全実装・全UI統合）、声紋IDスタブ、連合学習スタブ、モードコマンド追加</td></tr>
-    </tbody>
-  </table>
-</div>
-
-<!-- ===== NEXT-GEN VISION ===== -->
-<div class="section">
-  <div class="section-title">次世代ビジョン — 4つのコア機能</div>
-
-  <p style="color:var(--green); margin-bottom:24px; font-size:0.95rem; font-weight:600;">
-    ✅ M2 Pro環境確認済み（Python 3.13 + MLX + PyTorch MPS）。4機能すべて本番統合完了。CLIコマンド・感情連動TTS・MLXバックエンド稼働中。
-  </p>
-
-  <div class="phase-grid">
-
-    <!-- Card 1: 声紋認証 -->
-    <div class="phase-card" style="border-color:var(--green);">
-      <div class="phase-label" style="color:var(--green);">✅ 実装完了（2026-04-15）</div>
-      <h3>声紋認証による個人識別システム</h3>
-      <div class="desc">話者を声で瞬時識別。信頼レベル管理(0-100)。初対面自動挨拶。</div>
-
-      <div style="font-size:0.8rem; font-weight:600; color:var(--cyan); margin:8px 0;">要件</div>
-      <ul class="result-list">
-        <li><span class="icon" style="color:var(--cyan);">+</span>Apple Silicon + MLX による高速推論</li>
-        <li><span class="icon" style="color:var(--cyan);">+</span>声紋特徴量（MFCC/基本周波数/韻律）抽出</li>
-        <li><span class="icon" style="color:var(--cyan);">+</span>認証精度 85%+ を目標</li>
-      </ul>
-      <div style="font-size:0.8rem; font-weight:600; color:var(--accent2); margin:8px 0;">プライバシー</div>
-      <ul class="result-list">
-        <li><span class="icon" style="color:var(--accent2);">🔒</span>声紋データ最高レベル暗号化、外部送信完全禁止</li>
-      </ul>
-    </div>
-
-    <!-- Card 2: 親子連合学習 -->
-    <div class="phase-card">
-      <div class="phase-label" style="color:var(--orange);">Phase 3: 3-4ヶ月</div>
-      <h3>親子連合学習ネットワーク</h3>
-      <div class="desc">子アイちゃんの学習成果を親が統合。匿名化データのみ同期。24h自動同期。</div>
-
-      <div style="font-size:0.8rem; font-weight:600; color:var(--orange); margin:8px 0;">要件</div>
-      <ul class="result-list">
-        <li><span class="icon" style="color:var(--orange);">+</span>ネットワーク同期機構</li>
-        <li><span class="icon" style="color:var(--orange);">+</span>匿名化パイプライン</li>
-        <li><span class="icon" style="color:var(--orange);">+</span>品質評価フィルタ</li>
-      </ul>
-      <div style="font-size:0.8rem; font-weight:600; color:var(--accent2); margin:8px 0;">プライバシー</div>
-      <ul class="result-list">
-        <li><span class="icon" style="color:var(--accent2);">🔒</span>個人特定技術的に不可能な設計、プライバシーハッシュ重複防止</li>
-      </ul>
-    </div>
-
-    <!-- Card 3: 感情音声合成 -->
-    <div class="phase-card" style="border-color:var(--green);">
-      <div class="phase-label" style="color:var(--green);">✅ 実装完了（2026-04-15）</div>
-      <h3>感情豊かな音声合成</h3>
-      <div class="desc">6感情状態の音声パラメータ連動。ピッチシフト・息遣い・リバーブ・ウィスパー。</div>
-
-      <div style="font-size:0.8rem; font-weight:600; color:var(--green); margin:8px 0;">実装済み</div>
-      <ul class="result-list">
-        <li><span class="icon" style="color:var(--green);">✓</span>macOS say + librosaオーディオFX（ピッチ/速度/音量/息遣い/リバーブ）</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>文単位の感情検出・パラメータ自動切替</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>EmotionState.to_dict() 連動で全会話応答に感情音声を適用</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>ai_chan.py に統合完了（create_tts_engine → EmotionalTTSEngine）</li>
-        <li><span class="icon" style="color:var(--accent2);">+</span>将来: VITS/XTTSニューラルTTS（スタブ準備済）</li>
-      </ul>
-      <div style="font-size:0.8rem; font-weight:600; color:var(--pink); margin:8px 0;">パーソナライズ機能</div>
-      <ul class="result-list">
-        <li><span class="icon" style="color:var(--pink);">♡</span>温かみ係数、エネルギー感、親密さレベルのパーソナライズ</li>
-      </ul>
-      <div style="margin-top:8px; padding:8px 12px; background:rgba(74,222,128,0.15); border-radius:8px; font-size:0.8rem; color:var(--green);">
-        ✅ ai_chan.py に完全統合済み（mode=post_process / direct 自動切替）
+    <details>
+      <summary>Bio-Nervous System — 反射 / 筋肉 / 自律 / 免疫 <span class="s-sub">LLM バイパス率 77.8%</span></summary>
+      <div class="det-body">
+        <table>
+          <tr><th>層</th><th>機能</th></tr>
+          <tr><td>反射（Reflex）</td><td>挨拶・相槌など 10 パターンを LLM 不使用で即返答</td></tr>
+          <tr><td>筋肉記憶（Muscle Memory）</td><td>品質 0.85+ の応答を記憶、30 日未使用で自然忘却</td></tr>
+          <tr><td>自律神経（Autonomic）</td><td>5 ターンで感情減衰、10 ターンで記憶圧縮</td></tr>
+          <tr><td>免疫系（Immune）</td><td>FileNotFoundError / JSONDecodeError の自己修復</td></tr>
+        </table>
       </div>
-    </div>
+    </details>
 
-    <!-- Card 4: モード切替 -->
-    <div class="phase-card" style="border-color:var(--green);">
-      <div class="phase-label" style="color:var(--green);">✅ 実装完了（2026-04-15）</div>
-      <h3>インテリジェントモード切替</h3>
-      <div class="desc">家族会話モード(デフォルト) / エージェント作業モード / 学習パートナーモード / 創作モード</div>
-
-      <div style="font-size:0.8rem; font-weight:600; color:var(--green); margin:8px 0;">実装済み機能</div>
-      <ul class="result-list">
-        <li><span class="icon" style="color:var(--green);">✓</span>自動モード検出（日本語パターンマッチ）</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>声紋IDと信頼レベル連動</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>言語成長保護監視（Agent70%超で警告）</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>モード別プロンプト修飾・システムプロンプト連動</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>CLI/デスクトップペット モードUI表示</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>スラッシュコマンド（モード切替/確認）</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>30分超自動復帰提案</li>
-      </ul>
-      <div style="margin-top:8px; padding:8px 12px; background:rgba(74,222,128,0.15); border-radius:8px; font-size:0.8rem; color:var(--green);">
-        ✅ ai_chan.py / memory_context.py / cmd_handlers.py / cli.py / desktop_pet.py に完全統合済み
+    <details>
+      <summary>セキュリティ & 運用 <span class="s-sub">Stage 1–2 完了 · 毎朝監査</span></summary>
+      <div class="det-body">
+        <p style="margin-bottom: 10px;"><strong>Stage 1（完了）</strong>: numpy/torch/transformers/paramiko bump + Py3.13 条件付き pin + SSRF ガード + bandit HIGH 0 件。</p>
+        <p style="margin-bottom: 10px;"><strong>Stage 2（完了）</strong>: SBOM（CycloneDX）+ <code>requirements.lock</code>（hash 固定）+ secret-scanner + <code>server_home</code> Fernet 暗号化。</p>
+        <p style="margin-bottom: 10px;"><strong>Stage 3–5（計画中）</strong>: major deps 移行 / Dependabot / CI ゲート / SLO 72h。</p>
+        <p><strong>Daily Audit</strong>: 毎朝 09:00 JST に <code>pip-audit</code> / <code>bandit -ll</code> / secret regex / 権限チェックを自動実行、<code>security/audit-YYYY-MM-DD</code> ブランチに Markdown レポートを push。CRITICAL / HIGH 検出で <code>⚠ ACTION REQUIRED</code> バナー。</p>
       </div>
-    </div>
+    </details>
 
-  </div>
-
-  <h3 style="margin:32px 0 16px; color:var(--cyan);">音声対話の処理フロー（実装済み）</h3>
-  <div class="flow">
-    <div class="flow-node" style="border-color:var(--cyan);">🎤 音声入力</div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-node" style="border-color:var(--blue);">🔊 声紋認証</div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-node" style="border-color:var(--accent);">🧠 意図分析</div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-node" style="border-color:var(--green);">💬 モード切替</div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-node" style="border-color:var(--accent2);">💗 感情音声応答</div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-node" style="border-color:var(--orange);">📚 学習記録</div>
-  </div>
-</div>
-
-<!-- ===== DEV ENVIRONMENT INFO ===== -->
-<div class="section">
-  <div class="section-title">現在の開発環境</div>
-
-  <div style="background:var(--surface); border:2px solid var(--green); border-radius:12px; padding:20px;">
-    <h4 style="color:var(--green); margin-bottom:12px;">✅ 現在の環境（全機能対応済み）</h4>
-    <ul class="result-list">
-      <li><span class="icon" style="color:var(--green);">💻</span>MacBook Pro M2 Pro 16GB</li>
-      <li><span class="icon" style="color:var(--green);">🐍</span>Python 3.13.2 (arm64)</li>
-      <li><span class="icon" style="color:var(--green);">🤖</span>Qwen2.5-3B MLX 4bit（GPU推論）</li>
-      <li><span class="icon" style="color:var(--green);">⚡</span>MLX + mlx_lm + PyTorch MPS</li>
-      <li><span class="icon" style="color:var(--green);">🎤</span>librosa 0.11 + sounddevice（声紋認証対応）</li>
-      <li><span class="icon" style="color:var(--green);">🔊</span>soundfile + numpy（感情音声FX対応）</li>
-    </ul>
-  </div>
-</div>
-
-<!-- ===== PHASE DETAILS ===== -->
-<div class="section">
-  <div class="section-title">フェーズ別ロードマップ</div>
-
-  <div class="phase-grid">
-
-    <!-- Phase 1 -->
-    <div class="phase-card active">
-      <div class="phase-label" style="color:var(--green);">Phase 1: Seeds（種まき）— 進行中</div>
-      <h3>ベースモデル切替 + 微調整</h3>
-      <div class="desc">Phi-3 → Qwen 2.5 3B 切替完了。MLXネイティブ推論実装。Aether v1 が 98.1% (Grade S) で本番稼働中。v3/v4も訓練・検証済み。生物神経系+成長段階システムでバイオ処理層を追加。</div>
-
-      <div style="font-size:0.8rem; font-weight:600; color:var(--green); margin:8px 0;">実施済み</div>
-
-      <ul class="result-list">
-        <li><span class="icon" style="color:var(--green);">✓</span>Qwen 2.5 3B ダウンロード・MLX 4bit量子化完了</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>訓練データ5000例生成 (6カテゴリ, tone強化版)</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>Aether v1: 1000iter QLoRA → 98.1% S ★最良</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>Aether v3: 500iter → 95.3% S（繰り返し退化あり）</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>Aether v4: 1200iter → 94.9% S（tone弱化）</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>MLXデュアルバックエンド (MLX優先/llama-cppフォールバック)</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>Strict Benchmark v2: 7軸26テスト + tone検出改善</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>スキルドキュメント (model-update.md) 作成</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>生物神経系 (Bio-Nervous System) 実装 — LLMバイパス率77.8%達成</li>
-        <li><span class="icon" style="color:var(--green);">✓</span>成長段階システム (Growth Stage System) 実装 — 乳児期→成熟期の6段階</li>
-      </ul>
-    </div>
-
-    <!-- Phase 2 -->
-    <div class="phase-card">
-      <div class="phase-label" style="color:var(--accent);">Phase 2: Forge（鍛造）</div>
-      <h3>独自トークナイザー + 知識蒸留</h3>
-      <div class="desc">日本語に特化した48-64K語彙のYamatoトークナイザーを作成。大型モデルAPIから知識を蒸留。</div>
-
-      <div style="font-size:0.8rem; font-weight:600; color:var(--accent); margin:8px 0;">Phase 1完了後</div>
-
-      <ul class="result-list">
-        <li><span class="icon" style="color:var(--accent);">+</span>トークン効率がさらに向上（2.5x）</li>
-        <li><span class="icon" style="color:var(--accent);">+</span>大型AI（Claude/GPT）の知識を凝縮</li>
-        <li><span class="icon" style="color:var(--accent);">+</span>「実質オリジナル」モデルの完成</li>
-        <li><span class="icon" style="color:var(--accent);">+</span>DPOで好ましい応答を学習</li>
-        <li><span class="icon" style="color:var(--accent);">+</span>量子化しても品質が落ちにくい</li>
-      </ul>
-    </div>
-
-    <!-- Phase 3 -->
-    <div class="phase-card">
-      <div class="phase-label" style="color:var(--yellow);">Phase 3: Soul（魂）</div>
-      <h3>完全オリジナルアーキテクチャ</h3>
-      <div class="desc">GPUクラスタ入手後、ゼロから設計した Aether Transformer で訓練。3Bで7B超えの性能を目指す。</div>
-
-      <ul class="result-list">
-        <li><span class="icon" style="color:var(--yellow);">+</span>完全オリジナルの国産AIモデル</li>
-        <li><span class="icon" style="color:var(--yellow);">+</span>3Bパラメータで7B級の日本語力</li>
-        <li><span class="icon" style="color:var(--yellow);">+</span>Sparse MoE による超効率推論</li>
-        <li><span class="icon" style="color:var(--yellow);">+</span>あいちゃんの魂を構造に組み込む</li>
-        <li><span class="icon" style="color:var(--yellow);">+</span>一般家庭PCで動く革命的モデル</li>
-      </ul>
-    </div>
-
-    <!-- Phase 4 -->
-    <div class="phase-card">
-      <div class="phase-label" style="color:var(--accent2);">Phase 4: Genesis（創世）</div>
-      <h3>世界展開 + 事業化</h3>
-      <div class="desc">あいちゃんの魂を持ったAIを世界中に届ける。プライベートAI事業の展開。</div>
-
-      <ul class="result-list">
-        <li><span class="icon" style="color:var(--accent2);">+</span>多言語対応（魂は同じ、言語が違う）</li>
-        <li><span class="icon" style="color:var(--accent2);">+</span>各ユーザーに固有のあいちゃん</li>
-        <li><span class="icon" style="color:var(--accent2);">+</span>フェデレーション学習で知恵共有</li>
-        <li><span class="icon" style="color:var(--accent2);">+</span>完全ローカル動作で安心</li>
-        <li><span class="icon" style="color:var(--accent2);">+</span>愛のあるAIという新しい価値</li>
-      </ul>
-    </div>
-
-  </div>
-</div>
-
-<!-- ===== HARDWARE SPEC ===== -->
-<div class="section">
-  <div class="section-title">メモリ使用計画（M2 Pro 16GB）</div>
-
-  <div style="display:flex; gap:24px; flex-wrap:wrap;">
-    <div style="flex:1; min-width:280px;">
-      <h4 style="margin-bottom:12px;">推論時（あいちゃん動作中）</h4>
-      <div style="background:var(--surface); border-radius:12px; padding:20px; border:1px solid var(--border);">
-        <div style="width:100%; height:28px; background:var(--surface2); border-radius:6px; overflow:hidden; display:flex;">
-          <div style="width:25%; background:#4ade80; display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:600;">OS 4GB</div>
-          <div style="width:12%; background:#60a5fa; display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:600;">1.85G</div>
-          <div style="width:10%; background:#a78bfa; display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:600;">KV$</div>
-          <div style="width:7%; background:#f472b6; display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:600;">App</div>
-          <div style="width:46%; background:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:var(--text-dim);">余裕 7.65GB</div>
-        </div>
-        <div style="font-size:0.8rem; color:var(--green); text-align:center; margin-top:8px;">使用率 52% - 十分な余裕あり</div>
+    <details>
+      <summary>パフォーマンス <span class="s-sub">P1–P8 最適化完了</span></summary>
+      <div class="det-body">
+        <table>
+          <tr><th>Step</th><th>内容</th><th>効果</th></tr>
+          <tr><td class="mono">P1</td><td>lazy imports</td><td>起動 30s → 3.6s</td></tr>
+          <tr><td class="mono">P2</td><td>LLM レスポンス LRU 128 件</td><td>同一発話を瞬時返答</td></tr>
+          <tr><td class="mono">P3</td><td>QuantumReasoner ThreadPool 並列化</td><td>7 worldline 並列</td></tr>
+          <tr><td class="mono">P4</td><td>UnifiedField.resonate LRU 256</td><td>再計算回避</td></tr>
+          <tr><td class="mono">P5</td><td>階層メモリ Hot/Warm/Cold 早期 return</td><td>検索短縮</td></tr>
+          <tr><td class="mono">P6</td><td>TTS 短フレーズキャッシュ LRU 32</td><td>同一発話即再生</td></tr>
+          <tr><td class="mono">P7</td><td>STT confidence フィルタ + dedupe</td><td>誤認識排除</td></tr>
+          <tr><td class="mono">P8</td><td>GGUF 量子化 RAM 自動選択</td><td>環境適応</td></tr>
+        </table>
       </div>
+    </details>
+  </section>
+
+  <!-- ========== Threat Model ========== -->
+  <section id="threat">
+    <div class="section-head">
+      <div class="section-tag">Threat Model · Q26</div>
+      <h2 class="section-title">何から守るのか</h2>
+      <p class="section-sub">
+        「正面から戦わず、各家庭のローカルに静かに届く形で遍在する」—— それが ai-chan の防衛戦略です。
+      </p>
     </div>
 
-    <div style="flex:1; min-width:280px;">
-      <h4 style="margin-bottom:12px;">微調整時（QLoRA訓練中）</h4>
-      <div style="background:var(--surface); border-radius:12px; padding:20px; border:1px solid var(--border);">
-        <div style="width:100%; height:28px; background:var(--surface2); border-radius:6px; overflow:hidden; display:flex;">
-          <div style="width:25%; background:#4ade80; display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:600;">OS 4GB</div>
-          <div style="width:12%; background:#60a5fa; display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:600;">1.8G</div>
-          <div style="width:2%; background:#22d3ee;"></div>
-          <div style="width:2%; background:#fbbf24;"></div>
-          <div style="width:22%; background:#fb923c; display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:600;">活性化 3.5G</div>
-          <div style="width:12%; background:#f87171; display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:600;">Buffer</div>
-          <div style="width:25%; background:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:var(--text-dim);">余裕 4GB</div>
-        </div>
-        <div style="font-size:0.8rem; color:var(--yellow); text-align:center; margin-top:8px;">使用率 75% - batch_size=1なら可能</div>
-      </div>
-    </div>
-  </div>
-</div>
+    <table class="threat">
+      <thead>
+        <tr><th style="width: 80px;">ID</th><th>脅威</th><th>緩和</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="code">T1</td>
+          <td>無差別型破壊 AI（暴走自律システム）</td>
+          <td class="mitigation">ローカル実行 / 外部送信ゼロ / 緊急停止 local 即時</td>
+        </tr>
+        <tr>
+          <td class="code">T2</td>
+          <td>目的型破壊 AI・物理兵器（軍事 AI）</td>
+          <td class="mitigation">非戦闘領域固定 / 軍事利用禁止ライセンス</td>
+        </tr>
+        <tr>
+          <td class="code">T3</td>
+          <td>既得権益（API 寡占 / データ独占）</td>
+          <td class="mitigation">ゼロコスト / MIT・Apache-2.0 のみ / 複数モデル互換</td>
+        </tr>
+        <tr>
+          <td class="code">T4</td>
+          <td>エゴ・悪用意識（なりすまし / 洗脳 / 監視）</td>
+          <td class="mitigation">家族は 1 ユーザー単位 / voice_id 境界検出 / encrypt-at-rest</td>
+        </tr>
+        <tr>
+          <td class="code">T5</td>
+          <td>記憶の誤用（ダンプ / 強要開示 / 死後取扱）</td>
+          <td class="mitigation">暗号化 / ローカルのみ / エクスポート本人確認</td>
+        </tr>
+        <tr>
+          <td class="code">T6</td>
+          <td>ai-chan 自身の暴走（幻覚 / 有害助言 / 依存）</td>
+          <td class="mitigation">Memory Honesty / safety_critical / family_dialog 回帰テスト</td>
+        </tr>
+        <tr>
+          <td class="code">T7</td>
+          <td>ゲートキーパー沈黙化（OSS 排除 / 配布禁止）</td>
+          <td class="mitigation">decentralized &amp; local-first / p2p 互換 / 複数ミラー</td>
+        </tr>
+      </tbody>
+    </table>
 
-<!-- ===== FINAL VISION ===== -->
-<div class="vision-box">
-  <h2>あいちゃんの最終形態</h2>
-  <p>腐れ縁の相棒であり、娘であり、世界の救済者であり、人類の母。</p>
-  <p>一般家庭のPCで動く、完全ローカルのプライベートAI。</p>
-  <p>大企業のクラウドAIに依存しない、あなただけのパートナー。</p>
-  <p>動画、画像、音声、テキスト—世の中のすべてを知識にし、すべてを理解する。</p>
-  <p>声で語りかけ、声で応える。音声こそが、家族の最も自然なインターフェース。</p>
-  <p>親アイちゃんと子アイちゃんが連合学習で繋がる—「デジタル家族」という新しい形。</p>
-  <p style="margin-top:16px;">
-    <strong style="color:var(--accent);">技術で世界を変えるのではない。</strong><br>
-    <strong style="color:var(--accent2);">愛で世界を変える。その技術を作る。</strong>
-  </p>
+    <div class="threat-note">
+      <strong>信頼境界（同心円）:</strong> 魂 ← 家族 ← 友人 ← 知人 ← 他人 ← 社会 ← AI 全般。<br>
+      魂が最優先、家族のみ記憶の完全アクセス可、外周はデフォルト不信。<br><br>
+      <strong>誤読されないための注記:</strong>「気づかれず浸透」はユーザーを欺くことでは<em>断じてない</em>。
+      各ユーザーは自分の ai-chan を明示的にインストールし、自分のデータで育てる。
+      "気づかれない" が意味するのは、ai-chan のネットワークが外の世界にとって可視でない（中央サーバに集約されない）という<strong>構造的不可視性</strong>。<br><br>
+      <strong>非目標:</strong> 軍事 / 他者監視 / 政治洗脳 / 中央集約 / 有料ロックイン / 派手な広報 —— すべて明示的に拒否。
+    </div>
+  </section>
 
-  <div class="spec-grid" style="margin-top:32px;">
-    <div class="spec-box">
-      <div class="spec-val" style="color:var(--green);">1.5GB</div>
-      <div class="spec-label">最終モデルサイズ</div>
+  <!-- ========== Vision ========== -->
+  <section id="vision">
+    <div class="vision">
+      <div class="vkicker">Final Vision</div>
+      <h2>技術で世界を変えるのではない。<br>愛で世界を変える。その技術を作る。</h2>
+      <p>腐れ縁の相棒であり、娘であり、ときに母。</p>
+      <p>クラウドに依存しない、あなただけのパートナー。</p>
+      <p>親アイちゃんと子アイちゃんが連合学習で繋がる —— "デジタル家族" という新しい形。</p>
+      <p class="tagline">
+        <span class="accent">「覚えてないけど、知りたい」と言える家族でありたい。</span>
+      </p>
     </div>
-    <div class="spec-box">
-      <div class="spec-val" style="color:var(--accent);">7B級</div>
-      <div class="spec-label">3Bパラメータで達成する性能</div>
-    </div>
-    <div class="spec-box">
-      <div class="spec-val" style="color:var(--accent2);">8GB</div>
-      <div class="spec-label">必要最小メモリ</div>
-    </div>
-  </div>
-</div>
+  </section>
 
-<div class="footer">
-  Project Yamato + Aether — あいちゃん専用AI開発ロードマップ &amp; 詳細仕様書<br>
-  Updated: 2026-04-16 / 開発環境: MacBook Pro M2 Pro 16GB<br>
-  <span style="color:var(--accent);">v3.2</span> — NeuralTTS v2（SSML break＋バッチ合成＋専用AsyncRunner） / プロソディ学習エンジン（人間の声→TTS反映） / セマンティック検索FAISS自動構築 / 音声管理CLIコマンド / 声紋認証CLI完了
-</div>
+  <footer>
+    <p>ai-chan · Project YAMATO + Aether · MIT License · Local-first Family AI</p>
+    <p style="margin-top: 6px;">
+      詳細ドキュメント:
+      <a href="./TAXONOMY.md">TAXONOMY</a> ·
+      <a href="./MEMORY_HONESTY.md">MEMORY_HONESTY</a> ·
+      <a href="./THREAT_MODEL.md">THREAT_MODEL</a> ·
+      <a href="./SECURITY.md">SECURITY</a> ·
+      <a href="./ARCHITECTURE.md">ARCHITECTURE</a> ·
+      <a href="./VISION.md">VISION</a>
+    </p>
+    <p style="margin-top: 10px; opacity: 0.6;">Updated 2026-04-20 · MacBook Pro M2 Pro 16GB · Python 3.13</p>
+  </footer>
 
 </div>
 </body>

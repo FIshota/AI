@@ -64,8 +64,13 @@ def cmd_run(model: str, suite: str | None, run_all: bool, limit: int | None) -> 
             "suite": name,
             "model_family": model,
             "describe": info,
-            "results": [r.__dict__ for r in results],
+            "results": [
+                r.__dict__ if hasattr(r, "__dict__") else dict(r._asdict())
+                for r in results
+            ],
         }
+        for r in results:
+            print(f"  - {getattr(r, 'metric', '?')}: {getattr(r, 'value', '?')}")
         (out_dir / f"{name}.json").write_text(
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )

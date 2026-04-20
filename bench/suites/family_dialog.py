@@ -1,30 +1,27 @@
-"""family-dialog-100 suite stub (Phase 0).
+"""family-dialog suite (Phase 1).
 
-ai-chan 固有の "家族対話 100 問" 独自評価セット。
-記憶の一貫性・感情トーン・呼称 (あなた / 君 / 名前呼び) の安定性などを評価する。
-
-Phase 0 はスケルトンのみ。Phase 1 でデータセット (bench/data/family_dialog_100.jsonl)
-を同梱し、rule-based + judge 併用で採点する。
+ai-chan 固有の家族対話評価セット。rule + semantic で採点。
+Phase 1 は 30 問のシード、Phase 2 で 100 問に拡張。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+
+from bench.datasets import load_family_dialog
+from bench.evaluator import EvalConfig, aggregate, evaluate_suite
+from bench.judges.rule_judge import RuleJudge
 
 NAME = "family_dialog"
-LICENSE = "ai-chan 固有 (MIT 予定)"
-SOURCE = "local: bench/data/family_dialog_100.jsonl"
-
-DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "family_dialog_100.jsonl"
+LICENSE = "MIT (ai-chan 固有)"
+SOURCE = "bench/datasets.py::FAMILY_DIALOG_SEED"
 
 
 @dataclass(frozen=True)
 class FamilyDialogResult:
-    item_id: int
-    rule_score: float  # 0.0 - 1.0
-    judge_score: float  # 0.0 - 5.0
-    notes: str
+    item_id: str
+    metric: str
+    value: float
 
 
 def describe() -> dict:
@@ -32,11 +29,41 @@ def describe() -> dict:
         "name": NAME,
         "license": LICENSE,
         "source": SOURCE,
-        "data_available": DATA_PATH.exists(),
-        "status": "stub",
+        "status": "phase1",
+        "judges": ["rule", "semantic (optional)"],
     }
 
 
+def _load_judges() -> list:
+    judges: list = [RuleJudge()]
+    try:
+        from bench.judges.semantic_judge import SemanticJudge
+        judges.append(SemanticJudge())
+    except Exception:
+        pass
+    return judges
+
+
 def run(model_family: str, limit: int | None = None) -> list[FamilyDialogResult]:
-    _ = (model_family, limit)
-    return []
+    items = load_family_dialog(limit=limit)
+    cfg = EvalConfig(model_family=model_family, max_tokens=256, temperature=0.8)
+    records = evaluate_suite(items, cfg, judges=_load_judges())
+    agg = aggregate(records)
+
+    results: list[FamilyDialogResult] = []
+    for judge_name, mean in agg["means"].items():
+        results.append(
+            FamilyDialogResult(
+                item_id="aggregate",
+                metric=f"{judge_name}_mean",
+                value=float(mean),
+            )
+        )
+    results.append(
+        FamilyDialogResult(
+            item_id="aggregate",
+            metric="latency_sec_mean",
+            value=float(agg["latency_mean"]),
+        )
+    )
+    return results

@@ -1,18 +1,21 @@
-"""JGLUE suite stub (Phase 0).
+"""JGLUE JCommonsenseQA suite (Phase 1).
 
-JGLUE は Waseda / Yahoo Japan による日本語 GLUE 相当の総合ベンチ。
-サブタスク: MARC-ja / JSTS / JNLI / JSQuAD / JCommonsenseQA。
+現時点では JCommonsenseQA のみ実装。残り 4 サブタスクは Phase 2 以降。
 
-Phase 0 ではスケルトンのみ。Phase 1 で HuggingFace datasets から
-`shunk031/JGLUE` を読み込み、各タスクを評価する。
+使い方:
+    python3 bench/runner.py --model sarashina2-7b --suite jglue --limit 10
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from bench.datasets import load_jcommonsenseqa
+from bench.evaluator import EvalConfig, aggregate, evaluate_suite
+from bench.judges.rule_judge import RuleJudge
+
 NAME = "jglue"
-SUBTASKS = ("marc_ja", "jsts", "jnli", "jsquad", "jcommonsenseqa")
+SUBTASKS = ("jcommonsenseqa",)  # Phase 1 は 1 タスクのみ
 LICENSE = "CC BY-SA 4.0"
 SOURCE = "https://github.com/yahoojapan/JGLUE"
 
@@ -31,11 +34,39 @@ def describe() -> dict:
         "subtasks": list(SUBTASKS),
         "license": LICENSE,
         "source": SOURCE,
-        "status": "stub",
+        "status": "phase1",
+        "judges": ["rule"],
     }
 
 
 def run(model_family: str, limit: int | None = None) -> list[JGLUEResult]:
-    """Phase 1 で実装予定。Phase 0 は空リストを返す。"""
-    _ = (model_family, limit)
-    return []
+    """JCommonsenseQA を rule_judge で採点."""
+    items = load_jcommonsenseqa(limit=limit)
+    cfg = EvalConfig(
+        model_family=model_family,
+        choice_format=True,
+        max_tokens=64,
+    )
+    records = evaluate_suite(items, cfg, judges=[RuleJudge()])
+    agg = aggregate(records)
+
+    results: list[JGLUEResult] = []
+    for judge_name, mean in agg["means"].items():
+        results.append(
+            JGLUEResult(
+                subtask="jcommonsenseqa",
+                metric=f"{judge_name}_mean",
+                value=float(mean),
+                n=agg["n"],
+            )
+        )
+    # latency も保存
+    results.append(
+        JGLUEResult(
+            subtask="jcommonsenseqa",
+            metric="latency_sec_mean",
+            value=float(agg["latency_mean"]),
+            n=agg["n"],
+        )
+    )
+    return results

@@ -52,30 +52,28 @@ class LocalJudge:
     _cached_llm: Optional[object] = field(default=None, init=False, repr=False)
 
     def _ensure_llm(self):
-        """core.llm の AiLLM を lazy-load."""
+        """core.llm.LLMEngine を lazy-load."""
         if self.llm_call is not None:
             return self.llm_call
         if self._cached_llm is None:
-            from core.llm import AiLLM
-            config = {}
-            if self.model_family:
-                config["model_family"] = self.model_family
-            llm = AiLLM(config=config)
-            self._cached_llm = llm
+            from pathlib import Path
+            from core.llm import LLMEngine, default_model_family, get_model_family
+
+            fam_name = self.model_family or default_model_family()
+            config = {"model_family": fam_name}
+            # models/ から gguf を一つ選ぶ (シンプル: 最初に見つかったもの)
+            models_dir = Path("models")
+            gguf = next(iter(sorted(models_dir.glob("*.gguf"))), None)
+            if gguf is None:
+                raise RuntimeError(
+                    "models/*.gguf が見つかりません。"
+                    " scripts/setup_model.py で DL してください。"
+                )
+            self._cached_llm = LLMEngine(model_path=gguf, config=config)
 
         def _call(prompt: str) -> str:
-            # AiLLM の interface は respond() or generate() の可能性
-            obj = self._cached_llm
-            if hasattr(obj, "generate"):
-                return obj.generate(prompt, max_tokens=128)
-            elif hasattr(obj, "respond"):
-                return obj.respond(prompt)
-            elif hasattr(obj, "complete"):
-                return obj.complete(prompt)
-            else:
-                raise RuntimeError(
-                    f"AiLLM has no known generate/respond/complete method"
-                )
+            out = self._cached_llm.generate(prompt, stream=False)
+            return out if isinstance(out, str) else "".join(out)
 
         return _call
 

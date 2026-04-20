@@ -104,3 +104,7 @@ config/settings.json
 *.enc
 *.key
 *.keyfile
+
+# bench artifacts (large / reproducible)
+bench/results/
+bench/data_cache/

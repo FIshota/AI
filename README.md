@@ -3,10 +3,10 @@
 ローカル実行可能な日本語 AI パートナー。家族として長期記憶・感情・日記・音声対話を
 持つことを目的とした、完全ローカル (オフライン動作可) の Python アプリケーション。
 
-> **Status**: Phase 0 — rebrand & baseline
+> **Status**: IP-0 — rebrand & baseline (see [docs/TAXONOMY.md](docs/TAXONOMY.md) §3)
 > **Branch**: `phase0/rebrand-bench-baseline`
 > **Base model**: [Sarashina2-7B (MIT)](https://huggingface.co/sbintuitions/sarashina2-7b)
-> **Bench status**: 🧪 Phase 0 skeleton (JGLUE / ELYZA-tasks-100 / family-dialog-100 stubs)
+> **Bench status**: 🧪 IP-0 skeleton (JGLUE / ELYZA-tasks-100 / family-dialog-100 stubs)
 
 ## 🇯🇵 "国産 AI" として
 
@@ -37,8 +37,8 @@ python3 bench/runner.py --list
 python3 bench/runner.py --model sarashina2-7b --all
 ```
 
-Phase 0 ではスイート構造のみ (スコアは未計測)。Phase 1 でデータセット DL と
-judge-model 採点を追加する。
+IP-0 ではスイート構造のみ (スコアは未計測)。IP-1 でデータセット DL と
+judge-model 採点を追加する。用語・フェーズ体系は [docs/TAXONOMY.md](docs/TAXONOMY.md) §3 を参照。
 
 ## クイックスタート
 
@@ -51,7 +51,7 @@ cp config/settings.json.example config/settings.json
 python3 main.py
 ```
 
-起動時に下記が出れば Phase 0 配線は成功:
+起動時に下記が出れば IP-0 配線は成功:
 
 ```
 [LLM/P0] Model family: sarashina2-7b (MIT, clean) — Sarashina2-7B (SB Intuitions)
@@ -66,7 +66,7 @@ ai-chan/
 ├── web/            # FastAPI 提供の内部 API
 ├── scripts/        # 監査・インストール・ユーティリティ
 ├── config/         # 設定ファイル + security_policy.yaml + launchd plist
-├── bench/          # ベンチマークハーネス (Phase 0 skeleton)
+├── bench/          # ベンチマークハーネス (IP-0 skeleton)
 ├── docs/           # 設計・ロードマップ・ライセンス
 └── models/         # LLM 重み (gitignore 対象)
 ```

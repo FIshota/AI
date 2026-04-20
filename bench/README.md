@@ -1,6 +1,6 @@
 # ai-chan Benchmark Harness
 
-**Status**: Phase 0 skeleton (stubs only)
+**Status**: IP-1 (family_dialog + JGLUE JCommonsenseQA + ELYZA-tasks-100 rule+semantic 実装済み)
 **Owner**: honnsipittu@gmail.com
 
 ## 目的
@@ -43,10 +43,11 @@ bench/
     └── family_dialog.py    # 家族対話 100 問スタブ
 ```
 
-## Phase 0 での到達点
+## フェーズ到達点 (TAXONOMY.md §3)
 
-スタブを配置し、`python3 bench/runner.py --list` でスイート一覧が返ること。
-実装本体 (データセット DL / 採点 / judge 呼び出し) は Phase 1 で完成させる。
+- **IP-0**: スタブ配置 + `--list` が返る (完了)
+- **IP-1**: rule_judge + semantic_judge + 3 スイート計測 (進行中)
+- **IP-2**: local_judge (Sarashina2 self-eval) / JGLUE 全 5 サブタスク / family_dialog 100 問
 
 ## ライセンス注意
 

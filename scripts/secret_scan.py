@@ -47,7 +47,7 @@ PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
 EXCLUDE_DIRS = {
     ".git", "__pycache__", ".venv", "venv", "node_modules", "models",
     "data", "logs", "dist", "build", ".pytest_cache", ".mypy_cache",
-    ".ruff_cache", "outputs", "output", "AiChan.app",
+    ".ruff_cache", "outputs", "output", "ai-chan.app",
 }
 EXCLUDE_FILE_SUFFIXES = {".gguf", ".onnx", ".bin", ".pt", ".pth", ".safetensors",
                         ".zip", ".tar", ".gz", ".png", ".jpg", ".jpeg", ".mp3",

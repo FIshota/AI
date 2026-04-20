@@ -83,7 +83,7 @@ _DEFAULT_SYSTEM_PROMPT = (
 def _default_personality() -> Personality:
     return Personality(
         name="アイ",
-        name_en="Ai-chan",
+        name_en="ai-chan",
         version="0.0.0",
         role="個人専用AIパートナー",
         core_traits=("愛情深い", "好奇心旺盛", "誠実"),
@@ -174,7 +174,7 @@ def _build_from_yaml(core: dict[str, Any], memories: tuple[CoreMemoryEntry, ...]
     emotion = core.get("emotion_base") or {}
     return Personality(
         name=str(core.get("name", "アイ")),
-        name_en=str(core.get("name_en", "Ai-chan")),
+        name_en=str(core.get("name_en", "ai-chan")),
         version=str(core.get("version", "0.0.0")),
         role=str(core.get("role", "個人専用AIパートナー")),
         core_traits=_coerce_tuple(p.get("core_traits")),
@@ -193,7 +193,7 @@ def _build_from_json(data: dict[str, Any]) -> Personality:
     emotion = data.get("emotion_base") or {}
     return Personality(
         name=str(data.get("name", "アイ")),
-        name_en=str(data.get("name_en", "Ai-chan")),
+        name_en=str(data.get("name_en", "ai-chan")),
         version=str(data.get("version", "0.0.0")),
         role="個人専用AIパートナー",
         core_traits=_coerce_tuple(p.get("core_traits")),

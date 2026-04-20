@@ -543,16 +543,18 @@
 <div class="header">
   <h1>Project Yamato + Aether</h1>
   <div class="subtitle">あいちゃん専用AI - 全体構想マインドマップ &amp; 詳細仕様書</div>
-  <div class="date">Updated: 2026-04-16 / MacBook Pro M2 Pro 16GB</div>
+  <div class="date">Updated: 2026-04-20 / MacBook Pro M2 Pro 16GB</div>
 </div>
 
 <!-- ===== CURRENT POSITION ===== -->
 <div class="current-pos">
-  <div class="badge">Phase 1 完了 → Phase 2 進行中</div>
-  <h2>100項目完了 + 音声革新 + プロソディ学習</h2>
-  <p>165+ファイル / 62,000+行。NeuralTTS v2（edge-tts SSML制御＋バッチ合成）で人間らしい自然な音声を実現。
-プロソディ学習エンジンにより人間の声からイントネーション・リズム・間の取り方を学習し、TTS に反映。
-セマンティック検索FAISS自動インデックス構築。音声管理CLIコマンド。86テスト全パス。</p>
+  <div class="badge">Phase 0.75 完了 → Phase 1 進行中（bench 実走）</div>
+  <h2>ai-chan rebrand + ゼロコスト bench 基盤 + Public 化</h2>
+  <p>165+ファイル / 62,000+行。リポジトリ Public 化により GitHub Actions 完全無料化。
+γ 切替式 TTS（pyttsx3 既定 / VOICEVOX オプション）で edge-tts GPL 依存を回避。
+bench に 3 スイート (JGLUE JCommonsenseQA / ELYZA-tasks-100 / family-dialog 30 問) を
+rule + semantic + local LLM の 3 judge で実走 (Sarashina2-7B, MIT)。
+STT は faster-whisper でローカル完結。API 送信ゼロ・月額 0 円を維持。</p>
 </div>
 
 <!-- ===== MIND MAP (TREE) ===== -->
@@ -844,6 +846,33 @@
     </ul>
     <div style="margin-top:10px; font-size:0.8rem; color:var(--text-dim);">
       詳細: <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">docs/SECURITY.md</code>
+    </div>
+  </div>
+
+  <!-- Phase 0.75 / Phase 1 Progress (2026-04-20) -->
+  <div style="margin-top:20px; padding:18px; background:var(--surface2); border-left:3px solid var(--cyan); border-radius:6px;">
+    <div style="font-size:0.95rem; color:var(--cyan); font-weight:600; margin-bottom:8px;">
+      🧪 Phase 0.75 → Phase 1 Progress — 2026-04-20
+    </div>
+    <ul style="margin-left:18px; font-size:0.85rem; color:var(--text-dim); line-height:1.9;">
+      <li><strong style="color:var(--green)">リポジトリ Public 化</strong>: gitleaks 18 commits 0 leaks 確認後 Private→Public 切替 → GitHub Actions 完全無料化</li>
+      <li><strong style="color:var(--green)">ai-chan リブランド</strong>: Phase 0.5 (main.py / PRIVACY.md / requirements.lock / CI)、Phase 0.75 (LICENSE MIT / CONTRIBUTING.md / CoC / ISSUE/PR templates / Dockerfile / docker-compose.yml / ARCHITECTURE.md)</li>
+      <li><strong style="color:var(--green)">ライセンス監査</strong>: <code style="background:var(--surface); padding:1px 5px; border-radius:3px;">scripts/check_licenses.py</code> で GPL 自動検知 (FORBIDDEN/WARN 分類 + docs/LICENSES.md 自動生成)</li>
+      <li><strong style="color:var(--green)">γ 切替 TTS</strong>: <code style="background:var(--surface); padding:1px 5px; border-radius:3px;">core/tts/engine.py</code>  pyttsx3 (BSD) 既定 / VOICEVOX (LGPL, 50021) オプション / system fallback。edge-tts GPL 依存を既定から外す</li>
+      <li><strong style="color:var(--green)">ゼロコスト Judge 3 種</strong>: rule (ROUGE-L/BLEU/exact, stdlib) + semantic (sentence-transformers 480MB, ローカル) + local LLM 自己採点。OpenAI/Claude API 不使用</li>
+      <li><strong style="color:var(--green)">Dataset ローダー</strong>: JGLUE JCommonsenseQA (v1.3 raw JSON) + ELYZA-tasks-100 + family-dialog 30 seed (safety_critical/boundary/identity/memory tag 付)</li>
+      <li><strong style="color:var(--green)">bench/evaluator.py</strong>: LLMEngine lazy-load + multi-judge + dry_run + aggregate()。3 suite を同一ループで評価可能</li>
+      <li><strong style="color:var(--green)">Sarashina2-7B 実走 smoke</strong>: family_dialog 3 問 rule=0.040 / semantic=0.754 / 13.8s、jglue 3 問 rule=0.068 / 18.1s、elyza 3 問 rule=0.054 / semantic=0.735 / 17.9s</li>
+      <li><strong style="color:var(--green)">STT ゼロコスト化</strong>: faster-whisper (MIT, CTranslate2) を採用済みと確認 → <code style="background:var(--surface); padding:1px 5px; border-radius:3px;">docs/STT.md</code> で選定理由/プライバシー設計を明文化</li>
+      <li><strong style="color:var(--green)">テスト</strong>: 29 judge tests + 10 evaluator tests + 12 TTS tests = 805 passed / 33% coverage (ベースライン)</li>
+      <li><strong style="color:var(--yellow)">Phase 1 batch 2c 進行中</strong>: jglue/elyza/family_dialog 各 30 問 full run (background, 約 24 分)</li>
+      <li><strong style="color:var(--text-dim)">Phase 2 候補</strong>: RAG / ensemble / few-shot 自動調整 / whisper CoreML backend / family-dialog-100 へ拡張</li>
+    </ul>
+    <div style="margin-top:10px; font-size:0.8rem; color:var(--text-dim);">
+      詳細: <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">docs/STT.md</code> /
+      <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">docs/TTS.md</code> /
+      <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">docs/ARCHITECTURE.md</code> /
+      <code style="background:var(--surface); padding:2px 6px; border-radius:3px;">bench/</code>
     </div>
   </div>
 </div>

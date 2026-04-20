@@ -1,0 +1,30 @@
+name: taxonomy-check
+
+on:
+  push:
+    branches: [main, "phase*/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  taxonomy:
+    name: Check taxonomy integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run taxonomy check (non-strict)
+        run: |
+          python3 scripts/check_taxonomy.py
+
+      # Strict mode (Phase-N warnings become errors) is left as info-only
+      # for now — enabled after README.md and legacy docs have been migrated.
+      - name: Run taxonomy check (strict, info-only)
+        continue-on-error: true
+        run: |
+          python3 scripts/check_taxonomy.py --strict

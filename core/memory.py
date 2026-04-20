@@ -976,3 +976,74 @@ class MemoryManager:
             "version_count": version_count,
             "fts5_available": getattr(self, "_fts5_available", False),
         }
+
+    # ─── Memory Honesty (Q6 kindness-first) ──────────────────
+    # docs/MEMORY_HONESTY.md §3 の信頼度バンドに基づき、記憶検索結果に
+    # confidence [0, 1] を付与して返す。既存 search() は不変。
+
+    @staticmethod
+    def _confidence(query: str, content: str, importance: float) -> float:
+        """query と content の bigram 重なり + importance から信頼度を算出.
+
+        日本語はスペース分割できないので character bigram を使う。
+        戻り値は [0, 1] に clamp。
+        """
+        if not query or not content:
+            return 0.0
+        q = query.lower()
+        c = content.lower()
+        if len(q) < 2:
+            return 0.5 if q in c else 0.0
+        q_bg = {q[i:i + 2] for i in range(len(q) - 1)}
+        c_bg = {c[i:i + 2] for i in range(len(c) - 1)}
+        if not q_bg:
+            return 0.0
+        overlap = len(q_bg & c_bg) / len(q_bg)
+        # overlap を 70%, importance を 30% で加重
+        raw = overlap * 0.7 + max(0.0, min(1.0, float(importance))) * 0.3
+        return max(0.0, min(1.0, raw))
+
+    def recall_with_confidence(
+        self, query: str, limit: int = 5
+    ) -> list[tuple[Memory, float]]:
+        """キーワード検索＋信頼度付きで記憶を返す.
+
+        返り値は confidence 降順。ヒットがない場合は空リスト。
+        MEMORY_HONESTY §3 の confidence バンド選択の入力に使う。
+        """
+        # 広めに取ってから scoring & 並べ替え
+        hits = self.search(query, limit=max(limit * 3, 10))
+        scored: list[tuple[Memory, float]] = [
+            (m, self._confidence(query, m.content, m.importance)) for m in hits
+        ]
+        # 閾値未満はこのフェーズでは落とさず、caller 側で band 判定
+        scored.sort(key=lambda t: t[1], reverse=True)
+        return scored[:limit]
+
+    def respond_about_memory(
+        self,
+        query: str,
+        *,
+        stage: str = "S1",
+        subject: str | None = None,
+        recent: list[str] | None = None,
+    ) -> tuple[str, float]:
+        """記憶の有無を優しく開示する 1 フレーズを返す.
+
+        Returns:
+            (phrase, confidence) — phrase は即ユーザーに返せる日本語文字列
+        """
+        # 遅延 import（テスト・軽量用途で core/memory をロードしても
+        # phrasing を強制ロードしない）
+        from core.memory_phrasing import band_from_confidence, pick_phrase
+
+        hits = self.recall_with_confidence(query, limit=1)
+        conf = hits[0][1] if hits else 0.0
+        band = band_from_confidence(conf)
+        phrase = pick_phrase(
+            stage,  # type: ignore[arg-type]
+            band,
+            subject=subject or (query if conf >= 0.3 else None),
+            recent=recent or [],
+        )
+        return phrase, conf

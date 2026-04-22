@@ -3,26 +3,32 @@
 二段階アーキテクチャ:
 
 Tier 1 (常時有効): TF-IDF 風スコアリング（純粋 Python、追加インストール不要）
-Tier 2 (オプション): sentence-transformers + FAISS ベクトル検索
+Tier 2 (オプション): sentence-transformers + VectorStore ベクトル検索
   インストール: pip install sentence-transformers faiss-cpu
 
-sentence-transformers が利用可能な場合は Tier 2 が自動的に使われます。
+**M9 Phase 1 (2026-04-21)**: VectorStore Protocol 抽象化を導入。
+既存動作は完全に保持（default backend=faiss）。`settings.semantic_search.backend`
+を `"sqlite-vec"` に変更すると sqlite-vec にルーティング（実験的）。
 """
 from __future__ import annotations
 import json
+import logging
 import math
 import re
 from pathlib import Path
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from core.memory import MemoryManager
+    from core.vector_store import VectorStore
 
 # Tier 2 オプション依存
 try:
     from sentence_transformers import SentenceTransformer
-    import faiss
+    import faiss  # noqa: F401 — availability probe
     import numpy as np
     SEMANTIC_AVAILABLE = True
 except ImportError:
@@ -76,7 +82,7 @@ def keyword_search(query: str, memories: list, limit: int = 5) -> list:
 
 
 # ────────────────────────────────────────────────────────────────
-# Tier 2: ベクトル検索エンジン（sentence-transformers + FAISS）
+# Tier 2: ベクトル検索エンジン（sentence-transformers + VectorStore）
 # ────────────────────────────────────────────────────────────────
 
 # 軽量な多言語モデル（日本語対応、~100MB）
@@ -85,19 +91,24 @@ _DEFAULT_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
 
 class SemanticSearchEngine:
     """
-    sentence-transformers + FAISS による高精度ベクトル検索。
+    sentence-transformers + VectorStore による高精度ベクトル検索。
     利用可能な場合のみ有効化。未インストールでも安全に動作（Tier 1 にフォールバック）。
+
+    M9 Phase 1: backend 切替可能 (``backend="faiss"`` or ``"sqlite-vec"``)。
     """
 
-    def __init__(self, data_dir: Path, model_name: str = _DEFAULT_MODEL):
-        self.data_dir   = Path(data_dir)
-        self._index_path  = self.data_dir / "semantic_index.bin"
-        self._map_path    = self.data_dir / "semantic_map.json"
-        self._model_name  = model_name
-        self._model       = None
-        self._index       = None          # FAISS index
-        self._id_map: list[int] = []      # FAISS 順位 → DB id のマッピング
-        self._loaded      = False
+    def __init__(
+        self,
+        data_dir: Path,
+        model_name: str = _DEFAULT_MODEL,
+        backend: str = "faiss",
+    ):
+        self.data_dir = Path(data_dir)
+        self._model_name = model_name
+        self._backend_name = backend
+        self._model = None
+        self._store: "VectorStore | None" = None
+        self._loaded = False
 
     def load(self) -> bool:
         """モデルとインデックスを読み込む（時間がかかる場合あり）"""
@@ -105,29 +116,46 @@ class SemanticSearchEngine:
             return False
         try:
             import numpy as np
-            print(f"[Semantic] モデルを読み込み中: {self._model_name}", flush=True)
-            self._model  = SentenceTransformer(self._model_name)
+            from core.vector_store import make_vector_store
+
+            logger.info("[Semantic] モデルを読み込み中: %s", self._model_name)
+            self._model = SentenceTransformer(self._model_name)
             self._loaded = True
-            self._load_index()
-            print("[Semantic] ✓ セマンティック検索エンジン準備完了", flush=True)
+
+            # 次元推定: まず trivial encode で次元取得
+            probe = self._model.encode(["probe"], show_progress_bar=False)
+            dim = int(probe.shape[1])
+            self._store = make_vector_store(
+                backend=self._backend_name,
+                data_dir=self.data_dir,
+                dim=dim,
+            )
+            try:
+                self._store.load()
+            except Exception as exc:
+                logger.warning("[Semantic] インデックス load 失敗: %s", exc)
+
+            actual_backend = getattr(self._store, "backend_name", "?")
+            logger.info(
+                "[Semantic] ✓ セマンティック検索エンジン準備完了 (backend=%s)",
+                actual_backend,
+            )
             return True
         except Exception as e:
-            print(f"[Semantic] 読み込みエラー: {e}", flush=True)
+            logger.warning("[Semantic] 読み込みエラー: %s", e)
             return False
 
     def is_ready(self) -> bool:
-        return self._loaded and self._model is not None
+        return self._loaded and self._model is not None and self._store is not None
+
+    @property
+    def backend_name(self) -> str:
+        """現在利用中のベクトルストア backend 名（fallback 後を反映）。"""
+        if self._store is not None:
+            return getattr(self._store, "backend_name", self._backend_name)
+        return self._backend_name
 
     # ─── インデックス管理 ────────────────────────────────────────
-
-    def _load_index(self):
-        if self._index_path.exists() and self._map_path.exists():
-            try:
-                self._index  = faiss.read_index(str(self._index_path))
-                self._id_map = json.loads(self._map_path.read_text("utf-8"))
-            except Exception:
-                self._index  = None
-                self._id_map = []
 
     def rebuild_index(self, memories: list):
         """
@@ -138,26 +166,22 @@ class SemanticSearchEngine:
             return
 
         import numpy as np
-        texts   = [m.content[:512] for m in memories]
-        db_ids  = [m.id for m in memories]
+        texts = [m.content[:512] for m in memories]
+        db_ids = [m.id for m in memories]
 
-        print(f"[Semantic] {len(texts)} 件のインデックスを構築中...", flush=True)
+        logger.info("[Semantic] %d 件のインデックスを構築中...", len(texts))
         embeddings = self._model.encode(texts, show_progress_bar=False)
         embeddings = embeddings.astype(np.float32)
+        # cosine 類似度のため L2 正規化（FAISS IP と sqlite-vec cosine 両方で正）
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        embeddings = embeddings / norms
 
-        dim   = embeddings.shape[1]
-        index = faiss.IndexFlatIP(dim)   # 内積（コサイン類似度に相当）
-        faiss.normalize_L2(embeddings)
-        index.add(embeddings)
-
-        self._index  = index
-        self._id_map = db_ids
-
-        faiss.write_index(index, str(self._index_path))
-        self._map_path.write_text(
-            json.dumps(db_ids, ensure_ascii=False), "utf-8"
-        )
-        print(f"[Semantic] ✓ インデックス構築完了", flush=True)
+        if self._store is None:
+            return
+        self._store.rebuild(db_ids=db_ids, embeddings=embeddings)
+        self._store.save()
+        logger.info("[Semantic] ✓ インデックス構築完了")
 
     def add_memory(self, memory):
         """新しい記憶をインデックスに追加する（インクリメンタル更新）"""
@@ -167,20 +191,14 @@ class SemanticSearchEngine:
 
         embedding = self._model.encode([memory.content[:512]])
         embedding = embedding.astype(np.float32)
-        faiss.normalize_L2(embedding)
+        norm = float(np.linalg.norm(embedding))
+        if norm > 0:
+            embedding = embedding / norm
 
-        if self._index is None:
-            dim = embedding.shape[1]
-            self._index = faiss.IndexFlatIP(dim)
-
-        self._index.add(embedding)
-        self._id_map.append(memory.id)
-
-        # インデックスを保存
-        faiss.write_index(self._index, str(self._index_path))
-        self._map_path.write_text(
-            json.dumps(self._id_map, ensure_ascii=False), "utf-8"
-        )
+        if self._store is None:
+            return
+        self._store.add(db_id=int(memory.id), embedding=embedding)
+        self._store.save()
 
     # ─── 検索 ────────────────────────────────────────────────────
 
@@ -190,25 +208,24 @@ class SemanticSearchEngine:
         セマンティックエンジンが利用不可の場合は Tier 1 にフォールバック。
         memories: MemoryManager の全記憶リスト（フィルタリング用）
         """
-        if not self.is_ready() or self._index is None or self._index.ntotal == 0:
+        if not self.is_ready() or self._store is None or self._store.count() == 0:
             return keyword_search(query, memories, limit)
 
         try:
             import numpy as np
             q_emb = self._model.encode([query[:512]])
             q_emb = q_emb.astype(np.float32)
-            faiss.normalize_L2(q_emb)
+            norm = float(np.linalg.norm(q_emb))
+            if norm > 0:
+                q_emb = q_emb / norm
 
-            k = min(limit * 3, self._index.ntotal)
-            scores, indices = self._index.search(q_emb, k)
+            k = min(limit * 3, self._store.count())
+            ids, _scores = self._store.search(q_emb, k)
 
             # DB id → Memory のマッピング
             id_to_mem = {m.id: m for m in memories if m.id is not None}
             results = []
-            for idx, score in zip(indices[0], scores[0]):
-                if idx < 0 or idx >= len(self._id_map):
-                    continue
-                db_id = self._id_map[idx]
+            for db_id in ids:
                 if db_id in id_to_mem:
                     results.append(id_to_mem[db_id])
                 if len(results) >= limit:
@@ -216,5 +233,5 @@ class SemanticSearchEngine:
             return results if results else keyword_search(query, memories, limit)
 
         except Exception as e:
-            print(f"[Semantic] 検索エラー: {e}", flush=True)
+            logger.warning("[Semantic] 検索エラー: %s", e)
             return keyword_search(query, memories, limit)

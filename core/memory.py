@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -125,6 +126,11 @@ class MemoryManager:
         # 短期記憶（RAM）
         self._short_term: list[Memory] = []
         self.short_term_max = 20
+
+        # M5: スレッドローカル接続プール
+        # sqlite3 はスレッド越境不可のため、各スレッドが自分の接続を再利用する形にする。
+        # これで (a) 接続オープン/クローズのコスト削減、(b) 接続滞留リーク防止を両立。
+        self._thread_local = threading.local()
 
         self._init_db()
 
@@ -259,7 +265,30 @@ class MemoryManager:
             logger.warning("[Memory] FTS5 テーブル作成失敗: %s", e)
 
     def _conn(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path, timeout=10.0)
+        """スレッドローカルキャッシュされた sqlite3 接続を返す。
+
+        各スレッドは自分専用の接続オブジェクトを持ち、以降の呼び出しで再利用する。
+        呼び出し側の `with self._conn() as conn:` はトランザクション境界として
+        機能し、接続自体は close されない (sqlite3.Connection の context-manager 仕様)。
+
+        長時間稼働中に接続が腐るのを防ぐため、軽量な生存確認 (`SELECT 1`) を行い、
+        失敗した場合は自動で作り直す。
+        """
+        conn: sqlite3.Connection | None = getattr(self._thread_local, "conn", None)
+        if conn is not None:
+            try:
+                conn.execute("SELECT 1")
+                return conn
+            except sqlite3.Error:
+                # 接続が死んでいる — 作り直す
+                try:
+                    conn.close()
+                except sqlite3.Error:
+                    pass
+                self._thread_local.conn = None
+        new_conn = sqlite3.connect(self.db_path, timeout=10.0)
+        self._thread_local.conn = new_conn
+        return new_conn
 
     def _enc(self, text: str) -> str:
         if self.encrypt and self.key:
@@ -677,8 +706,10 @@ class MemoryManager:
             level_placeholders = ",".join(["?"] * len(allowed))
             params: list = [f"%{kw}%" for kw in keywords]
             params.extend(allowed)
+            # nosec B608: where_clauses と level_placeholders は "?" プレースホルダを
+            # 個数ぶん連結しているだけで、外部入力は一切埋め込まれない.
             sql = (
-                f"SELECT * FROM memories WHERE {where_clauses} "
+                f"SELECT * FROM memories WHERE {where_clauses} "  # nosec B608
                 f"AND COALESCE(security_level, 'public') IN ({level_placeholders}) "
                 f"ORDER BY importance DESC, accessed_at DESC LIMIT ?"
             )
@@ -721,8 +752,10 @@ class MemoryManager:
             where_sql = " AND ".join(where_parts)
             params.append(limit)
             with self._conn() as conn:
+                # nosec B608: where_sql は固定の "COALESCE(... IN (?,?,..))" と
+                # "memory_type = ?" の AND 結合で、リテラルのみ. 全値は params 経由.
                 cur = conn.execute(
-                    f"SELECT * FROM memories WHERE {where_sql} "
+                    f"SELECT * FROM memories WHERE {where_sql} "  # nosec B608
                     f"ORDER BY accessed_at DESC LIMIT ?",
                     params,
                 )
@@ -815,13 +848,15 @@ class MemoryManager:
             ]
             placeholders = ",".join(["?"] * len(allowed))
             with self._conn() as conn:
+                # nosec B608: placeholders は "?" を len(allowed) 個連結した
+                # 純粋なプレースホルダ文字列. 値は (query, *allowed, limit) 経由でバインド.
                 cur = conn.execute(
                     f"""SELECT m.* FROM memories m
                         JOIN memories_fts f ON m.id = f.rowid
                         WHERE memories_fts MATCH ?
                         AND COALESCE(m.security_level, 'public') IN ({placeholders})
                         ORDER BY rank
-                        LIMIT ?""",
+                        LIMIT ?""",  # nosec B608
                     (query, *allowed, limit),
                 )
                 rows = cur.fetchall()

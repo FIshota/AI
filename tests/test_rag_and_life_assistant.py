@@ -1,5 +1,14 @@
 """
-Sprint 3.0: B) 知識拡張 + C) 生活アシスタント + D) UI/UX のテスト
+RAG / 記憶要約 / タスク・習慣管理 / 表情エンジンのテスト.
+
+(元: test_sprint3.py — 2026-04-21 M7 でドメイン命名へリネーム)
+
+対象:
+    - RAGEngine: 知識拡張 (外部ドキュメント RAG)
+    - MemorySummarizer: 長期記憶の要約
+    - TaskManager: タスク管理
+    - HabitTracker: 習慣管理
+    - ExpressionEngine: 表情 UI/UX
 """
 from __future__ import annotations
 

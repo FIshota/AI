@@ -408,6 +408,7 @@ class SettingsWindow(tk.Toplevel):
         self.v_stt_enabled     = tk.BooleanVar()
         self.v_stt_model       = tk.StringVar()
         self.v_semantic_enabled = tk.BooleanVar()
+        self.v_semantic_backend = tk.StringVar(value="faiss")  # M9: "faiss" | "sqlite-vec"
         self.v_moondream       = tk.BooleanVar()
 
         row = 0
@@ -484,6 +485,17 @@ class SettingsWindow(tk.Toplevel):
         row += 1
         _label(f, "pip install sentence-transformers faiss-cpu",
                fg=COLOR_SUBTEXT, font=SMALL_FONT
+               ).grid(row=row, column=0, columnspan=2, sticky="w", padx=4, pady=(0, 4))
+        row += 1
+
+        # M9: backend 切替 (faiss / sqlite-vec)
+        _label(f, "ベクトルストア backend:", font=LABEL_FONT
+               ).grid(row=row, column=0, sticky="e", padx=4, pady=(2, 2))
+        tk.OptionMenu(f, self.v_semantic_backend, "faiss", "sqlite-vec"
+                      ).grid(row=row, column=1, sticky="w", padx=4, pady=(2, 2))
+        row += 1
+        _label(f, "sqlite-vec は Python が --enable-loadable-sqlite-extensions でビルドされている場合のみ有効。不可環境では faiss に自動 fallback。",
+               fg=COLOR_SUBTEXT, font=SMALL_FONT
                ).grid(row=row, column=0, columnspan=2, sticky="w", padx=4, pady=(0, 8))
         row += 1
 
@@ -512,11 +524,14 @@ class SettingsWindow(tk.Toplevel):
                 engine = TTSEngine(enabled=True, voice=voice, rate=rate)
                 engine.speak("こんにちは！アイだよ。聞こえてる？")
             except Exception as e:
-                def _show_err():
+                # PEP 3134: `except ... as e` は block 終了で e を del する。
+                # 後続の self.after コールバックから参照できるよう文字列化してキャプチャ。
+                err_msg = str(e)
+                def _show_err(msg: str = err_msg):
                     try:
                         if self.winfo_exists():
                             from tkinter import messagebox
-                            messagebox.showerror("TTS エラー", str(e), parent=self)
+                            messagebox.showerror("TTS エラー", msg, parent=self)
                     except Exception:
                         pass
                 try:
@@ -962,7 +977,9 @@ class SettingsWindow(tk.Toplevel):
         self.v_stt_enabled.set(stt.get("enabled", False))
         self.v_stt_model.set(stt.get("model_size", "small"))
 
-        self.v_semantic_enabled.set(cfg.get("semantic_search", {}).get("enabled", False))
+        sem_cfg = cfg.get("semantic_search", {})
+        self.v_semantic_enabled.set(sem_cfg.get("enabled", False))
+        self.v_semantic_backend.set(sem_cfg.get("backend", "faiss"))
         self.v_moondream.set(cfg.get("vision", {}).get("enable_moondream", False))
 
         # 記念日リスト
@@ -1052,6 +1069,10 @@ class SettingsWindow(tk.Toplevel):
 
         cfg.setdefault("semantic_search", {})
         cfg["semantic_search"]["enabled"] = self.v_semantic_enabled.get()
+        backend = (self.v_semantic_backend.get() or "faiss").strip()
+        if backend not in ("faiss", "sqlite-vec"):
+            backend = "faiss"
+        cfg["semantic_search"]["backend"] = backend
 
         cfg.setdefault("vision", {})
         cfg["vision"]["enable_moondream"] = self.v_moondream.get()

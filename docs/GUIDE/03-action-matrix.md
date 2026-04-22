@@ -56,11 +56,11 @@
 | M5 | SQLite threading.local connection | 27 | 1d |
 | M6 | scripts/convert_hf_to_gguf.py を upstream 参照に降格 | 18 | 2h |
 | M7 | test_sprint*.py を機能別再編 | 24 | 3d |
-| M8 | LLM を別プロセス化（IPC） | 40 | 2w |
-| M9 | faiss-cpu → sqlite-vec 移行検証 | 30 | 1w |
+| M8 | LLM を別プロセス化（IPC） | 40 | 2w | ✅ 2026-04-21 完了（Phase 1 IPC stack + Phase 2 配線/watchdog/logger/crash tests、opt-in `llm_ipc_enabled`） |
+| M9 | faiss-cpu → sqlite-vec 移行検証 | 30 | 1w | 🟡 Phase 1+2 完了（2026-04-21）: Phase 1 = Protocol 抽象化 + FAISS identity refactor + sqlite-vec opt-in。Phase 2 = `scripts/migrate_faiss_to_sqlite_vec.py`（verify 付き）+ settings_window に backend 切替 UI。ベンチと v0.2 追従は sqlite-vec 実行環境後。 |
 | M10 | core/emotion.py ポエム API 削除 | 18 | 2h |
-| M11 | core/ai_chan.py CMD_* 60 個 re-export 削除 | 18 | 1d |
-| M12 | chat() 517 行を pipeline 分解 | 40 | 2w |
+| M11 | core/ai_chan.py CMD_* 60 個 re-export 削除 | 18 | 1d | ✅ 2026-04-21 完了 |
+| M12 | chat() 517 行を pipeline 分解 | 40 | 2w | ✅ 2026-04-21 完了（239 行 / -54%） |
 
 ## 🟢 LATER（YAMATO 量産前、Priority < 20）
 

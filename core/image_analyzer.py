@@ -111,7 +111,9 @@ class ImageAnalyzer:
             gray = img.convert("L")
             # 高速化のためリサイズ
             gray.thumbnail((100, 100))
-            pixels = list(gray.getdata())
+            # Pillow 14 (2027) で Image.getdata() が削除予定。
+            # "L" モードは 1 byte/pixel なので tobytes() で等価に扱える。
+            pixels = list(gray.tobytes())
             if not pixels:
                 return 0.5
             avg = sum(pixels) / len(pixels)

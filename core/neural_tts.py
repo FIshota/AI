@@ -17,6 +17,7 @@ v2 改善点:
 from __future__ import annotations
 
 import asyncio
+import collections
 import logging
 import os
 import subprocess
@@ -285,7 +286,7 @@ class NeuralTTSEngine:
         # Item #P6: 合成済み音声の LRU キャッシュ（短フレーズの体感レイテンシ削減）
         # key: (voice, rate, pitch, volume, text) → tmp_path
         self._synth_cache: "collections.OrderedDict[tuple, str]" = (
-            __import__("collections").OrderedDict()
+            collections.OrderedDict()
         )
         self._synth_cache_max = 32
         self._synth_cache_hits = 0

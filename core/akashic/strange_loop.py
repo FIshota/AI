@@ -257,7 +257,7 @@ class StrangeLoop:
             """).strip()
 
             llm_blinds_raw = effective_llm(prompt)
-            llm_blinds = _parse_list_response(llm_blinds_raw)
+            llm_blinds = self._parse_list_response(llm_blinds_raw)
             return structural_blinds[:2] + llm_blinds
         else:
             # Fallback: structural blinds + level-appropriate deductions
@@ -534,6 +534,30 @@ class StrangeLoop:
             f"現在の{_LEVEL_TAXONOMY[level]['name']}で見えないものは、"
             f"{next_entry['description']}の視点から初めて見える。"
         )
+
+    @staticmethod
+    def _parse_list_response(raw: str, limit: int = 3) -> list[str]:
+        """LLM の箇条書き応答を行リストにパースする。
+
+        - 空行・箇条書き記号 (``-``, ``・``, ``1.`` 等) を除去
+        - 最大 ``limit`` 件に切り詰め
+        """
+        if not raw:
+            return []
+        lines: list[str] = []
+        for raw_line in raw.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            # 行頭の番号/記号を剥がす: "1. ", "- ", "・", "* "
+            line = re.sub(r"^[\-\*・]\s*", "", line)
+            line = re.sub(r"^\d+[\.\)]\s*", "", line)
+            line = line.strip()
+            if line:
+                lines.append(line)
+            if len(lines) >= limit:
+                break
+        return lines
 
     def _infer_blind_spots(self, reasoning: str, level: int) -> list[str]:
         """

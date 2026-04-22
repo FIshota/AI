@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 ベンチマーク比較スクリプト
-Phi-3 と Qwen 2.5 の応答品質を比較する。
-注意: settings.json は一切書き換えない。メモリ上のconfigのみ使用。
+Phi-3 (Microsoft/USA) と Sarashina 2.2 (SB Intuitions/日本) の応答品質を比較する。
+2026-04-21: 中国ベース Qwen2.5 比較を廃止。日本製 Sarashina に置換。
+注意: settings.json は一切書き換えない。メモリ上の config のみ使用。
 """
 from __future__ import annotations
 
@@ -79,7 +80,7 @@ def main():
 
     models = [
         ("Phi-3-mini-4k-instruct-q4.gguf", "Phi-3-mini-4k-Q4"),
-        ("qwen2.5-3b-instruct-q4_k_m.gguf", "Qwen2.5-3B-Q4_K_M"),
+        ("sarashina2.2-3b-instruct-v0.1-Q4_K_M.gguf", "Sarashina2.2-3B-Q4_K_M"),
     ]
 
     reports = {}

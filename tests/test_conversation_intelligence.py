@@ -1,6 +1,16 @@
 """
-Sprint K テスト: 国産AI進化パック
-K1: 会話知能、K2: 知識グラフ、K3: 性格進化、K4: 応答品質評価
+会話知能 / 知識グラフ / 性格進化 / 応答品質評価のテスト.
+
+(元: test_sprint_k.py — 2026-04-21 M7 でドメイン命名へリネーム)
+
+対象:
+    会話知能 (K1) — IntentClassification / ResponseStrategy / ContextChain /
+                    ConversationDepthManager / JapaneseQualityFilter /
+                    ConversationIntelligence
+    知識グラフ (K2) — KnowledgeGraph
+    性格進化 (K3) — PersonalityEvolution
+    応答品質評価 (K4) — ResponseEvaluator
+    コマンドパターン — TestSprintKCommandPatterns (将来改名候補)
 """
 import json
 from datetime import datetime, timedelta
@@ -403,25 +413,25 @@ class TestSprintKCommandPatterns:
     """Sprint K コマンドの正規表現マッチテスト"""
 
     def test_knowledge_patterns(self):
-        from core.ai_chan import CMD_KNOWLEDGE
+        from core.cmd_handlers import CMD_KNOWLEDGE
         assert CMD_KNOWLEDGE.match("知識グラフ")
         assert CMD_KNOWLEDGE.match("知ってることを見せて")
         assert CMD_KNOWLEDGE.match("ナレッジ一覧")
 
     def test_relationship_patterns(self):
-        from core.ai_chan import CMD_RELATIONSHIP
+        from core.cmd_handlers import CMD_RELATIONSHIP
         assert CMD_RELATIONSHIP.match("関係性を見せて")
         assert CMD_RELATIONSHIP.match("親密度確認")
         assert CMD_RELATIONSHIP.match("仲良し度どのくらい")
 
     def test_growth_patterns(self):
-        from core.ai_chan import CMD_GROWTH
+        from core.cmd_handlers import CMD_GROWTH
         assert CMD_GROWTH.match("成長レポート")
         assert CMD_GROWTH.match("アイの成長")
         assert CMD_GROWTH.match("進化状況")
 
     def test_quality_patterns(self):
-        from core.ai_chan import CMD_QUALITY
+        from core.cmd_handlers import CMD_QUALITY
         assert CMD_QUALITY.match("応答品質レポート")
         assert CMD_QUALITY.match("会話品質スコア")
         assert CMD_QUALITY.match("品質確認")

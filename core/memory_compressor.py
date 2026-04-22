@@ -64,8 +64,10 @@ class MemoryCompressor:
         )
 
         with self.memory._conn() as conn:
+            # nosec B608: ','.join('?'*N) は純粋なプレースホルダ文字列で外部入力なし.
+            # ids_to_delete の各値は第2引数でバインドされる.
             conn.execute(
-                f"UPDATE memories SET memory_type='long' WHERE id IN "
+                f"UPDATE memories SET memory_type='long' WHERE id IN "  # nosec B608
                 f"({','.join('?'*len(ids_to_delete))})",
                 ids_to_delete
             )

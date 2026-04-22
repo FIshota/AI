@@ -24,6 +24,7 @@ unified_field.py
 概念は点ではなく波動関数として存在する。
 """
 
+import collections
 import math
 import re
 from dataclasses import dataclass, field
@@ -432,7 +433,7 @@ class UnifiedField:
         self._domains = list(DOMAIN_AXIOMS.keys())
         # Item #P4: resonance cache — 同一概念の再計算を回避 (最大 256 件)
         self._resonance_cache: "collections.OrderedDict[str, FieldSignature]" = (
-            __import__("collections").OrderedDict()
+            collections.OrderedDict()
         )
         self._resonance_cache_max = 256
 

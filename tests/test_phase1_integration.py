@@ -22,7 +22,7 @@ class TestCodeCommandPatterns:
     """コードエンジンのコマンドパターンが正しくマッチするか"""
 
     def _import_patterns(self):
-        from core.ai_chan import (
+        from core.cmd_handlers import (
             CMD_CODE_ANALYZE,
             CMD_CODE_REVIEW,
             CMD_CODE_FIX,
@@ -313,7 +313,7 @@ class TestWebSearchPatterns:
     """Web検索コマンドパターンのマッチテスト"""
 
     def _import_patterns(self):
-        from core.ai_chan import CMD_WEB_SEARCH, CMD_WEB_FETCH
+        from core.cmd_handlers import CMD_WEB_SEARCH, CMD_WEB_FETCH
         return CMD_WEB_SEARCH, CMD_WEB_FETCH
 
     def test_search_patterns(self) -> None:

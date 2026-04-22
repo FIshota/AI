@@ -2,9 +2,10 @@
   "version": "0.1.0",
   "_comment": "このファイルを settings.json にコピーして編集してください。絶対パス・LAN IP・パスワードなどは各環境で設定。",
   "llm": {
+    "_model_note": "中国ベースの Qwen 系は 2026-04-21 に廃止。日本製 Sarashina 2.2 (SB Intuitions) を既定化。",
     "model_path": "models/",
-    "model_file": "qwen2.5-3b-instruct-q4_k_m.gguf",
-    "model_family": "sarashina2-7b",
+    "model_file": "sarashina2.2-3b-instruct-v0.1-Q4_K_M.gguf",
+    "model_family": "sarashina2.2-3b-instruct",
     "context_length": 8192,
     "max_tokens": 400,
     "max_sentences": 8,
@@ -19,7 +20,7 @@
     "use_mmap": true,
     "use_mlock": false,
     "mlx": {
-      "model_path": "models/Qwen2.5-3B-Instruct-mlx-4bit",
+      "model_path": "models/sarashina2.2-3b-instruct-v0.1-mlx-4bit",
       "adapter_path": "models/adapters/aether-v1",
       "adapter_enabled": false
     }
@@ -71,7 +72,13 @@
     "model_size": "small",
     "language": "ja"
   },
-  "semantic_search": { "enabled": true },
+  "_m8_comment": "llm_ipc_enabled=true にすると LLM 推論を別プロセス (scripts.ai_chan_llm_worker) に分離します。クラッシュ耐性が上がりますが、起動時間が +1-2 秒かかります。Phase 2 では opt-in。",
+  "llm_ipc_enabled": false,
+  "semantic_search": {
+    "enabled": true,
+    "_m9_comment": "backend: 'faiss' (default, 既存挙動) | 'sqlite-vec' (opt-in, 実験的)。sqlite-vec は Python が --enable-loadable-sqlite-extensions でビルドされている必要あり。",
+    "backend": "faiss"
+  },
   "vision": { "enable_moondream": true },
   "integrations": {
     "notion": {

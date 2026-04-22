@@ -1,5 +1,16 @@
 # スプリント履歴と実装状況
 
+> **注記 (2026-04-21 M7):** 以下に登場する `tests/test_sprint3.py` / `test_sprint3_ae.py` /
+> `test_sprint_j.py` / `test_sprint_k.py` は M7 でドメイン命名にリネームされました。
+> 新しいパスは以下の通り — 歴史記録としての旧ファイル名は本文内に残します。
+>
+> | 旧 | 新 |
+> |---|---|
+> | `test_sprint3.py` | `test_rag_and_life_assistant.py` |
+> | `test_sprint3_ae.py` | `test_multimodal_and_defense.py` |
+> | `test_sprint_j.py` | `test_server_ops_and_autonomous.py` |
+> | `test_sprint_k.py` | `test_conversation_intelligence.py` |
+
 ## 完了スプリント一覧
 
 ### Sprint 0: 基盤構築

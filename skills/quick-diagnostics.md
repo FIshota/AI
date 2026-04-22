@@ -53,10 +53,12 @@ print(f'合成データ: {getattr(ai, \"synthetic_gen\", None) is not None}')
 # 全テスト（~20秒）
 python3 -m pytest tests/ -v 2>&1 | tail -5
 
-# 特定スプリントのテストのみ
-python3 -m pytest tests/test_yamato.py -v     # ヤマト計画
-python3 -m pytest tests/test_sprint_k.py -v    # Sprint K
-python3 -m pytest tests/test_sprint_j.py -v    # Sprint J
+# 特定ドメインのテストのみ (M7 でドメイン命名へリネーム済み)
+python3 -m pytest tests/test_yamato.py -v                      # ヤマト計画
+python3 -m pytest tests/test_conversation_intelligence.py -v   # 会話知能 (旧 test_sprint_k.py)
+python3 -m pytest tests/test_server_ops_and_autonomous.py -v   # サーバー運用/自律行動 (旧 test_sprint_j.py)
+python3 -m pytest tests/test_rag_and_life_assistant.py -v      # RAG/生活アシスタント (旧 test_sprint3.py)
+python3 -m pytest tests/test_multimodal_and_defense.py -v      # マルチモーダル/防御 (旧 test_sprint3_ae.py)
 ```
 
 ## ランタイム診断

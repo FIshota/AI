@@ -40,7 +40,7 @@ transformers / fastapi / cryptography / Flask / lxml / pillow / sentence-transfo
 | | |
 |---|---|
 | `core/ai_chan.py` | **3,681 行** 👹 |
-| `scripts/convert_hf_to_gguf.py` | 6,195 行（upstream copy） |
+| `scripts/vendor/llama_cpp/convert_hf_to_gguf.py` | 6,195 行（upstream copy, M6 で vendor 隔離済み） |
 | `core/bio_nervous_system.py` | 1,095 行 |
 | `core/cmd_handlers.py` | 1,350 行 |
 | `core/llm.py` | 1,263 行 |

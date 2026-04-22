@@ -401,6 +401,162 @@
   .rm ul { margin-left: 18px; font-size: 0.82rem; color: var(--text-mid); }
   .rm ul li { margin: 3px 0; }
 
+  /* ===== HinoMoto Phase Tracker ===== */
+  .hinomoto {
+    background: linear-gradient(180deg, rgba(124,108,240,0.05), rgba(240,108,155,0.03));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 24px;
+    margin-top: 6px;
+  }
+  .hino-progress {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin: 18px 0 28px;
+    position: relative;
+  }
+  .hino-step {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    min-width: 0;
+  }
+  .hino-step::after {
+    content: "";
+    position: absolute;
+    top: 18px; left: 50%; right: -50%;
+    height: 3px;
+    background: var(--border);
+    z-index: 0;
+  }
+  .hino-step:last-child::after { display: none; }
+  .hino-step.done::after { background: var(--ok); opacity: 0.55; }
+  .hino-step.now::after  { background: linear-gradient(90deg, var(--ink), var(--border)); }
+  .hino-bullet {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--surface-2);
+    border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 0.72rem; font-weight: 700;
+    color: var(--text-dim);
+    position: relative; z-index: 1;
+    transition: transform 120ms ease;
+  }
+  .hino-step.done .hino-bullet {
+    background: var(--ok); color: #0b0d14; border-color: var(--ok);
+  }
+  .hino-step.now .hino-bullet {
+    background: var(--ink); color: #fff; border-color: var(--ink);
+    box-shadow: 0 0 0 6px rgba(124,108,240,0.18);
+    animation: hino-pulse 2.4s ease-in-out infinite;
+  }
+  .hino-step.next .hino-bullet {
+    background: var(--surface); color: var(--warn); border-color: var(--warn);
+  }
+  @keyframes hino-pulse {
+    0%, 100% { box-shadow: 0 0 0 6px rgba(124,108,240,0.18); }
+    50%      { box-shadow: 0 0 0 10px rgba(124,108,240,0.06); }
+  }
+  .hino-step .hino-label {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    text-align: center;
+    white-space: nowrap;
+  }
+  .hino-step.done .hino-label { color: var(--ok); }
+  .hino-step.now .hino-label { color: var(--ink); font-weight: 700; }
+  .hino-step.next .hino-label { color: var(--warn); }
+  .hino-step .hino-metric {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    color: var(--text-mid);
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .hino-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+  }
+  .hino-card {
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    padding: 16px 18px;
+    position: relative;
+  }
+  .hino-card.done { border-color: rgba(93,216,154,0.3); }
+  .hino-card.now  { border-color: rgba(124,108,240,0.45); box-shadow: 0 0 0 1px rgba(124,108,240,0.18); }
+  .hino-card.next { border-color: rgba(242,182,89,0.3); }
+  .hino-card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .hino-card-phase {
+    font-family: var(--mono); font-size: 0.7rem;
+    color: var(--text-dim);
+  }
+  .hino-card.done .hino-card-phase { color: var(--ok); }
+  .hino-card.now  .hino-card-phase { color: var(--ink); }
+  .hino-card.next .hino-card-phase { color: var(--warn); }
+  .hino-card-status {
+    font-family: var(--mono); font-size: 0.62rem;
+    padding: 2px 8px; border-radius: 999px;
+    background: var(--surface-2); color: var(--text-mid);
+    border: 1px solid var(--border-soft);
+  }
+  .hino-card.done .hino-card-status {
+    background: rgba(93,216,154,0.12); color: var(--ok);
+    border-color: rgba(93,216,154,0.35);
+  }
+  .hino-card.now .hino-card-status {
+    background: rgba(124,108,240,0.15); color: var(--ink);
+    border-color: rgba(124,108,240,0.4);
+  }
+  .hino-card.next .hino-card-status {
+    background: rgba(242,182,89,0.12); color: var(--warn);
+    border-color: rgba(242,182,89,0.35);
+  }
+  .hino-card h4 {
+    font-size: 0.96rem; font-weight: 600; margin-bottom: 6px;
+  }
+  .hino-card p {
+    font-size: 0.84rem; color: var(--text-mid); margin-bottom: 10px;
+  }
+  .hino-card .hino-kpi {
+    font-family: var(--mono); font-size: 0.78rem;
+    color: var(--text); border-top: 1px dashed var(--border-soft);
+    padding-top: 8px; margin-top: 8px;
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+  .hino-card .hino-kpi span:first-child { color: var(--text-dim); }
+
+  .hino-fork {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 22px;
+  }
+  @media (max-width: 720px) { .hino-fork { grid-template-columns: 1fr; } }
+  .hino-fork-item {
+    background: var(--surface);
+    border-left: 3px solid var(--cool);
+    border-radius: 8px;
+    padding: 12px 16px;
+  }
+  .hino-fork-item.warn { border-left-color: var(--warn); }
+  .hino-fork-item .hino-fork-title {
+    font-family: var(--mono); font-size: 0.72rem; color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .hino-fork-item p { font-size: 0.84rem; color: var(--text-mid); }
+
   /* ===== Details / expandable ===== */
   details {
     background: var(--surface);
@@ -559,6 +715,7 @@
       <a href="#progress">進捗</a>
       <a href="#tasks">残タスク</a>
       <a href="#roadmap">ロードマップ</a>
+      <a href="#hinomoto">HinoMoto</a>
       <a href="#tech">技術詳細</a>
       <a href="#threat">脅威モデル</a>
       <a href="#vision">ビジョン</a>
@@ -980,6 +1137,185 @@
           </ul>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- ========== HinoMoto Phase Tracker ========== -->
+  <section id="hinomoto">
+    <div class="section-head">
+      <div class="section-tag">HinoMoto · From-scratch LLM</div>
+      <h2 class="section-title">HinoMoto モデル開発 フェーズトラッカー</h2>
+      <p class="section-sub">
+        あいちゃんの将来の頭脳になる、ゼロから作る日本語 LLM「HinoMoto（日の本）」。
+        Phase 0（トークナイザ）から Phase 8（本番統合）まで、今どこに立っているかを俯瞰できます。
+        <strong>現在地: Phase 5 — BLEU/chrF 定量評価 (2026-04-22 01:22 JST, Phase 4 完了 val_ppl=45.81)</strong>
+      </p>
+    </div>
+
+    <div class="hinomoto">
+
+      <!-- 進捗バー (9 フェーズ横並び) -->
+      <div class="hino-progress" role="progressbar" aria-valuemin="0" aria-valuemax="8" aria-valuenow="5">
+        <div class="hino-step done">
+          <div class="hino-bullet">✓</div>
+          <div class="hino-label">P0 基盤</div>
+          <div class="hino-metric">tokenizer</div>
+        </div>
+        <div class="hino-step done">
+          <div class="hino-bullet">✓</div>
+          <div class="hino-label">P1 model</div>
+          <div class="hino-metric">RoPE+SwiGLU</div>
+        </div>
+        <div class="hino-step done">
+          <div class="hino-bullet">✓</div>
+          <div class="hino-label">P2 train</div>
+          <div class="hino-metric">ppl=308</div>
+        </div>
+        <div class="hino-step done">
+          <div class="hino-bullet">✓</div>
+          <div class="hino-label">P3 extend</div>
+          <div class="hino-metric">ppl=90</div>
+        </div>
+        <div class="hino-step done">
+          <div class="hino-bullet">✓</div>
+          <div class="hino-label">P4 10k</div>
+          <div class="hino-metric">ppl=45.81</div>
+        </div>
+        <div class="hino-step now">
+          <div class="hino-bullet">5</div>
+          <div class="hino-label">P5 metric</div>
+          <div class="hino-metric">BLEU/chrF 計測中</div>
+        </div>
+        <div class="hino-step">
+          <div class="hino-bullet">6</div>
+          <div class="hino-label">P6 mid</div>
+          <div class="hino-metric">d=512,50k</div>
+        </div>
+        <div class="hino-step">
+          <div class="hino-bullet">7</div>
+          <div class="hino-label">P7 infer</div>
+          <div class="hino-metric">ONNX/MLX</div>
+        </div>
+        <div class="hino-step">
+          <div class="hino-bullet">★</div>
+          <div class="hino-label">P8 GOAL</div>
+          <div class="hino-metric">ai-chan 統合</div>
+        </div>
+      </div>
+
+      <!-- フェーズカード詳細 -->
+      <div class="hino-cards">
+        <div class="hino-card done">
+          <div class="hino-card-head">
+            <span class="hino-card-phase">Phase 0–1</span>
+            <span class="hino-card-status">DONE</span>
+          </div>
+          <h4>基盤構築</h4>
+          <p>Byte-level BPE トークナイザ、RMSNorm + SwiGLU + RoPE + KV cache の Llama 系アーキテクチャ。全単体テスト 47 本 pass。</p>
+          <div class="hino-kpi"><span>params</span><span>4.19M</span></div>
+          <div class="hino-kpi"><span>vocab</span><span>8000</span></div>
+        </div>
+
+        <div class="hino-card done">
+          <div class="hino-card-head">
+            <span class="hino-card-phase">Phase 2</span>
+            <span class="hino-card-status">DONE</span>
+          </div>
+          <h4>Smoke 訓練 (300 step)</h4>
+          <p>jawiki 488 docs で BPE 学習 → 小モデル訓練 → perplexity 評価の E2E pipeline 疎通。</p>
+          <div class="hino-kpi"><span>val PPL</span><span>308.3</span></div>
+          <div class="hino-kpi"><span>所要</span><span>~30 秒</span></div>
+        </div>
+
+        <div class="hino-card done">
+          <div class="hino-card-head">
+            <span class="hino-card-phase">Phase 3</span>
+            <span class="hino-card-status">DONE</span>
+          </div>
+          <h4>Extended 訓練 (1.5k step)</h4>
+          <p>d_model=192 / 6 層に拡張し train/val 分割・best_val ckpt 自動保存を導入。val PPL 単調減少を確認。</p>
+          <div class="hino-kpi"><span>val PPL</span><span>90.0</span></div>
+          <div class="hino-kpi"><span>所要</span><span>~4 分</span></div>
+        </div>
+
+        <div class="hino-card done">
+          <div class="hino-card-head">
+            <span class="hino-card-phase">Phase 4 · DONE</span>
+            <span class="hino-card-status">✅ CLEARED</span>
+          </div>
+          <h4>Main 訓練 (10k step)</h4>
+          <p>d_model=256 / 8 層 / warmup 500。<strong>val PPL 目標 &lt; 50 達成 (最終 45.81 / best 45.28)</strong>。CPU 訓練 54 分、10.2M tokens 消費。</p>
+          <div class="hino-kpi"><span>final val PPL</span><span>45.81</span></div>
+          <div class="hino-kpi"><span>best val PPL</span><span>45.28</span></div>
+          <div class="hino-kpi"><span>tokens</span><span>10.2M</span></div>
+        </div>
+
+        <div class="hino-card now">
+          <div class="hino-card-head">
+            <span class="hino-card-phase">Phase 5 · NOW</span>
+            <span class="hino-card-status">ANALYZING</span>
+          </div>
+          <h4>定量評価 BLEU / chrF</h4>
+          <p>4 ckpt 比較: smoke/ext は短い参照文にフィットして BLEU 高め、main は生成が長く/多様化し BLEU 低下。val PPL と BLEU の乖離を分析中。<strong>次は greedy decode + 大規模 held-out で再計測</strong>。</p>
+          <div class="hino-kpi"><span>main_best</span><span>BLEU 0.155 / chrF 0.232</span></div>
+          <div class="hino-kpi"><span>ext1500</span><span>BLEU 0.262 / chrF 0.273</span></div>
+          <div class="hino-kpi"><span>smoke300</span><span>BLEU 0.267 / chrF 0.272</span></div>
+        </div>
+
+        <div class="hino-card">
+          <div class="hino-card-head">
+            <span class="hino-card-phase">Phase 6</span>
+            <span class="hino-card-status">LATER</span>
+          </div>
+          <h4>Mid-scale 訓練</h4>
+          <p>d_model=512 / 12 層 / 50k step。MPS/CUDA 環境で実施。val PPL &lt; 20 を現実的ラインに。</p>
+          <div class="hino-kpi"><span>params 予想</span><span>~40M</span></div>
+          <div class="hino-kpi"><span>目標 val PPL</span><span>&lt; 20</span></div>
+        </div>
+
+        <div class="hino-card">
+          <div class="hino-card-head">
+            <span class="hino-card-phase">Phase 7</span>
+            <span class="hino-card-status">LATER</span>
+          </div>
+          <h4>推論最適化</h4>
+          <p>ONNX Runtime / MLX 変換、量子化 (Q4/Q8)、ストリーミング推論で ai-chan にデプロイ可能なサイズに。</p>
+          <div class="hino-kpi"><span>目標</span><span>&lt; 500MB</span></div>
+          <div class="hino-kpi"><span>latency</span><span>&lt; 300ms/tok</span></div>
+        </div>
+
+        <div class="hino-card">
+          <div class="hino-card-head">
+            <span class="hino-card-phase">Phase 8 · GOAL</span>
+            <span class="hino-card-status">FUTURE</span>
+          </div>
+          <h4>ai-chan 統合 (理想ゴール)</h4>
+          <p>Sarashina2-7B から HinoMoto ベースへ段階的移行。家族の記憶に特化した LoRA をかぶせて「HinoMoto × Aether」へ。</p>
+          <div class="hino-kpi"><span>置換元</span><span>Sarashina2-7B</span></div>
+          <div class="hino-kpi"><span>家族性能</span><span>≥ Aether v1</span></div>
+        </div>
+      </div>
+
+      <!-- 分岐点 -->
+      <div class="hino-fork">
+        <div class="hino-fork-item">
+          <div class="hino-fork-title">✅ 分岐点 A — Phase 4 → 5 <strong>CLEARED</strong></div>
+          <p>10k step 完了時 <strong>val PPL = 45.81</strong> (best 45.28 @ step 8500)。目標 &lt; 50 クリアのため BLEU/chrF 定量比較に即移行済み。</p>
+        </div>
+        <div class="hino-fork-item warn">
+          <div class="hino-fork-title">⚠ 分岐点 B — Phase 5 → 6 <strong>検討中</strong></div>
+          <p>現状 BLEU 0.155–0.267 / chrF 0.232–0.273。BLEU&lt;0.05 しきい値は余裕で上回るが <strong>val_ppl 改善と逆行する BLEU</strong> を観測。評価セット拡大 (20→200 文) と greedy decoding 再計測後に判断。</p>
+        </div>
+        <div class="hino-fork-item">
+          <div class="hino-fork-title">🔀 分岐点 C — Phase 6 → 7 条件</div>
+          <p>val PPL &lt; 20 達成で Phase 7 へ。未達なら FineWeb-ja 等の追加コーパスを混合し継続訓練。</p>
+        </div>
+        <div class="hino-fork-item warn">
+          <div class="hino-fork-title">⚠ 分岐点 D — Phase 7 → 8 条件</div>
+          <p>量子化後の性能劣化が PPL+20% 以内なら ai-chan 統合へ。超過なら QLoRA 再訓練で調整。</p>
+        </div>
+      </div>
+
     </div>
   </section>
 

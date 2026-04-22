@@ -157,7 +157,9 @@ class DataExporter:
                 logger.warning("テーブルが存在しません: %s", table_name)
                 return []
 
-            cursor.execute(f"SELECT * FROM {table_name}")  # noqa: S608
+            # nosec B608: table_name は上の sqlite_master による存在チェックと
+            # 呼び出し側の内部 whitelist を通過したもの. SQL injection 経路なし.
+            cursor.execute(f"SELECT * FROM {table_name}")  # nosec B608
             rows: List[Dict[str, Any]] = [dict(row) for row in cursor.fetchall()]
             return rows
         finally:

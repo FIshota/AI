@@ -1,5 +1,13 @@
 """
-Sprint J テスト: サーバーホーム、自律行動、AI環境
+サーバー運用 / 自律行動 / AI 環境のテスト.
+
+(元: test_sprint_j.py — 2026-04-21 M7 でドメイン命名へリネーム)
+
+対象:
+    運用系 — CredentialStore / ServerHome / ServerAIEnv / KnowledgeSync / PrometheusReader
+    自律行動 — GreetingEngine / IdleLearner / ProactiveStarter / DiaryEnricher /
+               AnomalyEscalator / AutonomousActions
+    コマンドパターン — TestSprintJCommandPatterns (将来改名候補)
 """
 import json
 import os
@@ -431,30 +439,30 @@ class TestSprintJCommandPatterns:
     """Sprint J コマンドの正規表現マッチテスト"""
 
     def test_server_status_patterns(self):
-        from core.ai_chan import CMD_SERVER_STATUS
+        from core.cmd_handlers import CMD_SERVER_STATUS
         assert CMD_SERVER_STATUS.match("サーバー状態")
         assert CMD_SERVER_STATUS.match("ホーム確認")
         assert CMD_SERVER_STATUS.match("家の状況")
         assert CMD_SERVER_STATUS.match("サーバーステータス")
 
     def test_server_docker_patterns(self):
-        from core.ai_chan import CMD_SERVER_DOCKER
+        from core.cmd_handlers import CMD_SERVER_DOCKER
         assert CMD_SERVER_DOCKER.match("サーバーDocker一覧")
         assert CMD_SERVER_DOCKER.match("ホームDocker状態")
 
     def test_server_sync_patterns(self):
-        from core.ai_chan import CMD_SERVER_SYNC
+        from core.cmd_handlers import CMD_SERVER_SYNC
         assert CMD_SERVER_SYNC.match("サーバーに同期")
         assert CMD_SERVER_SYNC.match("ホームと同期")
         assert CMD_SERVER_SYNC.match("サーバー同期して")
 
     def test_server_setup_patterns(self):
-        from core.ai_chan import CMD_SERVER_SETUP
+        from core.cmd_handlers import CMD_SERVER_SETUP
         assert CMD_SERVER_SETUP.match("サーバー設定")
         assert CMD_SERVER_SETUP.match("ホーム接続設定")
 
     def test_proactive_patterns(self):
-        from core.ai_chan import CMD_PROACTIVE
+        from core.cmd_handlers import CMD_PROACTIVE
         assert CMD_PROACTIVE.match("話しかけて")
         assert CMD_PROACTIVE.match("何か話して")
         assert CMD_PROACTIVE.match("会話して")

@@ -47,7 +47,7 @@
 | core/ai_chan.py | **C** | 29 core import + God Object |
 | core/memory.py + migration.py | **A-** | 最も堅実、背骨 |
 | core/llm.py | **B+** | CVE mitigation 自前実装は良い |
-| core/emotion.py | **B** | quantum_superposition 等ポエム API は捨てるべき |
+| core/emotion.py | **B** | ~~quantum_superposition 等ポエム API は捨てるべき~~ → M10 (2026-04-21) で `get_quantum_state()` / `quantum_superposition()` 削除済み。`mood_label()` は実使用中のため保持 |
 | plugin_loader + 空 plugins/ | **D** | 機能しているフリ |
 | Growth Stage | **C** | S0-S3 と INFANT-MATURE の 2 系統併存 |
 | bench/ | **B+** | 役割分離が明確、健全 |
@@ -67,9 +67,9 @@
 - `core/federated_stub.py`
 - `core/yamato_dna.py`
 - `core/plugin_loader.py` + 空 `core/plugins/`
-- `core/emotion.py` の `quantum_superposition()` / `mood_label()` 固定文字列
+- ~~`core/emotion.py` の `quantum_superposition()` / `mood_label()` 固定文字列~~ → M10 で `quantum_superposition()` 系削除、`mood_label()` は実使用のため保持
 - `core/ai_chan.py:82-111` の CMD_* 60 個 re-export
-- `tests/test_sprint3*.py` / `test_sprint_j.py` / `test_sprint_k.py`
+- `tests/test_rag_and_life_assistant.py` / `test_multimodal_and_defense.py` / `test_server_ops_and_autonomous.py` / `test_conversation_intelligence.py` (旧 `test_sprint3*.py` / `test_sprint_j.py` / `test_sprint_k.py`, M7 でリネーム)
 - `config/persona.json` の system_prompt 埋込会話例
 
 ### 絶対守るべき核

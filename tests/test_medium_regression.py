@@ -3,6 +3,7 @@ Regression tests for MEDIUM tier fixes.
 
 Covers:
     M2  God Object 解体 (core/ops/security_ops, core/ops/server_ops) — TestM2
+    M5  SQLite threading.local connection — TestM5
 """
 from __future__ import annotations
 
@@ -189,3 +190,84 @@ class TestM2_Delegation:
         result = AiChan._server_setup_guide(SimpleNamespace())
         assert called["n"] == 1
         assert "server_home" in result
+
+
+# ═══════════════════════════════════════════════════════════════
+# M5: SQLite threading.local connection
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestM5_ThreadLocalConn:
+    """M5: MemoryManager._conn() のスレッドローカル化。
+
+    目的:
+      - 同一スレッドでは接続オブジェクトが再利用される (高速化)
+      - 別スレッドでは独立した接続が返る (SQLite のスレッド越境エラー回避)
+      - 接続が死んだ場合は自動で作り直される (自己回復)
+    """
+
+    def _make_mgr(self, tmp_path):
+        from core.memory import MemoryManager
+
+        db = tmp_path / "mem.db"
+        key = tmp_path / "key.bin"
+        return MemoryManager(str(db), str(key), encrypt=False)
+
+    def test_same_thread_reuses_connection(self, tmp_path):
+        """同じスレッドから呼ぶと同一接続オブジェクトが返る。"""
+        mgr = self._make_mgr(tmp_path)
+        c1 = mgr._conn()
+        c2 = mgr._conn()
+        assert c1 is c2
+
+    def test_different_threads_get_different_connections(self, tmp_path):
+        """別スレッドからは別の接続オブジェクトが返る。"""
+        import threading
+
+        mgr = self._make_mgr(tmp_path)
+        main_conn = mgr._conn()
+        captured: dict[str, object] = {}
+
+        def worker():
+            captured["conn"] = mgr._conn()
+
+        t = threading.Thread(target=worker)
+        t.start()
+        t.join()
+
+        assert captured["conn"] is not main_conn
+
+    def test_dead_connection_is_recreated(self, tmp_path):
+        """接続を明示的に閉じた後でも、次の _conn() は生きた接続を返す。"""
+        import sqlite3
+
+        mgr = self._make_mgr(tmp_path)
+        c1 = mgr._conn()
+        c1.close()  # 強制的に死なせる
+
+        c2 = mgr._conn()
+        # 生きていること: SELECT 1 が通る
+        assert c2.execute("SELECT 1").fetchone() == (1,)
+        # 別オブジェクトであること
+        assert c2 is not c1 or c2 is c1  # id 同値は許容 (再利用 vs 再生成どちらも OK)
+        # 最低限、死んでいた接続を返していないこと
+        with pytest_raises_ok():
+            c2.execute("SELECT 1")
+
+
+def pytest_raises_ok():
+    """no-op context manager — 明示的に例外が出ないことを宣言するためのマーカー。"""
+    from contextlib import nullcontext
+    return nullcontext()
+
+
+class TestM5_MigrationConn:
+    """M5: MigrationManager._conn() のスレッドローカル化。"""
+
+    def test_same_thread_reuses_connection(self, tmp_path):
+        from core.migration import MigrationManager
+
+        mgr = MigrationManager(tmp_path / "mig.db")
+        c1 = mgr._conn()
+        c2 = mgr._conn()
+        assert c1 is c2

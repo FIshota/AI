@@ -179,6 +179,14 @@ class ResearchAgent:
             logger.warning("[ResearchAgent] beautifulsoup4 が未インストール。テキスト抽出をスキップします")
             return ""
 
+        # SSRF ガード: DDG 検索結果由来の URL でも file:/ / localhost / metadata endpoint を拒否
+        try:
+            from utils.url_guard import assert_safe_http_url, UnsafeURLError
+            url = assert_safe_http_url(url)
+        except UnsafeURLError as exc:
+            logger.warning("[ResearchAgent] unsafe URL skipped: %s (%s)", url, exc)
+            return ""
+
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -187,7 +195,7 @@ class ResearchAgent:
         }
         req = urllib.request.Request(url, headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=5) as resp:
+            with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310
                 raw = resp.read(50_000)
         except urllib.error.URLError as exc:
             logger.warning("[ResearchAgent] URL 取得失敗 %s: %s", url, exc)

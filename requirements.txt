@@ -1,6 +1,10 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # ai-chan requirements
-# 更新: 2026-04-21 (H10: minor bumps — cryptography/fastapi/pydantic/requests)
+# 更新: 2026-04-22 (H12: pip-audit 監査で検出された 1 件 (CVE-2025-69872 diskcache)
+#                  は _secure_cache_dir() で mitigated. restore_memory.py B202 tar slip
+#                  修正済み. cryptography 46.x 正式採用, 他 minor/patch 下限引き上げ.
+#                  保留: rich 15 / pyarrow 24 / setuptools 82 / magika 1.x は major 変更レビュー待ち.
+#                  paramiko 3.x / notion 2.x / duckduckgo 7.x は API 差分検証中につき据え置き.)
 # 対応環境: Python 3.10+ (arm64 ネイティブ推奨、Py3.13 対応)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -8,16 +12,16 @@
 llama-cpp-python>=0.3.4
 
 # ── セキュリティ・暗号化 ────────────────────────────────
-# cryptography: 45.x 系で CVE-2025-xxxx 修正、46.x は ABI 変更のため保留
-cryptography>=45.0.0
+# cryptography: 46.x で本家 ABI 安定, 46.0.7 に追従 (2026-04-22 audit で検証済み)
+cryptography>=46.0.7
 python-jose[cryptography]>=3.5.0
 
 # ── 記憶・ベクトル検索 ──────────────────────────────────
-faiss-cpu>=1.9.0
+faiss-cpu>=1.11.0
 # numpy: Py3.13 は 2.x 必須。Py3.12 以下は 1.26 系に留める。
 numpy>=1.26.4,<2.0; python_version < "3.13"
 numpy>=2.1.0; python_version >= "3.13"
-sentence-transformers>=3.3.0
+sentence-transformers>=4.0.0
 
 # ── 音声 (Phase 0.75: γ 切替式) ─────────────────────────
 # 既定エンジン: pyttsx3 (BSD License, 完全ローカル, 軽量)
@@ -32,17 +36,17 @@ soundfile>=0.13.0
 librosa>=0.10.0
 
 # ── Web API ──────────────────────────────────────────────
-# H10 (2026-04-21): FastAPI 0.118+ で Starlette 依存の CVE 修正済
-fastapi>=0.118.0
-uvicorn[standard]>=0.34.0
+# H11 (2026-04-21): FastAPI 0.136+ / uvicorn 0.45 系に追従
+fastapi>=0.136.0
+uvicorn[standard]>=0.45.0
 slowapi>=0.1.9
 
 # ── Web リサーチ ─────────────────────────────────────────
 # duckduckgo-search: v8 はクライアントクラス変更のため v7 止め
 duckduckgo-search>=7.0.0
-beautifulsoup4>=4.13.0
-# requests: CVE-2024-35195 fixed in 2.32.3
-requests>=2.32.3
+beautifulsoup4>=4.14.0
+# requests: CVE-2024-35195 fixed in 2.32.3, 2.33 系で最新
+requests>=2.33.1
 
 # ── ドキュメント出力 ─────────────────────────────────────
 python-docx>=1.2.0
@@ -51,10 +55,10 @@ openpyxl>=3.1.5
 fpdf2>=2.8.0
 
 # ── PDF / 画像処理 ───────────────────────────────────────
-PyMuPDF>=1.24.0
-pdfminer.six>=20240706
-# Pillow: CVE-2024-28219 fixed in 10.3, 11.x で stable
-Pillow>=11.0.0
+PyMuPDF>=1.27.0
+pdfminer.six>=20250506
+# Pillow: CVE-2024-28219 fixed in 10.3, 12.x 系で最新. AVIF/WebP 改善.
+Pillow>=12.2.0
 pytesseract>=0.3.13
 
 # ── ML / NLP ─────────────────────────────────────────────
@@ -67,12 +71,12 @@ pytesseract>=0.3.13
 # transformers: 5.x は破壊的変更多数のため 4.x 止め
 # H6 fix: transformers も torch 前提ため optional に移動。
 #   NLP 補助が必要な場合: pip install "transformers>=4.44.0,<5.0"
-sentencepiece>=0.1.99
-gguf>=0.10.0
-tiktoken>=0.8.0
-safetensors>=0.4.5
-scikit-learn>=1.5.0
-scipy>=1.13.0
+sentencepiece>=0.2.0
+gguf>=0.17.0
+tiktoken>=0.9.0
+safetensors>=0.5.0
+scikit-learn>=1.7.0
+scipy>=1.15.0
 # ONNX Runtime: CPU 推論用（Moondream 代替候補）
 # onnxruntime>=1.18.0
 
@@ -87,7 +91,7 @@ vosk>=0.3.44
 # openwakeword>=0.6.0
 
 # ── Google カレンダー連携 ────────────────────────────────
-google-api-python-client>=2.150.0
+google-api-python-client>=2.194.0
 google-auth-oauthlib>=1.2.0
 
 # ── Notion 連携 ──────────────────────────────────────────
@@ -95,13 +99,18 @@ google-auth-oauthlib>=1.2.0
 notion-client>=2.2.0,<3.0
 
 # ── ユーティリティ ───────────────────────────────────────
-# H10 (2026-04-21): rich/click/pydantic minor bumps
-rich>=14.0.0
-click>=8.2.0
-pydantic>=2.11.0
-python-dateutil>=2.9.0
+# H11 (2026-04-21): rich 14 維持 (15 は major 変更, 後続で評価), pydantic/click minor bumps
+rich>=14.0.0,<16.0.0
+click>=8.3.0
+pydantic>=2.13.3
+python-dateutil>=2.9.0.post0
 python-dotenv>=1.1.0
 PyYAML>=6.0.2
+
+# ── セキュリティ必須依存 ────────────────────────────────
+# defusedxml: XXE 耐性 XML パーサ (core/web_fetcher.py で必須)
+# 2026-04-21 CRITICAL fix: XXE fallback を削除したため optional → required 昇格
+defusedxml>=0.7.1
 
 # ── macOS 固有 (Apple Silicon arm64 ネイティブ環境のみ) ──
 # mlx>=0.10.0

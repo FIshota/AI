@@ -63,21 +63,6 @@ class EmotionState:
         }
         return mapping.get(dom, "😊")
 
-    def quantum_superposition(self) -> list[tuple[str, float]]:
-        """量子重ね合わせ: 同時に存在する複数の感情状態を返す (感情, 確率振幅)"""
-        # 感情値からノルムを計算して共存確率を返す
-        emotions = [
-            ("happiness", self.happiness),
-            ("curiosity", self.curiosity),
-            ("affection", self.affection),
-            ("energy", self.energy),
-            ("anxiety", self.anxiety),
-        ]
-        total = sum(v**2 for _, v in emotions) ** 0.5
-        if total < 1e-6:
-            return [("neutral", 1.0)]
-        return [(name, round(val / total, 3)) for name, val in emotions if val / total > 0.1]
-
 
 POSITIVE_KEYWORDS = ["ありがとう", "嬉しい", "好き", "素晴らしい", "楽しい", "愛", "大好き",
                      "助かった", "感謝", "笑", "笑顔", "素敵", "すごい"]
@@ -198,26 +183,6 @@ class EmotionEngine:
             return round(profile.domain_diversity * 0.6 + profile.unique_word_ratio * 0.4, 3)
         except Exception:
             return 0.5
-
-    def get_quantum_state(self, text: str) -> dict:
-        """
-        テキストから量子的感情状態を推定。
-        複数の感情が重ね合わせ状態として共存する。
-        """
-        # 通常の感情更新を実行して状態取得
-        self.update_from_message(text)
-        state = self.state
-        superposed = state.quantum_superposition()
-        entropy = self.measure_emotional_entropy(text)
-        return {
-            "superposed_states": superposed,
-            "dominant": state.dominant(),
-            "emotional_entropy": entropy,
-            "mood": state.mood_label(),
-            "emoji": state.emoji(),
-            "is_complex": entropy > 0.6,
-        }
-
 
 class MoodAnalyzer:
     """

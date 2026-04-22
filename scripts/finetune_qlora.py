@@ -3,7 +3,9 @@
 D9: QLoRA微調整スクリプト - Aether Model Fine-tuning
 
 MLX フレームワークを使用して Apple Silicon 上で
-Qwen 2.5 3B-Instruct を QLoRA 微調整する。
+Sarashina 2.2 3B-Instruct (SB Intuitions / 日本) を QLoRA 微調整する。
+
+2026-04-21: 中国ベース Qwen 2.5 依存を排除し、日本製 Sarashina に切替。
 
 前提:
 - macOS + Apple Silicon (M1/M2/M3)
@@ -51,15 +53,25 @@ def check_mlx() -> bool:
     return True
 
 
+_PREFERRED_MODEL_KEYWORDS = ("sarashina", "llm-jp", "swallow", "elyza", "rinna", "calm")
+
+
 def find_model() -> Path | None:
-    """Qwenモデルを探す"""
+    """日本製優先でベースモデルを探す (sarashina/llm-jp/swallow/elyza/rinna/calm)."""
+    # 1) 日本製 GGUF を優先
+    for keyword in _PREFERRED_MODEL_KEYWORDS:
+        for f in MODELS_DIR.glob("*.gguf"):
+            if keyword in f.name.lower():
+                return f
+        for d in MODELS_DIR.iterdir():
+            if d.is_dir() and keyword in d.name.lower():
+                return d
+    # 2) フォールバック: 任意の GGUF (中国系は警告)
     for f in MODELS_DIR.glob("*.gguf"):
-        if "qwen" in f.name.lower():
-            return f
-    # GGUF以外（HuggingFace形式）も探す
-    for d in MODELS_DIR.iterdir():
-        if d.is_dir() and "qwen" in d.name.lower():
-            return d
+        if "qwen" in f.name.lower() or "deepseek" in f.name.lower() or "yi-" in f.name.lower():
+            print(f"[FineTune] 警告: 中国系モデル {f.name} を検出。"
+                  "scripts/setup_sarashina.py で日本製に差し替えを推奨。")
+        return f
     return None
 
 
@@ -198,23 +210,23 @@ def main() -> None:
     # 2. モデル確認
     model_path = find_model()
     if not model_path:
-        print("[FineTune] Qwenモデルが見つかりません。")
-        print("[FineTune] 先に `python scripts/setup_qwen.py` を実行してください。")
+        print("[FineTune] ベースモデルが見つかりません。")
+        print("[FineTune] 先に `python scripts/setup_sarashina.py` を実行してください。")
         sys.exit(1)
 
     # 3. MLX形式に変換（GGUF以外の場合）
     if model_path.is_dir():
         mlx_dir = convert_to_mlx(model_path)
     else:
-        # GGUF の場合、HuggingFace からMLX版をダウンロード
+        # GGUF の場合、HuggingFace からMLX版をダウンロード (日本製 Sarashina 2.2)
         print("[FineTune] GGUF形式は直接微調整できません。")
-        print("[FineTune] HuggingFaceからQwen2.5-3B-Instructをダウンロードします。")
+        print("[FineTune] HuggingFace から sbintuitions/sarashina2.2-3b-instruct-v0.1 をダウンロードします。")
         try:
             from huggingface_hub import snapshot_download
-            hf_dir = MODELS_DIR / "Qwen2.5-3B-Instruct"
+            hf_dir = MODELS_DIR / "sarashina2.2-3b-instruct-v0.1"
             if not hf_dir.exists():
                 snapshot_download(
-                    "Qwen/Qwen2.5-3B-Instruct",
+                    "sbintuitions/sarashina2.2-3b-instruct-v0.1",
                     local_dir=str(hf_dir),
                 )
             mlx_dir = convert_to_mlx(hf_dir)

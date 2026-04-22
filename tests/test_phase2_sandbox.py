@@ -236,7 +236,7 @@ class TestCmdCodeRunPattern:
     """CMD_CODE_RUN パターンマッチテスト"""
 
     def _pattern(self):
-        from core.ai_chan import CMD_CODE_RUN
+        from core.cmd_handlers import CMD_CODE_RUN
         return CMD_CODE_RUN
 
     def test_basic_match(self) -> None:

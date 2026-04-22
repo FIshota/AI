@@ -1,5 +1,11 @@
 """
-Sprint 3.0: A) マルチモーダル強化 + E) 防御進化 のテスト
+マルチモーダル処理 / 防御監視のテスト.
+
+(元: test_sprint3_ae.py — 2026-04-21 M7 でドメイン命名へリネーム)
+
+対象:
+    - ImageAnalyzer / ClipboardImageCapture / MultimodalChatHandler: 画像入力
+    - NetworkMonitor / ProcessMonitor / DefenseDashboard: 防御レイヤー監視
 """
 from __future__ import annotations
 

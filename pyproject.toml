@@ -21,7 +21,7 @@ dynamic = ["version"]
 line-length = 100
 target-version = "py310"
 extend-exclude = [
-    "scripts/convert_hf_to_gguf.py",  # vendored from llama.cpp upstream
+    "scripts/vendor",  # M6: vendored 3rd-party code (llama.cpp 等)
     "build",
     "dist",
     ".venv",
@@ -102,5 +102,21 @@ module = "tests.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "scripts.convert_hf_to_gguf"
+# M6: vendored llama.cpp コードは上流責任。ai-chan 側で型検査しない。
+module = "scripts.vendor.*"
 ignore_errors = true
+
+# ──────────────────────────────────────────────────────────────
+# pytest — mark registration (removes PytestUnknownMarkWarning 48件)
+# ──────────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: fast unit-level tests (no IO / no network)",
+    "integration: integration tests (may touch local files / db)",
+    "slow: long-running tests (>5s each)",
+    "network: tests that require network access",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:swigvarlink",
+]

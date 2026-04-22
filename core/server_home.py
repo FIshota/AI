@@ -40,16 +40,53 @@ try:
 except (ImportError, OSError):
     FERNET_OK = False
 
-# 実行を許可するコマンドのプレフィックス
+# ─── コマンド許可リスト (defense-in-depth) ──────────────────────────────
+#
+# 歴史: 2026-04-21 以前、この allowlist は以下の致命的問題を持っていた:
+#   1. "rm -rf /home" が含まれており、startswith マッチで
+#      "rm -rf /home/../.." のような path traversal が全て通過していた
+#   2. 単体の "cat", "ls", "pwd", "mkdir" が含まれており
+#      "cat /etc/shadow", "ls /root/.ssh/" 等が全て通過していた
+#
+# 現在の方針:
+#   - rm 系は完全禁止 (ファイル削除は allowlist しない)
+#   - 曖昧な単語プレフィックスを排除し、具体的な形で列挙
+#   - ファイル操作は /home/ 配下に限定
+#   - _is_allowed() で path traversal / command substitution を追加拒否
+#
+# 注意: これは「完全な sandbox」ではなく defense-in-depth のみ。
+#       run_command() への呼び出し元が信頼できる内部コードであることが大前提。
 DEFAULT_ALLOWED_PREFIXES = [
-    "docker", "df", "free", "uptime", "systemctl status",
-    "cat", "ls", "pwd", "whoami", "hostname", "uname",
-    "curl localhost", "top -bn1", "ps aux",
-    "mkdir", "rm -rf /home",  # ホームディレクトリ内のみ
+    # Docker operations (container lifecycle + inspect only)
+    "docker inspect ", "docker exec ", "docker ps", "docker logs ",
+    "docker stats", "docker images", "docker create ",
+    "docker start ", "docker stop ", "docker restart ",
+    # Metrics over localhost only (Prometheus / health checks)
+    "curl -s 'localhost:", "curl -s \"localhost:",
+    "curl -s 'http://localhost:", "curl -s http://localhost:",
+    "curl -s 'http://127.0.0.1:", "curl -s http://127.0.0.1:",
+    "curl localhost:",
+    # File operations — /home/ 配下に限定
+    "mkdir -p /home/", "ls -1 /home/", "ls /home/", "cd /home/",
+    # Read-only system info (literal or literal+args)
+    "uptime", "whoami", "hostname", "uname",
+    "df -h", "free -h", "top -bn1", "ps aux",
+    "systemctl status ",
 ]
 
 # コンテナ名のバリデーション
 _SAFE_NAME = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_.\-]*$')
+
+# _is_allowed() で拒否する危険パターン (defense-in-depth)
+_DANGEROUS_PATTERNS = re.compile(
+    r"(\.\.(?:/|\\|$))"          # path traversal
+    r"|(\$\()"                   # command substitution $(...)
+    r"|(`)"                      # command substitution backticks
+    r"|(\x00)"                   # null byte
+    r"|(\n|\r)"                  # newline-based chaining
+    r"|(\brm\s+-?r)"             # rm -r / rm -rf (allowlist を通過しても禁止)
+    r"|(/etc/shadow|/etc/passwd|/etc/sudoers)"  # 機密ファイル名 (明示)
+)
 
 
 @dataclass
@@ -428,8 +465,23 @@ class ServerHome:
         return client
 
     def _is_allowed(self, cmd: str) -> bool:
-        """コマンドが許可リストに含まれるか確認する"""
+        """コマンドが許可リストに含まれるか確認する.
+
+        多層検査:
+          1. 危険パターン (path traversal / command substitution / rm 系) を拒否
+          2. allowlist の prefix にマッチするか確認
+        """
         cmd_stripped = cmd.strip()
+        if not cmd_stripped:
+            return False
+        # 1. 危険パターンは allowlist に関わらず拒否
+        if _DANGEROUS_PATTERNS.search(cmd_stripped):
+            logger.warning(
+                "server_home: rejected dangerous pattern in command: %r",
+                cmd_stripped[:100],
+            )
+            return False
+        # 2. allowlist prefix マッチ
         for prefix in self._allowed:
             if cmd_stripped.startswith(prefix):
                 return True

@@ -15,7 +15,10 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.deps import AiChanDeps  # noqa: F401  # 型ヒント用（ランタイムは遅延 import）
 
 logger = logging.getLogger(__name__)
 
@@ -73,40 +76,6 @@ from core.response_pipeline import (
     get_friendly_error,
     sanitize_input,
     _NARRATION_RE,
-)
-
-# ──────────────────────────────────────────────────────────────
-# 後方互換: CMD_* パターンを re-export（テストコードが参照している）
-# ──────────────────────────────────────────────────────────────
-from core.cmd_handlers import (  # noqa: F401
-    CMD_REMEMBER, CMD_FORGET, CMD_IMPORTANT, CMD_MEMORY,
-    CMD_PROFILE, CMD_SEARCH, CMD_DIARY, CMD_ANNIV_ADD, CMD_ANNIV_LIST,
-    CMD_YT_LIST, CMD_WEB_LIST, CMD_FILE_LIST, CMD_CALENDAR, CMD_BATTERY,
-    CMD_AUTO_LEARN, CMD_LEARN_ADD, CMD_LEARN_NOW,
-    CMD_MEMO_ADD, CMD_MEMO_LIST,
-    CMD_PROPOSAL, CMD_PROPOSAL_OK, CMD_PROPOSAL_NO,
-    CMD_SELF_AWARE, CMD_MINUTES,
-    CMD_SECURITY, CMD_BACKUP, CMD_LOCKDOWN, CMD_UNLOCK,
-    CMD_SERVER_STATUS, CMD_SERVER_DOCKER, CMD_SERVER_SYNC,
-    CMD_SERVER_SETUP, CMD_PROACTIVE,
-    CMD_KNOWLEDGE, CMD_RELATIONSHIP, CMD_GROWTH, CMD_QUALITY,
-    CMD_YAMATO_DASH, CMD_MOE_STATUS, CMD_LEARNING_STATUS,
-    CMD_SYNTH_GEN, CMD_VERIFY_STATUS,
-    CMD_SCREENSHOT, CMD_CLIPBOARD_IMG, CMD_IMAGE_ANALYZE,
-    CMD_NETWORK_CHECK, CMD_PROCESS_CHECK, CMD_DEFENSE_REPORT,
-    CMD_TASK_ADD, CMD_TASK_DONE, CMD_TASK_LIST,
-    CMD_HABIT_ADD, CMD_HABIT_REC, CMD_HABIT_LIST,
-    CMD_DOC_ADD, CMD_DOC_LIST, CMD_DOC_SEARCH,
-    CMD_WEB_SEARCH, CMD_WEB_SEARCH_PREFIX, CMD_WEB_FETCH,
-    CMD_CODE_ANALYZE, CMD_CODE_REVIEW, CMD_CODE_FIX,
-    CMD_CODE_TEST, CMD_CODE_EXPLAIN, CMD_CODE_FILE, CMD_CODE_RUN,
-    CMD_SLASH_CODE, CMD_SLASH_REVIEW, CMD_SLASH_FIX,
-    CMD_SLASH_RUN, CMD_SLASH_EXPLAIN, CMD_SLASH_TEST, CMD_SLASH_CODE_HELP,
-    CMD_EXPORT_WORD, CMD_EXPORT_PPTX, CMD_EXPORT_EXCEL, CMD_EXPORT_AUTO,
-    CMD_HEALTH,
-    CMD_VOICE_REGISTER, CMD_VOICE_IDENTIFY, CMD_VOICE_STATUS,
-    # Sprint 2
-    CMD_WEB_BUILD, CMD_CODE_REVIEW_S2, CMD_DOC_CREATE,
 )
 
 # ──────────────────────────────────────────────────────────────
@@ -370,10 +339,38 @@ class AiChan:
         else:
             self.emotion = EmotionEngine(state_file=emotion_state_file)
 
-        # LLMエンジン (H1: deps 注入対応)
+        # LLMエンジン (H1: deps 注入対応 / M8 Phase 2: IPC isolation opt-in)
         model_path = self.base_dir / cfg["llm"]["model_path"]
         if self._deps.llm is not None:
             self.llm = self._deps.llm
+        elif bool(self.settings.get("llm_ipc_enabled", False)):
+            # M8: 別プロセス LLM worker (UDS/JSON-lines)
+            proxy = None
+            try:
+                from core.llm_proxy import LLMProxy
+                proxy = LLMProxy(model_path=model_path, config=cfg["llm"])
+                proxy.start()
+                self.llm = proxy
+                logger.info(
+                    "[M8] LLM IPC worker 起動 (backend=%s)",
+                    getattr(proxy, "_backend", "?"),
+                )
+            except Exception as exc:
+                # フォールバック: in-process (既存挙動)
+                logger.warning(
+                    "[M8] LLMProxy 起動失敗、in-process にフォールバック: %s",
+                    exc,
+                )
+                # 部分起動した worker subprocess が残らないよう確実に回収
+                if proxy is not None:
+                    try:
+                        proxy.close()
+                    except Exception:
+                        try:
+                            proxy._kill_worker()
+                        except Exception:
+                            pass
+                self.llm = LLMEngine(model_path=model_path, config=cfg["llm"])
         else:
             self.llm = LLMEngine(model_path=model_path, config=cfg["llm"])
 
@@ -487,8 +484,14 @@ class AiChan:
 
         # セマンティック検索エンジン
         # Item #P1: lazy import
+        # M9 Phase 1: backend は settings.semantic_search.backend で切替可 (default=faiss)
         from core.semantic_search import SemanticSearchEngine
-        self.semantic_search = SemanticSearchEngine(self.base_dir / "data")
+        _ss_backend = str(
+            cfg.get("semantic_search", {}).get("backend", "faiss")
+        )
+        self.semantic_search = SemanticSearchEngine(
+            self.base_dir / "data", backend=_ss_backend,
+        )
         if cfg.get("semantic_search", {}).get("enabled", False):
             import threading
             threading.Thread(
@@ -1448,6 +1451,13 @@ class AiChan:
             self.stop_autonomous()
         except Exception:
             pass
+        # M8: LLMProxy が起動中なら worker 終了
+        try:
+            llm = getattr(self, "llm", None)
+            if llm is not None and hasattr(llm, "close") and callable(llm.close):
+                llm.close()
+        except Exception as e:
+            logger.warning("LLM close 失敗: %s", e)
 
     # ──────────────────────────────────────────────────────────
     # 対話処理
@@ -1712,25 +1722,10 @@ class AiChan:
 
         self.turn_count += 1
 
-        # ─── モード切替検出 ───
-        if getattr(self, "mode_manager", None):
-            self.mode_manager.record_turn()
-            detected_mode = self.mode_manager.detect_mode_intent(user_input)
-            if detected_mode and detected_mode != self.mode_manager.current_mode:
-                switch_msg = self.mode_manager.switch_mode(detected_mode)
-                if switch_msg:
-                    self.conversation_history.append({"role": "user", "content": user_input})
-                    self.conversation_history.append({"role": "assistant", "content": switch_msg})
-                    self._log_conversation_jsonl(user_input, switch_msg, {"mode_switch": detected_mode})
-                    return switch_msg
-            # 成長保護: エージェントモード使いすぎ警告
-            growth_warning = self.mode_manager.check_growth_balance()
-            if growth_warning:
-                self._pending_greeting = growth_warning
-            # 30分以上の作業モード自動復帰提案
-            auto_return = self.mode_manager.get_auto_return_suggestion()
-            if auto_return:
-                self._pending_greeting = auto_return
+        # M12 Step 6: モード切替検出 → 早期 return 時はメッセージ返却
+        _mode_switch_msg = self._handle_mode_switch(user_input)
+        if _mode_switch_msg is not None:
+            return _mode_switch_msg
 
         # Sprint J: ユーザー操作を記録
         if getattr(self, "autonomous_actions", None):
@@ -1794,14 +1789,7 @@ class AiChan:
             if _honesty_reply:
                 self.conversation_history.append({"role": "user", "content": user_input})
                 self.conversation_history.append({"role": "assistant", "content": _honesty_reply})
-                try:
-                    if hasattr(self.tts, "speak_with_emotion_analysis"):
-                        _ed = self.emotion.state.to_dict() if hasattr(self.emotion.state, "to_dict") else {}
-                        self.tts.speak_with_emotion_analysis(_honesty_reply, _ed)
-                    else:
-                        self.tts.speak_sentence_by_sentence(_honesty_reply)
-                except Exception:
-                    pass
+                self._speak_response(_honesty_reply)
                 self._log_conversation_jsonl(
                     user_input, _honesty_reply, {"layer": "memory_honesty"},
                 )
@@ -1816,14 +1804,7 @@ class AiChan:
                 self.conversation_history.append({"role": "user", "content": user_input})
                 self.conversation_history.append({"role": "assistant", "content": bio_response})
                 self.bio_nervous.autonomic.heartbeat(self.turn_count)
-                try:
-                    if hasattr(self.tts, "speak_with_emotion_analysis"):
-                        emotion_dict = self.emotion.state.to_dict() if hasattr(self.emotion.state, "to_dict") else {}
-                        self.tts.speak_with_emotion_analysis(bio_response, emotion_dict)
-                    else:
-                        self.tts.speak_sentence_by_sentence(bio_response)
-                except Exception:
-                    pass
+                self._speak_response(bio_response)
                 if not is_system_call:
                     self.topic_tracker.extract_topics(user_input, self.turn_count)
                     self.emotion.save_if_changed()
@@ -1853,24 +1834,8 @@ class AiChan:
         if conv_analysis and conv_analysis.get("instruction_text"):
             _conv_instruction = conv_analysis["instruction_text"]
 
-        # ヤマト A1: MoEルーティング
-        _growth = getattr(self, "growth", None)
-        _moe_ok = not _growth or _growth.can_use_moe_routing()
-        _moe_task_type = "chat"
-        _moe_saved_params: dict | None = None
-        if _moe_ok and getattr(self, "moe_router", None) and self.moe_router.expert_count > 0:
-            try:
-                if conv_analysis and conv_analysis.get("intent"):
-                    _moe_task_type = conv_analysis["intent"].intent_type
-                if self.moe_router.expert_count > 1:
-                    self.moe_router.apply_routing(
-                        _moe_task_type, self.llm,
-                    )
-                optimal = self.moe_router.get_optimal_params(_moe_task_type)
-                if optimal and hasattr(self.llm, "override_params"):
-                    _moe_saved_params = self.llm.override_params(optimal)
-            except Exception as exc:
-                logger.debug("MoEルーティングスキップ: %s", exc)
+        # M12 Step 6: ヤマト A1 MoEルーティング
+        _moe_saved_params = self._apply_moe_routing(conv_analysis)
 
         # Sprint 3.0-B: 会話が長くなったら自動要約
         if getattr(self, "memory_summarizer", None):
@@ -1885,58 +1850,13 @@ class AiChan:
                 pass
 
         # 記憶から関連情報を取得
-        memory_context = self._build_memory_context(user_input)
-
-        # Item #82: 意図に基づくプロンプト重み付け
-        memory_context = self._apply_intent_weighting(memory_context, _intent_type)
-
-        # ── 追加コンテキスト ──
-        extra_parts: list[str] = []
-
-        if _correction_context:
-            extra_parts.append(_correction_context)
-        elif getattr(self, "correction_learning", None):
-            _corr_hint = self.correction_learning.get_recent_corrections_hint(max_entries=2)
-            if _corr_hint:
-                extra_parts.append(_corr_hint[:120])
-
-        # 継続学習: 高品質会話例を1件だけ軽量注入
-        cl = getattr(self, "continuous_learner", None)
-        if cl and cl.example_count > 0 and not _correction_context:
-            try:
-                _topic = ""
-                if getattr(self, "conv_intelligence", None):
-                    ci = self.conv_intelligence
-                    if ci.last_intent:
-                        _topic = ci.last_intent.intent_type
-                examples = cl.get_curriculum_examples(
-                    n=1, topic=_topic, user_input=user_input
-                )
-                if examples:
-                    ex = examples[0]
-                    extra_parts.append(f"参考: {ex['user'][:30]}→{ex['ai'][:40]}")
-            except Exception:
-                pass
-
-        # BUG #3 FIX: 会話知能の応答方針を注入（質問への具体的な回答指示）
-        if _conv_instruction:
-            extra_parts.append(_conv_instruction)
-
-        # Item #72: 感情リンクプロンプトを追加
-        emotion_prompt = self._get_emotion_prompt(_intent_type)
-        if emotion_prompt:
-            extra_parts.append(emotion_prompt)
-
-        # ─── モード別プロンプト修飾 ───
-        if getattr(self, "mode_manager", None):
-            mode_modifier = self.mode_manager.get_mode_prompt_modifier()
-            if mode_modifier:
-                extra_parts.insert(0, mode_modifier)
-
-        # 追加コンテキストを結合
-        extra = "\n".join(extra_parts)
-        if extra:
-            memory_context = memory_context + "\n" + extra[:300]
+        # M12: 追加コンテキストを集約して memory_context を構築
+        memory_context = self._build_augmented_memory_context(
+            user_input=user_input,
+            intent_type=_intent_type,
+            conv_instruction=_conv_instruction,
+            correction_context=_correction_context,
+        )
 
         # 会話履歴に追加（Phase D: 話者名があれば含める）
         _hist_content = (
@@ -1980,14 +1900,7 @@ class AiChan:
         _evaluated_quality = self._estimate_response_quality(user_input, response)
 
         # TTS（感情連動）
-        try:
-            if hasattr(self.tts, "speak_with_emotion_analysis"):
-                emotion_dict = self.emotion.state.to_dict() if hasattr(self.emotion.state, "to_dict") else {}
-                self.tts.speak_with_emotion_analysis(response, emotion_dict)
-            else:
-                self.tts.speak_sentence_by_sentence(response)
-        except Exception:
-            pass
+        self._speak_response(response)
 
         # 応答を履歴に追加
         self.conversation_history.append({"role": "assistant", "content": response})
@@ -1996,6 +1909,390 @@ class AiChan:
         if getattr(self, "correction_learning", None) and not is_system_call:
             self.correction_learning.record_turn(user_input, response)
 
+        # M12 Step 5 (2026-04-21): ターン確定処理を _finalize_conversation_turn に抽出
+        self._finalize_conversation_turn(
+            user_input, response, _intent_type, _evaluated_quality, is_system_call
+        )
+
+        # 生物神経系: 自律神経ハートビート
+        if getattr(self, "bio_nervous", None):
+            self.bio_nervous.autonomic.heartbeat(self.turn_count)
+
+        # M12: 自己意思 / 時間帯挨拶の前置装飾を適用
+        return self._apply_response_decorations(response)
+
+    # ──────────────────────────────────────────────────────────
+    # プロンプトコンテキスト構築
+    # M12 (2026-04-21): chat() 内の 50行 extra_parts ビルダーを抽出
+    # ──────────────────────────────────────────────────────────
+
+    def _build_augmented_memory_context(
+        self,
+        user_input: str,
+        intent_type: str,
+        conv_instruction: Optional[str] = None,
+        correction_context: Optional[str] = None,
+    ) -> str:
+        """memory_context を構築し、補助コンテキストを付加する。
+
+        付加される要素（順序も挙動保証）:
+          1. mode_modifier（モード別修飾, 先頭に insert）
+          2. correction_context または correction_hint（排他）
+          3. continuous_learner の curriculum example（1件, 訂正なし時のみ）
+          4. conv_instruction（BUG#3 FIX: 応答方針）
+          5. emotion_prompt（Item #72: 感情リンク）
+
+        extras 全体は 300 文字で切り詰めて memory_context 末尾に join される。
+        """
+        memory_context = self._build_memory_context(user_input)
+
+        # Item #82: 意図に基づくプロンプト重み付け
+        memory_context = self._apply_intent_weighting(memory_context, intent_type)
+
+        extra_parts: list[str] = []
+
+        # 訂正コンテキスト（優先）または訂正ヒント
+        if correction_context:
+            extra_parts.append(correction_context)
+        elif getattr(self, "correction_learning", None):
+            corr_hint = self.correction_learning.get_recent_corrections_hint(max_entries=2)
+            if corr_hint:
+                extra_parts.append(corr_hint[:120])
+
+        # 継続学習: 高品質会話例を1件だけ軽量注入
+        cl = getattr(self, "continuous_learner", None)
+        if cl and cl.example_count > 0 and not correction_context:
+            try:
+                topic = ""
+                if getattr(self, "conv_intelligence", None):
+                    ci = self.conv_intelligence
+                    if ci.last_intent:
+                        topic = ci.last_intent.intent_type
+                examples = cl.get_curriculum_examples(
+                    n=1, topic=topic, user_input=user_input
+                )
+                if examples:
+                    ex = examples[0]
+                    extra_parts.append(f"参考: {ex['user'][:30]}→{ex['ai'][:40]}")
+            except Exception:
+                pass
+
+        # BUG #3 FIX: 会話知能の応答方針を注入
+        if conv_instruction:
+            extra_parts.append(conv_instruction)
+
+        # Item #72: 感情リンクプロンプトを追加
+        emotion_prompt = self._get_emotion_prompt(intent_type)
+        if emotion_prompt:
+            extra_parts.append(emotion_prompt)
+
+        # モード別プロンプト修飾（先頭に挿入）
+        if getattr(self, "mode_manager", None):
+            mode_modifier = self.mode_manager.get_mode_prompt_modifier()
+            if mode_modifier:
+                extra_parts.insert(0, mode_modifier)
+
+        extra = "\n".join(extra_parts)
+        if extra:
+            memory_context = memory_context + "\n" + extra[:300]
+
+        return memory_context
+
+    # ──────────────────────────────────────────────────────────
+    # 応答装飾（chat() 末尾の前置メッセージ適用）
+    # M12 (2026-04-21): chat() から抽出
+    # ──────────────────────────────────────────────────────────
+
+    def _apply_response_decorations(self, response: str) -> str:
+        """self_will の保留メッセージと時間帯挨拶を応答の前に付与する。
+
+        呼び出し後、self._pending_greeting は消費（None に戻す）される。
+        """
+        if getattr(self, "self_will", None):
+            will_msg = self.self_will.pending_message
+            if will_msg:
+                response = f"{will_msg}\n\n{response}"
+
+        if self._pending_greeting:
+            response = f"{self._pending_greeting}\n\n{response}"
+            self._pending_greeting = None
+
+        return response
+
+    # ──────────────────────────────────────────────────────────
+    # TTS 発話ヘルパ
+    # M12 (2026-04-21): chat() 内 3 箇所の同一 TTS 呼び出しを DRY 化
+    # ──────────────────────────────────────────────────────────
+
+    def _speak_response(self, text: str) -> None:
+        """感情連動 TTS があればそちらを、なければ通常 TTS で発話する。
+
+        全例外を握りつぶすのは意図的（音声出力失敗は致命的でないため）。
+        """
+        try:
+            if hasattr(self.tts, "speak_with_emotion_analysis"):
+                emotion_dict = (
+                    self.emotion.state.to_dict()
+                    if hasattr(self.emotion.state, "to_dict")
+                    else {}
+                )
+                self.tts.speak_with_emotion_analysis(text, emotion_dict)
+            else:
+                self.tts.speak_sentence_by_sentence(text)
+        except Exception:
+            pass
+
+    # ──────────────────────────────────────────────────────────
+    # バッチ更新（chat() 後段の重い副作用処理）
+    # M12 (2026-04-21): chat() から抽出。
+    # ThreadPoolExecutor(max_workers=1) で直列実行される前提。
+    # 全例外を握りつぶすのは意図的（非クリティカルな副作用のため）。
+    # ──────────────────────────────────────────────────────────
+
+    def _batch_update_post_conversation(
+        self,
+        user_input: str,
+        response: str,
+        turn_count: int,
+        evaluated_quality: float | None,
+    ) -> None:
+        """会話ターン終了後の重い更新を直列に実行する。
+
+        Args:
+            user_input:        ユーザー発話（sanitize 済み）
+            response:          アイの応答（clean 済み）
+            turn_count:        現在のターン番号
+            evaluated_quality: Sprint K4 自己評価スコア (None なら 0.6)
+        """
+        try:
+            self.emotion_history.record(self.emotion.state.to_dict())
+        except Exception:
+            pass
+        try:
+            self.interest_map.update(user_input)
+        except Exception:
+            pass
+        try:
+            self.goal_tracker.detect_and_add(user_input)
+        except Exception:
+            pass
+        try:
+            if self.semantic_search.is_ready():
+                recent = self.memory.get_recent(limit=1)
+                if recent:
+                    self.semantic_search.add_memory(recent[0])
+        except Exception:
+            pass
+        today = datetime.now().date()
+        if today != self._last_diary_date:
+            self._last_diary_date = today
+            try:
+                self.diary.write_today(
+                    emotion_snapshot=self.emotion.state.to_dict()
+                )
+            except Exception:
+                pass
+        ar = sum(1 for c in response if c.isascii() and c.isalpha()) / max(len(response), 1)
+        if ar < 0.3 and len(response) > 2:
+            self.learning.add_conversation(user_input, response, save=True)
+        if turn_count % 10 == 0:
+            self.compressor.compress()
+        self.emotion.save_if_changed()
+
+        if getattr(self, "knowledge_graph", None):
+            try:
+                self.knowledge_graph.extract_from_conversation(user_input, response)
+            except Exception:
+                pass
+
+        if getattr(self, "personality_evo", None):
+            try:
+                intent_type = ""
+                ci = getattr(self, "conv_intelligence", None)
+                if ci and ci.last_intent:
+                    intent_type = ci.last_intent.intent_type
+                self.personality_evo.on_conversation(
+                    user_input,
+                    intent_type=intent_type,
+                    hour=datetime.now().hour,
+                )
+            except Exception:
+                pass
+
+        q_score = evaluated_quality if evaluated_quality is not None else 0.6
+
+        if getattr(self, "growth", None):
+            try:
+                self.growth.on_conversation(quality_score=q_score)
+                kg = getattr(self, "knowledge_graph", None)
+                if kg and hasattr(kg, "total_entities"):
+                    self.growth.on_knowledge_update(kg.total_entities)
+                if getattr(self, "topic_tracker", None):
+                    topic_count = len(getattr(self.topic_tracker, "topics", []))
+                    while self.growth._metrics.unique_topics < topic_count:
+                        self.growth.on_new_topic()
+                if getattr(self, "emotion_history", None):
+                    records = getattr(self.emotion_history, "_records", [])
+                    if len(records) >= 5:
+                        recent = records[-20:]
+                        all_vals = []
+                        for r in recent:
+                            all_vals.extend(
+                                v for k, v in r.items()
+                                if k not in ("timestamp",) and isinstance(v, (int, float))
+                            )
+                        if all_vals:
+                            e_range = max(all_vals) - min(all_vals)
+                            self.growth.on_emotional_experience(e_range)
+                self.growth.save_if_changed()
+            except Exception:
+                pass
+
+        if getattr(self, "action_cycle", None):
+            try:
+                self.action_cycle.record_progress("any", 1.0)
+                self.action_cycle.record_quality(q_score)
+            except Exception:
+                pass
+
+        if getattr(self, "self_correction", None):
+            try:
+                corrections = self.self_correction.on_turn(
+                    quality_score=q_score,
+                    response=response,
+                )
+                if corrections and getattr(self, "growth", None):
+                    for c in corrections:
+                        if c.get("ok"):
+                            self.growth.on_error_recovery()
+                    self.growth.save_if_changed()
+            except Exception:
+                pass
+
+        if getattr(self, "continuous_learner", None):
+            try:
+                self.continuous_learner.learn_from_conversation(
+                    user_input, response, quality_score=q_score
+                )
+            except Exception:
+                pass
+
+        if getattr(self, "synthetic_gen", None):
+            try:
+                intent = ""
+                ci = getattr(self, "conv_intelligence", None)
+                if ci and ci.last_intent:
+                    intent = ci.last_intent.intent_type
+                self.synthetic_gen.learn_template_from_conversation(
+                    user_input, response, intent=intent
+                )
+            except Exception:
+                pass
+
+        # M3 (2026-04-21): FederatedStub 削除により連合学習ブロックは無効化
+        # LATER tier PP-1 で本実装時に再配線予定
+
+        if getattr(self, "prompt_ab_test", None):
+            try:
+                ab_state = self.prompt_ab_test._state
+                current_variant = "B" if ab_state.next_variant == "A" else "A"
+                self.prompt_ab_test.record_score(current_variant, q_score)
+            except Exception:
+                pass
+
+    # ──────────────────────────────────────────────────────────
+    # モード切替検出（chat() 先頭）
+    # M12 Step 6 (2026-04-21): chat() から抽出（pure refactor）
+    # ──────────────────────────────────────────────────────────
+
+    def _handle_mode_switch(self, user_input: str) -> Optional[str]:
+        """モード切替を検出・適用し、切替メッセージ or None を返す。
+
+        戻り値が非 None なら chat() は即 return する（切替確認応答）。
+        None の場合も growth 警告 / auto-return 提案を self._pending_greeting
+        に積むことがある。
+        """
+        if not getattr(self, "mode_manager", None):
+            return None
+
+        self.mode_manager.record_turn()
+        detected_mode = self.mode_manager.detect_mode_intent(user_input)
+        if detected_mode and detected_mode != self.mode_manager.current_mode:
+            switch_msg = self.mode_manager.switch_mode(detected_mode)
+            if switch_msg:
+                self.conversation_history.append({"role": "user", "content": user_input})
+                self.conversation_history.append({"role": "assistant", "content": switch_msg})
+                self._log_conversation_jsonl(
+                    user_input, switch_msg, {"mode_switch": detected_mode},
+                )
+                return switch_msg
+
+        # 成長保護: エージェントモード使いすぎ警告 / 30分以上の作業モード自動復帰提案
+        # 優先度: auto_return > growth_warning（作業疲労の検知を優先）
+        growth_warning = self.mode_manager.check_growth_balance()
+        auto_return = self.mode_manager.get_auto_return_suggestion()
+        next_greeting = auto_return or growth_warning
+        if next_greeting:
+            self._pending_greeting = next_greeting
+        return None
+
+    # ──────────────────────────────────────────────────────────
+    # MoE ルーティング適用
+    # M12 Step 6 (2026-04-21): chat() から抽出
+    # ──────────────────────────────────────────────────────────
+
+    def _apply_moe_routing(
+        self,
+        conv_analysis: Optional[dict],
+    ) -> Optional[dict]:
+        """ヤマト A1 MoE ルーティングを適用し、override 前のパラメータを返す。
+
+        戻り値は chat() 応答生成後 ``self.llm.restore_params`` に渡すための
+        保存済みパラメータ辞書、または None（適用不能時）。
+        """
+        _growth = getattr(self, "growth", None)
+        if _growth and not _growth.can_use_moe_routing():
+            return None
+        router = getattr(self, "moe_router", None)
+        if router is None or router.expert_count <= 0:
+            return None
+
+        task_type = "chat"
+        saved_params: Optional[dict] = None
+        try:
+            if conv_analysis and conv_analysis.get("intent"):
+                task_type = conv_analysis["intent"].intent_type
+            if router.expert_count > 1:
+                router.apply_routing(task_type, self.llm)
+            optimal = router.get_optimal_params(task_type)
+            if optimal and hasattr(self.llm, "override_params"):
+                saved_params = self.llm.override_params(optimal)
+        except Exception as exc:
+            logger.debug("MoEルーティングスキップ: %s", exc)
+        return saved_params
+
+    # ──────────────────────────────────────────────────────────
+    # ターン確定処理（chat() 末尾の永続化・ログ・履歴トリム）
+    # M12 Step 5 (2026-04-21): chat() から抽出（pure refactor）
+    # ──────────────────────────────────────────────────────────
+
+    def _finalize_conversation_turn(
+        self,
+        user_input: str,
+        response: str,
+        intent_type: str,
+        quality: float | None,
+        is_system_call: bool,
+    ) -> None:
+        """1 ターン分の永続化・追跡・ログ・バッチ submit・履歴トリムを行う。
+
+        Args:
+            user_input:     ユーザー発話（sanitize 済み）
+            response:       アイの応答
+            intent_type:    推論済み意図タイプ
+            quality:        自己評価スコア (None 可)
+            is_system_call: システム呼び出しなら永続化スキップ + 履歴から除去
+        """
         if not is_system_call:
             # 全会話をDBに永続保存
             importance = self._estimate_importance(user_input)
@@ -2015,156 +2312,19 @@ class AiChan:
 
             # Item #22: JSONL ログ
             self._log_conversation_jsonl(user_input, response, {
-                "intent": _intent_type,
-                "quality": _evaluated_quality,
+                "intent": intent_type,
+                "quality": quality,
                 "mode": self.mode_manager.current_mode if getattr(self, "mode_manager", None) else "family",
             })
 
-            # Item #19: バッチ更新を ThreadPoolExecutor で実行
-            _ui = user_input
-            _resp = response
-            _tc = self.turn_count
-
-            def _batch_updates():
-                try:
-                    self.emotion_history.record(self.emotion.state.to_dict())
-                except Exception:
-                    pass
-                try:
-                    self.interest_map.update(_ui)
-                except Exception:
-                    pass
-                try:
-                    self.goal_tracker.detect_and_add(_ui)
-                except Exception:
-                    pass
-                try:
-                    if self.semantic_search.is_ready():
-                        recent = self.memory.get_recent(limit=1)
-                        if recent:
-                            self.semantic_search.add_memory(recent[0])
-                except Exception:
-                    pass
-                today = datetime.now().date()
-                if today != self._last_diary_date:
-                    self._last_diary_date = today
-                    try:
-                        self.diary.write_today(
-                            emotion_snapshot=self.emotion.state.to_dict()
-                        )
-                    except Exception:
-                        pass
-                ar = sum(1 for c in _resp if c.isascii() and c.isalpha()) / max(len(_resp), 1)
-                if ar < 0.3 and len(_resp) > 2:
-                    self.learning.add_conversation(_ui, _resp, save=True)
-                if _tc % 10 == 0:
-                    self.compressor.compress()
-                self.emotion.save_if_changed()
-
-                if getattr(self, "knowledge_graph", None):
-                    try:
-                        self.knowledge_graph.extract_from_conversation(_ui, _resp)
-                    except Exception:
-                        pass
-
-                if getattr(self, "personality_evo", None):
-                    try:
-                        intent_type = ""
-                        ci = getattr(self, "conv_intelligence", None)
-                        if ci and ci.last_intent:
-                            intent_type = ci.last_intent.intent_type
-                        self.personality_evo.on_conversation(
-                            _ui,
-                            intent_type=intent_type,
-                            hour=datetime.now().hour,
-                        )
-                    except Exception:
-                        pass
-
-                _q_score = _evaluated_quality if _evaluated_quality is not None else 0.6
-
-                if getattr(self, "growth", None):
-                    try:
-                        self.growth.on_conversation(quality_score=_q_score)
-                        kg = getattr(self, "knowledge_graph", None)
-                        if kg and hasattr(kg, "total_entities"):
-                            self.growth.on_knowledge_update(kg.total_entities)
-                        if getattr(self, "topic_tracker", None):
-                            topic_count = len(getattr(self.topic_tracker, "topics", []))
-                            while self.growth._metrics.unique_topics < topic_count:
-                                self.growth.on_new_topic()
-                        if getattr(self, "emotion_history", None):
-                            records = getattr(self.emotion_history, "_records", [])
-                            if len(records) >= 5:
-                                recent = records[-20:]
-                                all_vals = []
-                                for r in recent:
-                                    all_vals.extend(
-                                        v for k, v in r.items()
-                                        if k not in ("timestamp",) and isinstance(v, (int, float))
-                                    )
-                                if all_vals:
-                                    e_range = max(all_vals) - min(all_vals)
-                                    self.growth.on_emotional_experience(e_range)
-                        self.growth.save_if_changed()
-                    except Exception:
-                        pass
-
-                if getattr(self, "action_cycle", None):
-                    try:
-                        self.action_cycle.record_progress("any", 1.0)
-                        self.action_cycle.record_quality(_q_score)
-                    except Exception:
-                        pass
-
-                if getattr(self, "self_correction", None):
-                    try:
-                        corrections = self.self_correction.on_turn(
-                            quality_score=_q_score,
-                            response=_resp,
-                        )
-                        if corrections and getattr(self, "growth", None):
-                            for c in corrections:
-                                if c.get("ok"):
-                                    self.growth.on_error_recovery()
-                            self.growth.save_if_changed()
-                    except Exception:
-                        pass
-
-                if getattr(self, "continuous_learner", None):
-                    try:
-                        self.continuous_learner.learn_from_conversation(
-                            _ui, _resp, quality_score=_q_score
-                        )
-                    except Exception:
-                        pass
-
-                if getattr(self, "synthetic_gen", None):
-                    try:
-                        intent = ""
-                        ci = getattr(self, "conv_intelligence", None)
-                        if ci and ci.last_intent:
-                            intent = ci.last_intent.intent_type
-                        self.synthetic_gen.learn_template_from_conversation(
-                            _ui, _resp, intent=intent
-                        )
-                    except Exception:
-                        pass
-
-                # M3 (2026-04-21): FederatedStub 削除により連合学習ブロックは無効化
-                # LATER tier PP-1 で本実装時に再配線予定
-
-                if getattr(self, "prompt_ab_test", None):
-                    try:
-                        ab_state = self.prompt_ab_test._state
-                        current_variant = "B" if ab_state.next_variant == "A" else "A"
-                        self.prompt_ab_test.record_score(current_variant, _q_score)
-                    except Exception:
-                        pass
-
-            # H5 fix (2026-04-21): 単一ワーカー executor で直列実行
-            # (ThreadPoolExecutor(max_workers=1) なのでキューに積まれる)
-            self._batch_executor.submit(_batch_updates)
+            # Item #19: バッチ更新を ThreadPoolExecutor で直列実行
+            self._batch_executor.submit(
+                self._batch_update_post_conversation,
+                user_input,
+                response,
+                self.turn_count,
+                quality,
+            )
 
             # Item #1: 動的スライディングウィンドウでトリミング (H5: lock で保護)
             with self._history_lock:
@@ -2172,23 +2332,6 @@ class AiChan:
                     self.conversation_history = self.conversation_history[-30:]
         else:
             self.conversation_history = self.conversation_history[:-2]
-
-        # 生物神経系: 自律神経ハートビート
-        if getattr(self, "bio_nervous", None):
-            self.bio_nervous.autonomic.heartbeat(self.turn_count)
-
-        # 自己意思: 保留中のメッセージ
-        if getattr(self, "self_will", None):
-            will_msg = self.self_will.pending_message
-            if will_msg:
-                response = f"{will_msg}\n\n{response}"
-
-        # Sprint J: 保留中の時間帯挨拶
-        if self._pending_greeting:
-            response = f"{self._pending_greeting}\n\n{response}"
-            self._pending_greeting = None
-
-        return response
 
     # ──────────────────────────────────────────────────────────
     # セマンティック検索初期化（バックグラウンドスレッド用）

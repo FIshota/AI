@@ -1,10 +1,16 @@
 """
 LLMエンジン
 MLX (Apple Silicon最適化) / llama-cpp-python のデュアルバックエンド推論。
-Qwen 2.5 + Aether LoRAアダプターをネイティブで使用可能。
+Sarashina (SB Intuitions) / llm-jp / Swallow 等の日本製モデル + Aether LoRAアダプターをネイティブで使用可能。
 モデルが未インストールの場合はフォールバックモードで動作します。
+
+Model Policy (docs/MODEL_POLICY.md 参照):
+    - 禁止リスト: 中国系モデル (Qwen / DeepSeek / Yi / ChatGLM / InternLM / Baichuan / Moonshot)
+    - config["_consent_nonpreferred_model"] = True で明示 opt-in した場合のみ利用可能
+    - 起動時に model_file / mlx.model_path をスキャンし、違反があれば WARNING (opt-in 無しなら ERROR)
 """
 from __future__ import annotations
+import collections
 import hashlib
 import json
 import logging
@@ -270,6 +276,85 @@ _fallback_lock = threading.Lock()
 _fallback_warned = False  # ターミナル警告は1回だけ
 
 
+# ─── Model Policy (docs/MODEL_POLICY.md) ─────────────────────────────
+# ユーザー方針: 中国系のモデル/ベンダーを既定では信用しない.
+# 起動時に設定された model path / file 名を denylist と照合し, 一致すれば警告.
+# config["_consent_nonpreferred_model"] = True が明示的に立っているときのみ警告レベルを下げる.
+_MODEL_POLICY_DENYLIST: tuple[str, ...] = (
+    "qwen",
+    "deepseek",
+    "yi-",       # yi-34b 等。ハイフンで絞って "yield" 等誤検知を回避
+    "chatglm",
+    "internlm",
+    "baichuan",
+    "moonshot",
+    "kimi",      # Moonshot の商品名
+)
+
+_MODEL_POLICY_PREFERRED: tuple[str, ...] = (
+    "sarashina",
+    "llm-jp",
+    "swallow",
+    "elyza",
+    "rinna",
+    "calm3",
+    "calm2",
+    "plamo",
+    "stockmark",
+)
+
+
+def check_model_policy(
+    paths: list[str],
+    *,
+    consent: bool = False,
+    logger_: logging.Logger | None = None,
+) -> list[str]:
+    """与えられた path/file 文字列群を denylist と照合し、違反を返す.
+
+    Args:
+        paths: model_file や mlx.model_path の文字列リスト。
+        consent: config["_consent_nonpreferred_model"] の値。True なら WARNING, False なら ERROR.
+        logger_: ログ出力先 (None ならモジュール logger を使用)。
+
+    Returns:
+        違反した (path, matched_keyword) の文字列表現リスト。空なら準拠。
+    """
+    lg = logger_ or logger
+    violations: list[str] = []
+    for raw in paths:
+        if not raw:
+            continue
+        lower = str(raw).lower()
+        for bad in _MODEL_POLICY_DENYLIST:
+            if bad in lower:
+                violations.append(f"{raw} (matched '{bad}')")
+                break
+
+    if not violations:
+        return []
+
+    msg_head = (
+        "[Model Policy] 禁止リストに該当するモデルが設定されています: "
+        + ", ".join(violations)
+    )
+    if consent:
+        lg.warning(
+            "%s — _consent_nonpreferred_model=True のため続行しますが、"
+            "docs/MODEL_POLICY.md を確認してください。",
+            msg_head,
+        )
+    else:
+        lg.error(
+            "%s — opt-in (_consent_nonpreferred_model=True) がありません。"
+            "設定を見直すか、docs/MODEL_POLICY.md の推奨モデル "
+            "(%s) に切り替えてください。",
+            msg_head,
+            ", ".join(_MODEL_POLICY_PREFERRED),
+        )
+    return violations
+
+
 class LLMEngine:
     """
     ローカルLLM推論エンジン
@@ -287,6 +372,21 @@ class LLMEngine:
     def __init__(self, model_path: str | Path, config: dict):
         self.model_path = Path(model_path)
         self.config = config
+
+        # Model Policy: 中国系モデル denylist を起動時にチェック
+        try:
+            paths_to_check: list[str] = [
+                str(model_path),
+                str(config.get("model_file", "") or ""),
+                str((config.get("mlx", {}) or {}).get("model_path", "") or ""),
+            ]
+            check_model_policy(
+                paths_to_check,
+                consent=bool(config.get("_consent_nonpreferred_model", False)),
+            )
+        except Exception as _policy_err:  # 防御: policy チェックで初期化を落とさない
+            logger.warning("Model Policy check failed: %s", _policy_err)
+
         self._llm = None
         self._mlx_model = None
         self._mlx_tokenizer = None
@@ -304,7 +404,7 @@ class LLMEngine:
 
         # Item #P2: Response cache — 繰返しプロンプトの即時応答 (LRU, 128 entries)
         self._response_cache: "collections.OrderedDict[str, str]" = (
-            __import__("collections").OrderedDict()
+            collections.OrderedDict()
         )
         self._response_cache_max = int(self.config.get("response_cache_size", 128))
         self._response_cache_hits = 0

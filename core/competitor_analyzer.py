@@ -104,17 +104,18 @@ class CompetitorAnalyzer:
 
         # フォールバック: DDG Lite 直接検索
         try:
-            import urllib.parse
-            import urllib.request
+            import requests
 
             from utils.url_guard import assert_safe_http_url
-            query = urllib.parse.quote(f"{target} 競合他社 サービス比較")
-            url = assert_safe_http_url(f"https://lite.duckduckgo.com/lite/?q={query}")
-            req = urllib.request.Request(
-                url, headers={"User-Agent": "AiChan-Researcher/1.0"}
+            url = assert_safe_http_url("https://lite.duckduckgo.com/lite/")
+            resp = requests.get(
+                url,
+                params={"q": f"{target} 競合他社 サービス比較"},
+                headers={"User-Agent": "AiChan-Researcher/1.0"},
+                timeout=8,
             )
-            with urllib.request.urlopen(req, timeout=8) as resp:  # noqa: S310 (scheme asserted)
-                html = resp.read().decode("utf-8", errors="replace")
+            resp.raise_for_status()
+            html = resp.content.decode("utf-8", errors="replace")
             # 簡易テキスト抽出
             import re
             text = re.sub(r"<[^>]+>", " ", html)

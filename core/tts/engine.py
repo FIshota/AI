@@ -122,27 +122,28 @@ class VoiceVoxBackend:
 
     def available(self) -> bool:
         try:
-            import urllib.request
-            urllib.request.urlopen(f"{self._base}/version", timeout=0.5).read()
+            import requests
+            resp = requests.get(f"{self._base}/version", timeout=0.5)
+            resp.raise_for_status()
             return True
         except Exception:
             return False
 
     def speak(self, text: str, emotion: str = "neutral") -> SpeakResult:
-        import json
         import tempfile
         import time
-        import urllib.parse
-        import urllib.request
+        import requests
         start = time.monotonic()
         try:
             # 1. audio_query
-            q = urllib.parse.urlencode({"text": text, "speaker": self.spec.voicevox_speaker_id})
-            req = urllib.request.Request(
-                f"{self._base}/audio_query?{q}", method="POST",
+            r1 = requests.post(
+                f"{self._base}/audio_query",
+                params={"text": text, "speaker": self.spec.voicevox_speaker_id},
                 headers={"Accept": "application/json"},
+                timeout=5,
             )
-            query = json.loads(urllib.request.urlopen(req, timeout=5).read())
+            r1.raise_for_status()
+            query = r1.json()
 
             # 感情プロソディ
             if emotion in ("excited", "happy"):
@@ -155,14 +156,15 @@ class VoiceVoxBackend:
                 query["volumeScale"] = 1.1
 
             # 2. synthesis
-            q2 = urllib.parse.urlencode({"speaker": self.spec.voicevox_speaker_id})
-            req2 = urllib.request.Request(
-                f"{self._base}/synthesis?{q2}",
-                data=json.dumps(query).encode("utf-8"),
-                method="POST",
-                headers={"Content-Type": "application/json", "Accept": "audio/wav"},
+            r2 = requests.post(
+                f"{self._base}/synthesis",
+                params={"speaker": self.spec.voicevox_speaker_id},
+                json=query,
+                headers={"Accept": "audio/wav"},
+                timeout=30,
             )
-            wav = urllib.request.urlopen(req2, timeout=30).read()
+            r2.raise_for_status()
+            wav = r2.content
 
             # 3. 再生
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:

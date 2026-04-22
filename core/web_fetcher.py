@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import threading
 import time
 from collections import OrderedDict
@@ -57,15 +58,25 @@ def _cached(key: str, fn):
     return result
 
 
+_CITY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9\-\s]{0,63}$")
+
+
 def get_weather(city: str = "Tokyo") -> Optional[str]:
     """wttr.in から天気情報を取得して日本語で返す"""
+    # SSRF fix (2026-04-21): city を URL に展開する前にホワイトリスト検証
+    if not _CITY_RE.match(city):
+        logging.getLogger(__name__).warning(
+            "get_weather: invalid city name rejected: %r", city[:50]
+        )
+        return None
 
     def _fetch():
-        import urllib.request
-        url = f"https://wttr.in/{city}?format=j1"
-        req = urllib.request.Request(url, headers={"User-Agent": "AiChan/0.1"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+        import requests
+        from utils.url_guard import assert_safe_http_url
+        url = assert_safe_http_url(f"https://wttr.in/{city}?format=j1")
+        resp = requests.get(url, headers={"User-Agent": "AiChan/0.1"}, timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
 
         current  = data["current_condition"][0]
         temp_c   = current["temp_C"]
@@ -80,22 +91,17 @@ def get_news_headlines(n: int = 3) -> Optional[List[str]]:
     """NHK RSS から最新ニュースの見出しを取得"""
 
     def _fetch():
-        import urllib.request
-        # B9 fix (2026-04-20): XXE 対策で defusedxml を優先使用。
-        # defusedxml 未インストール環境では標準 ET にフォールバック（警告ログ）。
-        try:
-            from defusedxml import ElementTree as ET  # type: ignore
-        except ImportError:
-            import xml.etree.ElementTree as ET  # fallback (XXE 非耐性)
-            import logging
-            logging.getLogger(__name__).warning(
-                "defusedxml 未インストール: XXE 脆弱性リスクあり。"
-                "pip install defusedxml を推奨。"
-            )
-        url = "https://www3.nhk.or.jp/rss/news/cat0.xml"
-        req = urllib.request.Request(url, headers={"User-Agent": "AiChan/0.1"})
-        with urllib.request.urlopen(req, timeout=5) as resp:  # nosec B310
-            tree = ET.parse(resp)
+        import io
+        import requests
+        # XXE fix (2026-04-21): defusedxml を必須化.
+        # フォールバックで標準 ET を使う実装は XXE 脆弱性を残すため廃止。
+        # requirements.txt / requirements.lock に defusedxml が含まれていること。
+        from defusedxml import ElementTree as ET  # type: ignore
+        from utils.url_guard import assert_safe_http_url
+        url = assert_safe_http_url("https://www3.nhk.or.jp/rss/news/cat0.xml")
+        resp = requests.get(url, headers={"User-Agent": "AiChan/0.1"}, timeout=5)
+        resp.raise_for_status()
+        tree = ET.parse(io.BytesIO(resp.content))
 
         headlines = []
         for item in tree.findall(".//item")[:n]:
@@ -133,21 +139,22 @@ def web_search(query: str, max_results: int = 5) -> Optional[List[dict]]:
     """
 
     def _fetch():
-        import urllib.request
+        import requests
         import urllib.parse
         import re as _re
 
+        from utils.url_guard import assert_safe_http_url
         encoded = urllib.parse.urlencode({"q": query})
-        url = f"https://lite.duckduckgo.com/lite/?{encoded}"
-        req = urllib.request.Request(url, headers={
+        url = assert_safe_http_url(f"https://lite.duckduckgo.com/lite/?{encoded}")
+        resp = requests.get(url, headers={
             "User-Agent": (
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
                 "Chrome/120.0.0.0 Safari/537.36"
             ),
-        })
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            html = resp.read().decode("utf-8", errors="replace")
+        }, timeout=10)
+        resp.raise_for_status()
+        html = resp.content.decode("utf-8", errors="replace")
 
         # DuckDuckGo Lite の結果を簡易パース
         results: List[dict] = []
@@ -203,14 +210,25 @@ def web_fetch_text(url: str, max_chars: int = 3000) -> Optional[str]:
     """
 
     def _fetch():
-        import urllib.request
+        import requests
         import re as _re
+        from utils.url_guard import assert_safe_http_url, UnsafeURLError
 
-        req = urllib.request.Request(url, headers={
+        # SSRF fix (2026-04-21): web_fetch_text() は任意 URL を受け取る公開関数。
+        # 内部ネットワーク / file:// / 非 HTTP スキームへの誘導を常に拒否する。
+        try:
+            safe_url = assert_safe_http_url(url)
+        except UnsafeURLError as e:
+            logging.getLogger(__name__).warning(
+                "web_fetch_text: refused unsafe URL: %s", e
+            )
+            return None
+
+        resp = requests.get(safe_url, headers={
             "User-Agent": "AiChan/0.1",
-        })
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            html = resp.read().decode("utf-8", errors="replace")
+        }, timeout=10)
+        resp.raise_for_status()
+        html = resp.content.decode("utf-8", errors="replace")
 
         # script/style 除去
         html = _re.sub(r"<(script|style)[^>]*>.*?</\1>", "", html, flags=_re.DOTALL)

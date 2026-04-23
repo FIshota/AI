@@ -391,7 +391,8 @@ class LLMEngine:
         self._mlx_model = None
         self._mlx_tokenizer = None
         self._mlx_engine: _MLXEngine | None = None  # standalone MLX backend
-        self._backend = None  # "mlx" or "llama"
+        self._hinomoto_bridge = None  # P1-4: HinoMoto bridge (optional)
+        self._backend = None  # "hinomoto" | "mlx" | "llama"
         self._loaded = False
         self._loading = False
         self._inference_lock = threading.Lock()
@@ -462,6 +463,15 @@ class LLMEngine:
             self._model_family = None
             self._model_family_info = None
 
+        # ── HinoMoto (国産自社 LM, P1-4) ──────────────────────
+        # 明示的に opt-in した場合のみ最優先で試行. 失敗時は既存経路へ graceful fallback.
+        hm_cfg = self.config.get("hinomoto") or {}
+        if hm_cfg.get("enabled", False):
+            loaded = self._try_load_hinomoto(hm_cfg)
+            if loaded:
+                return
+            print("[LLM/HinoMoto] 利用不可 — MLX/llama-cpp へフォールバック")
+
         # ── MLXEngine (standalone backend) ────────────────────
         if _MLXEngine is not None and _MLX_ENGINE_OK:
             loaded = self._try_load_mlx_engine()
@@ -509,6 +519,63 @@ class LLMEngine:
                 print(f"[LLM/P0] template override from family: {tmpl}")
                 return tmpl
         return _detect_template(model_name)
+
+    def _try_load_hinomoto(self, hm_cfg: dict) -> bool:
+        """P1-4: HinoMoto (自社 LM) バックエンドを試行.
+
+        config.llm.hinomoto = {
+            "enabled": true,
+            "checkpoint": "/path/to/ckpt_best_val.pt",
+            "tokenizer": "/path/to/tokenizer_jawiki.json",
+            "device": null,            # auto-detect if omitted
+            "eos_boost": 10.0,         # P2-2.1: 文末 EOS boost (v2 は 10 推奨)
+            "min_new_tokens": 5,       # 最小生成数
+            "max_new_tokens": 128,
+            "greedy": true
+        }
+        """
+        try:
+            from core.hinomoto_bridge import HinoMotoBridge
+        except ImportError as e:
+            print(f"[LLM/HinoMoto] bridge import 失敗: {e}")
+            return False
+
+        ckpt = hm_cfg.get("checkpoint")
+        tok = hm_cfg.get("tokenizer")
+        if not ckpt or not tok:
+            print("[LLM/HinoMoto] checkpoint / tokenizer 未設定")
+            return False
+
+        try:
+            bridge = HinoMotoBridge(
+                checkpoint=ckpt,
+                tokenizer=tok,
+                device=hm_cfg.get("device"),
+            )
+        except Exception as e:
+            print(f"[LLM/HinoMoto] 初期化失敗: {e}")
+            return False
+
+        if not bridge.is_available():
+            print(f"[LLM/HinoMoto] 必要ファイル不足 (ckpt={ckpt} tok={tok})")
+            return False
+
+        # 冒頭の軽量 warmup で実動作確認 (失敗時は fallback)
+        try:
+            _ = bridge.reply("今日は", max_new_tokens=4,
+                             greedy=True, min_gen_chars=1)
+        except Exception as e:
+            print(f"[LLM/HinoMoto] warmup 失敗: {e}")
+            return False
+
+        self._hinomoto_bridge = bridge
+        self._hinomoto_config = hm_cfg
+        self._backend = "hinomoto"
+        self._loaded = True
+        self._model_name = "HinoMoto"
+        self._template_id = "hinomoto-plain"
+        print(f"[LLM/HinoMoto] ✓ 読み込み完了: ckpt={ckpt}")
+        return True
 
     def _try_load_mlx_engine(self) -> bool:
         """MLXEngine (standalone) バックエンドの読み込みを試行"""
@@ -1032,6 +1099,20 @@ class LLMEngine:
                 return cached
             self._response_cache_misses += 1
 
+        # ── HinoMoto backend (P1-4) ─────────────────────────
+        if self._backend == "hinomoto" and self._hinomoto_bridge is not None:
+            result = self._generate_hinomoto(prompt)
+            if result is not None:
+                if cache_key and isinstance(result, str) and result:
+                    self._response_cache[cache_key] = result
+                    while len(self._response_cache) > self._response_cache_max:
+                        self._response_cache.popitem(last=False)
+                return result
+            # 生成失敗 → fallback chain (MLX/llama が未ロードなのでこのパスは
+            # 一般に _fallback_response に落ちる)
+            print("[LLM/HinoMoto] 生成失敗 — fallback")
+            return self._fallback_response()
+
         # MLXEngine (standalone) — prompt をメッセージ形式に変換して委譲
         if self._backend == "mlx" and self._mlx_engine is not None:
             messages = [{"role": "user", "content": prompt}]
@@ -1082,6 +1163,24 @@ class LLMEngine:
                     self._response_cache.popitem(last=False)
             return result
 
+    def _generate_hinomoto(self, prompt: str) -> str | None:
+        """P1-4: HinoMoto bridge 経由でテキスト生成. 失敗時 None."""
+        hm_cfg = getattr(self, "_hinomoto_config", {}) or {}
+        try:
+            with self._inference_lock:
+                text = self._hinomoto_bridge.reply(
+                    prompt,
+                    max_new_tokens=int(hm_cfg.get("max_new_tokens", 128)),
+                    greedy=bool(hm_cfg.get("greedy", True)),
+                    min_gen_chars=int(hm_cfg.get("min_new_tokens", 5)),
+                )
+            text = text.strip()
+            self._recent_response_lengths.append(len(text))
+            return text
+        except Exception as e:
+            print(f"[LLM/HinoMoto] 生成例外: {e}")
+            return None
+
     def _stream_generate(self, prompt: str, params: dict) -> Generator:
         with self._inference_lock:
             for chunk in self._llm(prompt, **params):
@@ -1103,6 +1202,18 @@ class LLMEngine:
 
         resolved_max = (max_tokens if max_tokens is not None
                         else self.config.get("max_tokens", 500))
+
+        # ── HinoMoto backend (P1-4) ───────────────────────────
+        # HinoMoto は chat-template を学習していないため、最後の user メッセージを
+        # そのまま prompt として継続生成する最小実装 (継続補完モード).
+        if self._backend == "hinomoto" and self._hinomoto_bridge is not None:
+            last_user = next(
+                (m.get("content", "") for m in reversed(messages)
+                 if m.get("role") == "user"),
+                "",
+            )
+            result = self._generate_hinomoto(last_user)
+            return result if result is not None else self._fallback_response()
 
         # ── MLXEngine (standalone) ────────────────────────────
         if self._backend == "mlx" and self._mlx_engine is not None:

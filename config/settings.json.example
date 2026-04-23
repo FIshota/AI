@@ -23,6 +23,17 @@
       "model_path": "models/sarashina2.2-3b-instruct-v0.1-mlx-4bit",
       "adapter_path": "models/adapters/aether-v1",
       "adapter_enabled": false
+    },
+    "_hinomoto_note": "P1-4: 国産自社 LM 'HinoMoto' をバックエンドとして使う場合に有効化. enabled=true で MLX/llama より優先. 失敗時は MLX→llama に自動フォールバック.",
+    "hinomoto": {
+      "enabled": false,
+      "checkpoint": "/Users/fujihiranoborudai/Downloads/agent/hinomoto-model/artifacts/main_run_v2/ckpt_best_val.pt",
+      "tokenizer": "/Users/fujihiranoborudai/Downloads/agent/hinomoto-model/artifacts/tokenizer_jawiki.json",
+      "device": null,
+      "eos_boost": 10.0,
+      "min_new_tokens": 5,
+      "max_new_tokens": 128,
+      "greedy": true
     }
   },
   "memory": {

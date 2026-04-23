@@ -108,3 +108,6 @@ config/settings.json
 # bench artifacts (large / reproducible)
 bench/results/
 bench/data_cache/
+
+# INTERNAL: Ai の存在を公開リポジトリに出さない
+docs/VISION_INTERNAL.md

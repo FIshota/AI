@@ -91,12 +91,18 @@ class HinoMotoBridge:
         max_new_tokens: int = 128,
         greedy: bool = True,
         min_gen_chars: int = 5,
+        repetition_penalty: Optional[float] = None,
         seed: Optional[int] = None,
     ) -> str:
         """プロンプトに対する生成返答を返す.
 
         既定設定は 2026-04-23 ベンチで BLEU 最高 (0.3514) を取った
         greedy + min_gen_chars=5 の組合わせ.
+
+        repetition_penalty:
+            None のとき greedy=True は 1.3, greedy=False は 1.1 を使う.
+            SFT v1 の e2e で greedy 時に「その後、その後、...」の反復が出たため
+            2026-04-23 以降 greedy 既定を 1.0 → 1.3 に引き上げ.
         """
         self._ensure_loaded()
         assert self._runner is not None
@@ -105,12 +111,14 @@ class HinoMotoBridge:
             temperature = 0.0
             top_p = None
             top_k = None
-            repetition_penalty = 1.0
+            default_rp = 1.3
         else:
             temperature = 0.8
             top_p = 0.95
             top_k = 50
-            repetition_penalty = 1.1
+            default_rp = 1.1
+
+        rp = repetition_penalty if repetition_penalty is not None else default_rp
 
         generated = self._runner.generate(
             prompt,
@@ -118,7 +126,7 @@ class HinoMotoBridge:
             temperature=temperature,
             top_p=top_p,
             top_k=top_k,
-            repetition_penalty=repetition_penalty,
+            repetition_penalty=rp,
             min_new_tokens=min_gen_chars,
             seed=seed,
         )

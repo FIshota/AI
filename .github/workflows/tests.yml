@@ -1,0 +1,43 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'phase*/**']
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          # テストに必要な最小セット (regression テストは PII / 暗号化 / subject rights を触る)
+          pip install pytest pytest-cov
+          pip install cryptography fastapi pydantic 'click>=8.3.3' pyyaml
+      - name: Regression tests with coverage
+        run: |
+          pytest tests/test_blocker_regression.py tests/test_high_regression.py tests/test_medium_regression.py \
+            --cov --cov-report=term-missing --cov-report=xml -v
+      - name: Upload coverage.xml
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+      - name: Coverage floor check
+        # Phase 3 昇格条件: 80%. 現状は記録のみ (fail しない)
+        run: |
+          python3 -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('coverage.xml')
+          rate = float(tree.getroot().get('line-rate')) * 100
+          floor = 60  # 段階 1: 60% から開始, 目標 80%
+          print(f'coverage={rate:.1f}% floor={floor}%')
+          import sys
+          sys.exit(0 if rate >= floor else 1)
+          "

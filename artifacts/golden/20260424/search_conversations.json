@@ -1,0 +1,17 @@
+{
+  "query": {
+    "keywords": [
+      "ペット"
+    ],
+    "mode": "AND"
+  },
+  "hits": [
+    {
+      "turn_id": "t003",
+      "timestamp": "2026-04-21T10:00:00+00:00",
+      "speaker": "papa",
+      "text": "ペットの健康診断を予約した",
+      "score": 2.5562
+    }
+  ]
+}

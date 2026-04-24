@@ -1,0 +1,6 @@
+OK  core.emotion
+OK  core.ai_chan
+OK  core.memory
+OK  core.anniversary
+OK  core.autonomous_engine
+OK  core.audit_chain

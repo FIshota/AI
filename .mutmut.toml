@@ -1,0 +1,15 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# mutmut 設定 — 変異テスト (mutation testing) 用
+#
+# 方針:
+#   - 安全重要モジュール (subject_rights, tenant) を優先対象とする。
+#   - runner は regression スイートの blocker / high 層のみを回し、
+#     1 変異あたりの実行コストを抑える。
+#   - backup = false にしてワークツリーを汚さない (mutmut が内部で退避する)。
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[tool.mutmut]
+paths_to_mutate = ["core/subject_rights.py", "core/tenant.py"]
+backup = false
+runner = "pytest tests/test_blocker_regression.py tests/test_high_regression.py -x -q"
+tests_dir = "tests/"

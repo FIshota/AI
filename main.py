@@ -469,9 +469,34 @@ def main():
                         help="記憶アーカイブから復元してから起動（家族モード）")
     parser.add_argument("--smoke-test", action="store_true",
                         help="主要モジュールの import のみ行い終了（CI/検証用）")
+    # Cat 5 新機能フラグ (Sprint 5.x)
+    parser.add_argument("--tenant", metavar="ID",
+                        help="テナント分離モード: base_dir/tenants/<ID>/ を専用 root にする")
+    parser.add_argument("--screenshot-test", metavar="TITLE", nargs="?", const="1Password",
+                        help="screenshot_sensitive 分類のテスト起動 (引数はウィンドウタイトル)")
 
     args = parser.parse_args()
     base_dir = Path(args.base_dir)
+
+    # Cat 5 / 5.6: --tenant 指定時は専用 root に切り替える (lazy import)
+    if getattr(args, "tenant", None):
+        try:
+            from core.cat5_wiring import resolve_tenant_base_dir
+            base_dir = resolve_tenant_base_dir(base_dir, args.tenant)
+            print(f"[main] tenant mode: root={base_dir}", flush=True)
+        except Exception as exc:  # noqa: BLE001
+            import warnings
+            warnings.warn(f"tenant resolution failed: {exc}")
+
+    # Cat 5 / 5.10: screenshot-test は重い起動を避けて即時実行
+    if getattr(args, "screenshot_test", None) is not None:
+        try:
+            from core.cat5_wiring import handle_screenshot_test_command
+            _stub = type("_Stub", (), {"base_dir": str(base_dir)})()
+            print(handle_screenshot_test_command(_stub, args.screenshot_test))
+        except Exception as exc:  # noqa: BLE001
+            print(f"[main] screenshot-test failed: {exc}", flush=True)
+        return
 
     # Phase 0 切り離し対応: --restore-memory があればアーカイブから復元
     if args.restore_memory:

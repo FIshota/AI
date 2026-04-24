@@ -27,6 +27,7 @@ def capture_screen(hide_windows: list = None) -> Optional[Path]:
     """
     スクリーンショットを一時ファイルに保存して Path を返します。
     失敗時は None を返します。
+    機密画面検出 (screenshot_sensitive) により、検出時はブラー/黒塗り/破棄されます。
     """
     try:
         tmp = tempfile.NamedTemporaryFile(
@@ -38,10 +39,31 @@ def capture_screen(hide_windows: list = None) -> Optional[Path]:
             ["screencapture", "-x", "-t", "png", tmp.name],
             check=True, timeout=10
         )
+        _apply_sensitive_guard(Path(tmp.name))
         return Path(tmp.name)
     except Exception as e:
         print(f"[Screenshot] キャプチャ失敗: {e}", flush=True)
         return None
+
+
+def _apply_sensitive_guard(path: Path, window_title: str = "", bundle_id: str = "") -> None:
+    """キャプチャ直後に機密画面を検出し、必要なら in-place 加工する (安全側既定)。"""
+    try:
+        from core.screenshot_sensitive import SensitiveClassifier, SensitiveAction
+        from core.screenshot_blur import apply_blur
+        pat = SensitiveClassifier().classify(window_title, bundle_id)
+        if pat is None:
+            return
+        data = path.read_bytes()
+        processed = apply_blur(data, pat.action)
+        if pat.action == SensitiveAction.BLOCK or not processed:
+            path.write_bytes(b"")
+            print(f"[Screenshot] BLOCK 機密画面検出: {pat.name}", flush=True)
+        else:
+            path.write_bytes(processed)
+            print(f"[Screenshot] {pat.action.name} 適用: {pat.name}", flush=True)
+    except Exception as e:
+        print(f"[Screenshot] 機密ガード失敗: {e}", flush=True)
 
 
 def extract_text(image_path: Path, lang: str = "jpn+eng") -> str:

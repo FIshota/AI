@@ -1,4 +1,4 @@
-.PHONY: test lint benchmark backup diagnose run desktop help
+.PHONY: test lint benchmark backup diagnose run desktop help pin install install-dev verify-hashes
 
 PYTHON ?= python3
 BASE_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
@@ -71,6 +71,34 @@ gen-architecture: ## アーキテクチャ図を生成
 
 release-check: ## リリースチェックリストを実行
 	$(PYTHON) scripts/release.py
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 依存関係のハッシュピン留め (dependency confusion 対策)
+#
+# ワークフロー:
+#   1. requirements/*.in を編集
+#   2. `make pin` で requirements/*.txt を再生成 (要 pip-tools)
+#   3. .in と .txt を一緒にコミット
+# 詳細: docs/security/DEPENDENCY_PINNING.md
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+pin: ## requirements/*.in から requirements/*.txt をハッシュ付きで再生成
+	@command -v pip-compile >/dev/null 2>&1 || { \
+		echo "pip-compile が見つかりません。まず: pip install pip-tools"; exit 1; }
+	pip-compile --generate-hashes --resolver=backtracking \
+		--output-file requirements/base.txt requirements/base.in
+	pip-compile --generate-hashes --resolver=backtracking --allow-unsafe \
+		--output-file requirements/dev.txt requirements/dev.in
+
+install: ## 本番依存をハッシュ検証付きでインストール
+	$(PYTHON) -m pip install --require-hashes -r requirements/base.txt
+
+install-dev: ## 本番 + 開発依存をハッシュ検証付きでインストール
+	$(PYTHON) -m pip install --require-hashes -r requirements/base.txt
+	$(PYTHON) -m pip install --require-hashes -r requirements/dev.txt
+
+verify-hashes: ## ロックされたハッシュが現在のレジストリと一致するか dry-run
+	$(PYTHON) -m pip install --dry-run --require-hashes -r requirements/base.txt
 
 clean: ## キャッシュファイルを削除
 	find $(BASE_DIR) -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

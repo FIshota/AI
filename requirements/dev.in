@@ -1,0 +1,44 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ai-chan development-only dependencies (unpinned)
+#
+# 本番実行には不要だが、開発・CI ローカル検証に必要な依存。
+# base.in と同様に `make pin` でハッシュ付き dev.txt を再生成する。
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ハッシュ付き requirements のコンパイラ
+pip-tools
+
+# 静的解析 / フォーマッタ
+ruff
+black
+mypy
+
+# プロパティベース / 変異テスト
+hypothesis
+mutmut
+
+# Flaky テスト検出 / 再試行
+# pytest-flakefinder: 同一セッション内でテストを N 回繰り返し実行し、非決定性を暴く
+# pytest-rerunfailures: CI で @pytest.mark.flaky 付きテストを自動リトライする暫定措置
+pytest-flakefinder
+pytest-rerunfailures
+
+# Git pre-commit フック
+pre-commit
+
+# API リファレンス自動生成 (scripts/build_api_docs.sh から呼ばれる)
+# 対象: core / utils / ui
+pdoc>=14.0
+
+# Observability (opt-in / 既定 OFF)
+#
+# ai-chan は 10 年運用の原則に従いローカル優先・無課金で運用する。
+# OpenTelemetry は「必要になった時に有効化」する想定で、既定ではコメントアウト。
+# 有効化する際は docs/quality/OBSERVABILITY.md のレビュー手順を参照すること。
+# opentelemetry-api
+# opentelemetry-sdk
+
+# 注: gitleaks は Go 製バイナリであり pip で配布されていない。
+#     インストールは以下を参照:
+#         brew install gitleaks
+#     もしくは https://github.com/gitleaks/gitleaks/releases からバイナリ取得。

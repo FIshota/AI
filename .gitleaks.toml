@@ -19,6 +19,24 @@ paths = [
     '''requirements\.lock$''',       # hash は false-positive 率高
     '''config/.*\.example$''',
     '''\.gitleaks\.toml$''',
+    # 実行時生成物 / キャッシュ / ログ (ローカル環境由来の絶対パスを含みうる)
+    '''\.ruff_cache/''',
+    '''\.hypothesis/''',
+    '''\.gitignore$''',
+    '''logs/''',
+    '''backups/''',
+    '''reports/''',
+    # macOS 連携ファイル (launchd / plist は LOCAL_HOME 埋め込みが正当)
+    '''launchd/.*\.plist$''',
+    '''config/.*\.plist$''',
+    # GitHub テンプレート / 行動規範・貢献・ライセンス等の公開記載
+    '''\.github/ISSUE_TEMPLATE/''',
+    '''CODE_OF_CONDUCT\.md$''',
+    '''CONTRIBUTING\.md$''',
+    '''LICENSE$''',
+    '''PRIVACY\.md$''',
+    '''bench/.*\.md$''',
+    '''skills/.*\.md$''',
 ]
 
 # 除外コミット (必要に応じて追加)
@@ -33,3 +51,125 @@ regexes = [
     '''xxxxxxxx''',
     '''AKIA[0-9A-Z]{16}EXAMPLE''',
 ]
+
+# ----------------------------------------------------------------------------
+# HinoMoto / ai-chan カスタムルール (追加)
+# 各ルールは append-only。既存のデフォルト/拡張ルールには影響しない。
+# ----------------------------------------------------------------------------
+
+[[rules]]
+id = "hinomoto_sqlite_db_filename_leak"
+description = "ai-chan 暗号化済み SQLite DB (memories.db / emotion_history.db / diary.db) のファイル名が source 中に漏出"
+regex = '''\b(memories|emotion_history|diary)\.db\b'''
+tags = ["ai-chan", "sqlite", "db-path"]
+    [rules.allowlist]
+    description = "DB パス文字列の定義箇所および関連ドキュメント/テスト"
+    paths = [
+        '''core/.*\.py$''',
+        '''utils/.*\.py$''',
+        '''ui/.*\.py$''',
+        '''main\.py$''',
+        '''web_main\.py$''',
+        '''scripts/.*''',
+        '''tests/.*''',
+        '''docs/.*\.md$''',
+        '''docs/security/.*''',
+        '''docs/adr/.*''',
+        '''ROADMAP\.md$''',
+        '''\.gitleaks\.toml$''',
+        '''SECURITY\.md$''',
+        '''Makefile$''',
+    ]
+
+[[rules]]
+id = "hinomoto_user_absolute_home_path"
+description = "開発者のローカル絶対パス /Users/fujihiranoborudai/ が tracked ファイルに混入"
+regex = '''/Users/fujihiranoborudai/'''
+tags = ["ai-chan", "pii", "path-leak"]
+    [rules.allowlist]
+    description = "ドキュメント・セキュリティ注記など明示的に記載を許容するファイル"
+    paths = [
+        '''SECURITY\.md$''',
+        '''NOTICE$''',
+        '''docs/LICENSE_MODEL_DRAFT\.md$''',
+        '''docs/security/.*''',
+        '''docs/adr/.*''',
+        '''docs/.*\.html$''',
+        '''\.gitleaks\.toml$''',
+        '''tests/test_gitleaks_rules\.py$''',
+        '''docs/GITLEAKS_CUSTOM_RULES\.md$''',
+        '''docs/security/GITLEAKS_CUSTOM_RULES\.md$''',
+        # HinoMoto ブリッジ・ローカル連携の既知パスを保持するモジュール/スクリプト
+        '''core/hinomoto_bridge\.py$''',
+        '''core/youtube_learner\.py$''',
+        '''scripts/.*\.(sh|py)$''',
+    ]
+
+[[rules]]
+id = "hinomoto_owner_email_leak"
+description = "オーナー連絡先メールアドレス honnsipittu@gmail.com の漏出"
+regex = '''honnsipittu@gmail\.com'''
+tags = ["ai-chan", "pii", "email"]
+    [rules.allowlist]
+    description = "連絡先記載を明示的に許可する公開ファイル"
+    paths = [
+        '''SECURITY\.md$''',
+        '''NOTICE$''',
+        '''docs/LICENSE_MODEL_DRAFT\.md$''',
+        '''\.gitleaks\.toml$''',
+        '''tests/test_gitleaks_rules\.py$''',
+        '''docs/security/GITLEAKS_CUSTOM_RULES\.md$''',
+        # セキュリティ運用スクリプトが通知先として保持
+        '''scripts/daily_security_audit\.sh$''',
+        '''scripts/weekly_security_summary\.sh$''',
+    ]
+
+[[rules]]
+id = "hinomoto_vision_internal_marker"
+description = "VISION_INTERNAL.md のマーカー文字列がログ/公開成果物に混入"
+regex = '''VISION_INTERNAL(?:\.md)?'''
+tags = ["ai-chan", "internal-doc"]
+    [rules.allowlist]
+    description = "内部ドキュメント自体および参照を許可するメタ資料"
+    paths = [
+        '''docs/VISION_INTERNAL\.md$''',
+        '''docs/adr/.*''',
+        '''docs/security/.*''',
+        '''SECURITY\.md$''',
+        '''ROADMAP\.md$''',
+        '''\.gitleaks\.toml$''',
+        '''tests/test_gitleaks_rules\.py$''',
+        '''docs/security/GITLEAKS_CUSTOM_RULES\.md$''',
+    ]
+
+[[rules]]
+id = "hinomoto_ckpt_artifact_path_leak"
+description = "HinoMoto 学習済みチェックポイント (artifacts/**/ckpt_*.pt 等) の絶対/相対パスが公開ドキュメントに漏出"
+regex = '''artifacts/(?:sft_dolly_v1_continue/|[^\s'"`]*?ckpt_[^\s'"`]*\.pt)'''
+tags = ["ai-chan", "hinomoto", "artifact-path"]
+    [rules.allowlist]
+    description = "ADR・セキュリティ文書・scripts・ROADMAP と HinoMoto ブリッジでは許容"
+    paths = [
+        '''docs/adr/.*''',
+        '''docs/security/.*''',
+        '''scripts/.*''',
+        '''ROADMAP\.md$''',
+        '''\.gitleaks\.toml$''',
+        '''tests/test_gitleaks_rules\.py$''',
+        '''core/hinomoto_bridge\.py$''',
+    ]
+
+[[rules]]
+id = "hinomoto_tenant_id_path_traversal"
+description = "tenant ID を模した ../ や ..\\ によるパストラバーサルが tracked fixture / 設定に含まれる"
+regex = '''tenant[_-]?id["'\s:=]+[^"'\n]*\.\.[\\/]'''
+tags = ["ai-chan", "traversal", "defense-in-depth"]
+    [rules.allowlist]
+    description = "セキュリティテスト・ドキュメントでの明示的例示は許容"
+    paths = [
+        '''tests/.*''',
+        '''docs/security/.*''',
+        '''docs/adr/.*''',
+        '''\.gitleaks\.toml$''',
+    ]
+

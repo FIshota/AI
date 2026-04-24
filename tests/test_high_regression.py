@@ -278,9 +278,20 @@ class TestH8_WebCache:
 
 class TestH10_Requirements:
     def test_fastapi_minor_bumped(self):
+        """H10: FastAPI floor は 0.118+. 以降の minor bump でも pass する.
+
+        req 側は 0.136.0 (H11 2026-04-21 時点). 将来 bump しても
+        0.118 以上を満たす限り OK.
+        """
+        import re
         from pathlib import Path
         req = (Path(__file__).resolve().parent.parent / "requirements.txt").read_text("utf-8")
-        assert "fastapi>=0.118" in req, "H10: FastAPI 0.118+ を要求するはず"
+        m = re.search(r"^fastapi>=(\d+)\.(\d+)", req, re.MULTILINE)
+        assert m is not None, "H10: `fastapi>=X.Y` pin が見つからない"
+        major, minor = int(m.group(1)), int(m.group(2))
+        assert (major, minor) >= (0, 118), (
+            f"H10: FastAPI 0.118+ を要求するはず (found {major}.{minor})"
+        )
 
     def test_torch_optional_not_default(self):
         from pathlib import Path

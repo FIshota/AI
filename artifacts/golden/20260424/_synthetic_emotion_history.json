@@ -1,0 +1,9 @@
+[
+  {"ts": "2026-04-18T08:00", "label": "joy", "valence": 0.8},
+  {"ts": "2026-04-19T10:30", "label": "calm", "valence": 0.3},
+  {"ts": "2026-04-20T14:00", "label": "sadness", "valence": -0.5},
+  {"ts": "2026-04-21T09:15", "label": "joy", "valence": 0.7},
+  {"ts": "2026-04-22T18:45", "label": "anger", "valence": -0.6},
+  {"ts": "2026-04-23T07:30", "label": "calm", "valence": 0.4},
+  {"ts": "2026-04-24T12:00", "label": "joy", "valence": 0.9}
+]

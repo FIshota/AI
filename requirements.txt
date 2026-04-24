@@ -101,7 +101,7 @@ notion-client>=2.2.0,<3.0
 # ── ユーティリティ ───────────────────────────────────────
 # H11 (2026-04-21): rich 14 維持 (15 は major 変更, 後続で評価), pydantic/click minor bumps
 rich>=14.0.0,<16.0.0
-click>=8.3.0
+click>=8.3.3
 pydantic>=2.13.3
 python-dateutil>=2.9.0.post0
 python-dotenv>=1.1.0

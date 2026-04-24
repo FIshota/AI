@@ -117,7 +117,28 @@ class MemoryManager:
             >= cls._LEVEL_ORDER.get(mem_level or "public", 0)
         )
 
-    def __init__(self, db_path: str | Path, key_file: str | Path, encrypt: bool = True):
+    def __init__(
+        self,
+        db_path: str | Path,
+        key_file: str | Path,
+        encrypt: bool = True,
+        tenant_context: "object | None" = None,
+    ):
+        # tenant_context (core.tenant_context.TenantContext) が指定されると
+        # db_path / key_file は tenant_context.memory_dir 配下に張り替えられる。
+        # 後方互換: None の場合は従来どおりの挙動。
+        if tenant_context is not None:
+            try:
+                tc_root = tenant_context.memory_dir  # type: ignore[attr-defined]
+                db_path = tenant_context.guard_path(
+                    tc_root / Path(db_path).name
+                )
+                key_file = tenant_context.guard_path(
+                    tc_root / Path(key_file).name
+                )
+            except AttributeError:  # pragma: no cover - 互換保険
+                pass
+        self._tenant_context = tenant_context
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.encrypt = encrypt

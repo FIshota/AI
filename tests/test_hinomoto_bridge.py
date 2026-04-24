@@ -82,7 +82,9 @@ class TestHinoMotoBridgeUnit:
         assert kwargs["temperature"] == 0.0
         assert kwargs["top_p"] is None
         assert kwargs["top_k"] is None
-        assert kwargs["repetition_penalty"] == 1.0
+        # NOTE: 2026-04-23 以降 greedy 既定は 1.3 (反復抑制目的)。
+        # 実装 core/hinomoto_bridge.py の既定値に合わせる。
+        assert kwargs["repetition_penalty"] == 1.3
 
     def test_sampling_mode_has_defaults(self, tmp_path):
         bridge = HinoMotoBridge(

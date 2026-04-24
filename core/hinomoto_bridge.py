@@ -28,11 +28,20 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from core.llm_backend import BackendSpec, LLMBackend, select_backend
+
 log = logging.getLogger(__name__)
 
 
 class HinoMotoBridge:
-    """HinoMoto 推論を ai-chan から呼び出すための薄いアダプタ."""
+    """HinoMoto 推論を ai-chan から呼び出すための薄いアダプタ.
+
+    バックエンド選択:
+        ``backend`` に :class:`~core.llm_backend.BackendSpec` を渡すと、
+        従来の HinoMoto ランナーの代わりに汎用バックエンド
+        (cpu / mlx / stub / torch) で生成する。
+        ``backend=None`` (既定) のときは既存の HinoMoto 動作を維持する。
+    """
 
     def __init__(
         self,
@@ -41,10 +50,13 @@ class HinoMotoBridge:
         *,
         hinomoto_repo_path: Optional[str | Path] = None,
         device: Optional[str] = None,
+        backend: Optional[BackendSpec] = None,
     ) -> None:
         self.checkpoint = Path(checkpoint)
         self.tokenizer_path = Path(tokenizer)
         self._runner = None  # 遅延初期化
+        self._backend_spec: Optional[BackendSpec] = backend
+        self._backend: Optional[LLMBackend] = None
 
         # hinomoto パッケージを sys.path に追加
         if hinomoto_repo_path is None:
@@ -96,6 +108,9 @@ class HinoMotoBridge:
     ) -> str:
         """プロンプトに対する生成返答を返す.
 
+        ``backend`` が ``__init__`` で指定されていればそちら経由で生成する.
+        未指定時は既存の HinoMoto ランナーへフォールバックする.
+
         既定設定は 2026-04-23 ベンチで BLEU 最高 (0.3514) を取った
         greedy + min_gen_chars=5 の組合わせ.
 
@@ -104,6 +119,21 @@ class HinoMotoBridge:
             SFT v1 の e2e で greedy 時に「その後、その後、...」の反復が出たため
             2026-04-23 以降 greedy 既定を 1.0 → 1.3 に引き上げ.
         """
+        # --- 新しい薄いレイヤー: backend が指定されていれば委譲 ---
+        if self._backend_spec is not None:
+            if self._backend is None:
+                self._backend = select_backend(self._backend_spec)
+            temperature = 0.0 if greedy else 0.8
+            top_p = 1.0 if greedy else 0.95
+            return self._backend.generate(
+                prompt,
+                max_tokens=max_new_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                seed=seed,
+            )
+
+        # --- 既存の HinoMoto ランナー経路 (変更なし) ---
         self._ensure_loaded()
         assert self._runner is not None
 

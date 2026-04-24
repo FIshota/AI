@@ -1,0 +1,39 @@
+# サンプル提案: 家族向けの軽量な「手書きメモ振り返り」機能
+#
+# VALUES.md / VALUES_RUBRIC.md に基づく新機能提案のテンプレートでもある。
+# 新規提案は本ファイルをコピーして別名で追加すること。
+
+title: "手書きメモ振り返り (ローカル OCR ベース)"
+lineage: KAGUYA        # Ai / YAMATO / KAGUYA
+owner: "家族運用担当"
+summary: |
+  家族が手書きしたメモ画像をローカル OCR で読み、週次で ai-chan が
+  そっと思い出として手渡す機能。画像もテキストも家庭内ローカルに閉じる。
+
+design_notes: |
+  - OCR はローカルモデルを使用 (オフラインで動く)。
+  - メモ画像とその派生 (OCR テキスト、埋め込み、キャッシュ) は
+    purge コマンドで一括削除対象に登録する。
+  - 通知による再訪促進は行わない。参照はユーザ起動に限る。
+  - 依存ライブラリが消滅した場合、OCR なしの「画像閲覧のみ」で縮退動作する。
+
+rubric:
+  # Kill-Switch (期待値 yes)
+  killswitch_purge_guaranteed: yes
+  killswitch_side_effects_covered: yes
+
+  # 家族 (期待値 no)
+  targets_engagement_kpi: no
+  has_attention_hook: no
+
+  # 系譜 (期待値 yes / no)
+  lineage_scope_defined: yes
+  leaks_ai_layer: no
+
+  # 10 年運用 (期待値 yes)
+  survives_dependency_loss: yes
+  respects_maintainability_budget: yes
+
+  # ローカル優先 (期待値 yes / no)
+  works_offline: yes
+  feeds_third_party_training: no

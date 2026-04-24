@@ -364,16 +364,18 @@ class TestWebFetcherFunctions:
         <a rel="nofollow" href="https://example.com/2" class="result-link">Result Two</a>
         <td class="result-snippet">This is snippet two</td>
         '''
-        import urllib.request
+        # NOTE: 実装は `requests.get` を使う (core/web_fetcher.py の
+        # web_search 内で import requests)。関数内 import なので
+        # モジュール `requests` の `get` を直接 patch する。
+        import requests
         import core.web_fetcher as wf
         wf._CACHE.clear()
 
-        with patch.object(urllib.request, "urlopen") as mock_urlopen:
+        with patch.object(requests, "get") as mock_get:
             mock_resp = MagicMock()
-            mock_resp.read.return_value = sample_html.encode("utf-8")
-            mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-            mock_resp.__exit__ = MagicMock(return_value=False)
-            mock_urlopen.return_value = mock_resp
+            mock_resp.content = sample_html.encode("utf-8")
+            mock_resp.raise_for_status = MagicMock()
+            mock_get.return_value = mock_resp
 
             results = wf.web_search("test query")
             assert results is not None
@@ -393,16 +395,16 @@ class TestWebFetcherFunctions:
         <p>This is content</p>
         </body></html>
         '''
-        import urllib.request
+        # NOTE: 実装は `requests.get` を使う。 urllib ではないので patch target を合わせる。
+        import requests
         import core.web_fetcher as wf
         wf._CACHE.clear()
 
-        with patch.object(urllib.request, "urlopen") as mock_urlopen:
+        with patch.object(requests, "get") as mock_get:
             mock_resp = MagicMock()
-            mock_resp.read.return_value = sample_html.encode("utf-8")
-            mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-            mock_resp.__exit__ = MagicMock(return_value=False)
-            mock_urlopen.return_value = mock_resp
+            mock_resp.content = sample_html.encode("utf-8")
+            mock_resp.raise_for_status = MagicMock()
+            mock_get.return_value = mock_resp
 
             text = wf.web_fetch_text("https://example.com")
             assert text is not None

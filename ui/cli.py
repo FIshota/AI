@@ -50,6 +50,13 @@ HELP_TEXT = """
 │ 音声一覧            利用可能な音声の一覧      │
 │ イントネーション学習 声を聞いて抑揚を学習    │
 │ イントネーション確認 学習状態を確認          │
+│ /search <kw>        会話履歴をテキスト検索     │
+│ /search-ui          検索ウィンドウを開く       │
+│ /drift week|month|year 感情ドリフト表示        │
+│ /anniv-ical         記念日を iCal に書き出し  │
+│ /silence-status     沈黙検出器の状態表示       │
+│ /a11y on|off|palette <name>  アクセシビリティ │
+│ /screenshot-test [title] 機密画面分類テスト    │
 │ /help               このヘルプを表示          │
 │ /quit               終了                     │
 ╰─────────────────────────────────────────────╯
@@ -244,6 +251,42 @@ def run_cli(base_dir: str | Path = "."):
                     print(f"  {icon} 現在のモード: {name}")
             else:
                 print("  モード管理は利用できません")
+            continue
+
+        # ─── Cat 5 (Sprint 5.x) コマンド ────────────────────────
+        # 各モジュールは lazy import。import 失敗時は warnings.warn でフォールバック。
+        _lower = user_input.lower()
+        if _lower.startswith("/search-ui"):
+            from core.cat5_wiring import open_search_window
+            print(open_search_window(ai_chan))
+            continue
+        if _lower.startswith("/search "):
+            from core.cat5_wiring import handle_search_command
+            kw = user_input[len("/search "):].strip()
+            print(handle_search_command(ai_chan, kw))
+            continue
+        if _lower.startswith("/drift"):
+            from core.cat5_wiring import handle_drift_command
+            tail = user_input[len("/drift"):].strip() or "week"
+            print(handle_drift_command(ai_chan, tail))
+            continue
+        if _lower == "/anniv-ical":
+            from core.cat5_wiring import handle_anniv_ical_command
+            print(handle_anniv_ical_command(ai_chan))
+            continue
+        if _lower == "/silence-status":
+            from core.cat5_wiring import handle_silence_status_command
+            print(handle_silence_status_command(ai_chan))
+            continue
+        if _lower.startswith("/a11y"):
+            from core.cat5_wiring import handle_a11y_command
+            tail = user_input[len("/a11y"):].strip()
+            print(handle_a11y_command(ai_chan, tail))
+            continue
+        if _lower.startswith("/screenshot-test"):
+            from core.cat5_wiring import handle_screenshot_test_command
+            tail = user_input[len("/screenshot-test"):].strip()
+            print(handle_screenshot_test_command(ai_chan, tail))
             continue
 
         # E-05: ストリーミング切替コマンド

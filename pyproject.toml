@@ -116,7 +116,40 @@ markers = [
     "integration: integration tests (may touch local files / db)",
     "slow: long-running tests (>5s each)",
     "network: tests that require network access",
+    "ui: UI / desktop widget tests (require a display, skipped headless)",
+    "flaky: tests known to be non-deterministic (quarantined; excluded from flaky-finder, auto-retried in CI via pytest-rerunfailures)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:swigvarlink",
+]
+# pytest が import できるよう PYTHONPATH を自動で追加
+pythonpath = ["."]
+
+# ──────────────────────────────────────────────────────────────
+# Coverage — 段階的 80% ゲート
+# 現状 regression テストしか無いので、まずは core モジュール単体で 80% を狙う。
+# 全体 80% は Phase 3 遷移条件に昇格時点で強制。
+# ──────────────────────────────────────────────────────────────
+
+[tool.coverage.run]
+source = ["core", "utils", "ui"]
+branch = true
+omit = [
+    "tests/*",
+    "scripts/*",
+    "*/vendor/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+# fail_under は Phase 3 昇格時に 80 へ。現状は走るだけ。
+precision = 1
+show_missing = true
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "\\.\\.\\.",
 ]

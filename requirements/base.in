@@ -1,0 +1,31 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ai-chan base dependencies (unpinned)
+#
+# このファイルは regression テスト (.github/workflows/tests.yml) が
+# 必要とする最小依存セットを宣言する。完全な実行環境の依存は
+# プロジェクトルートの requirements.txt を参照すること。
+#
+# 更新手順:
+#   1. このファイル (.in) を編集
+#   2. `make pin` でハッシュ付き base.txt を再生成
+#   3. .in と .txt を同一コミットに含める
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# テストランナー (tests.yml が直接インストール)
+pytest
+pytest-cov
+
+# 暗号化 / セキュリティ (core/memory, utils/crypto が前提)
+cryptography
+
+# Web API (core/ops/server_ops 等)
+fastapi
+
+# データバリデーション
+pydantic
+
+# CLI フレームワーク
+click>=8.3.3
+
+# 設定ファイル / シリアライズ
+pyyaml

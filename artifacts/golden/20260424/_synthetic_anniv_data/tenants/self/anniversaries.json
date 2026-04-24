@@ -1,0 +1,15 @@
+[
+  {
+    "id": "c0feb4b7",
+    "label": "ゴールデン記念日",
+    "month": 4,
+    "day": 24,
+    "is_birthday": false,
+    "yearly": true,
+    "auto_importance": {
+      "score": 0.9,
+      "bucket": "critical",
+      "updated_at": "2026-04-23T21:52:48.494746+00:00"
+    }
+  }
+]

@@ -1,0 +1,65 @@
+ai-chan
+Copyright (c) 2025-2026 honnsipittu
+
+このソフトウェアは以下のサードパーティコンポーネントを利用しています。
+各コンポーネントのライセンスは元の条件に従います。
+
+================================================================================
+Python Standard Library
+  License: PSF License
+  https://docs.python.org/3/license.html
+
+FastAPI
+  Copyright (c) 2018 Sebastián Ramírez
+  License: MIT
+  https://github.com/fastapi/fastapi
+
+Pydantic
+  Copyright (c) 2017 Samuel Colvin
+  License: MIT
+  https://github.com/pydantic/pydantic
+
+cryptography
+  License: Apache-2.0 OR BSD-3-Clause
+  https://github.com/pyca/cryptography
+
+Click
+  Copyright (c) 2014 Pallets
+  License: BSD-3-Clause
+  https://github.com/pallets/click
+
+PyYAML
+  License: MIT
+  https://github.com/yaml/pyyaml
+
+pytest / pytest-cov
+  License: MIT
+  https://github.com/pytest-dev/pytest
+
+================================================================================
+HinoMoto model family (separate repository / separate license)
+  See: ../hinomoto-model/LICENSE
+  Model weights license (draft): docs/LICENSE_MODEL_DRAFT.md
+
+================================================================================
+SFT corpus:
+  databricks-dolly-15k-ja
+  License: CC BY-SA 3.0
+  https://huggingface.co/datasets/kunishou/databricks-dolly-15k-ja
+
+Pretraining corpus:
+  Japanese Wikipedia (jawiki)
+  License: CC BY-SA 4.0 (content) / GFDL (legacy)
+  https://dumps.wikimedia.org/jawiki/
+
+================================================================================
+Development tooling (not bundled; dev-time only):
+  gitleaks    — MIT     https://github.com/gitleaks/gitleaks
+  pip-audit   — Apache  https://github.com/pypa/pip-audit
+  pre-commit  — MIT     https://github.com/pre-commit/pre-commit
+  ruff        — MIT     https://github.com/astral-sh/ruff
+  black       — MIT     https://github.com/psf/black
+================================================================================
+
+このファイルは Apache License 2.0 準拠の NOTICE 文として維持されます。
+本プロジェクト自体のライセンスはリポジトリ直下の LICENSE を参照してください。

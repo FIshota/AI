@@ -1,0 +1,32 @@
+name: corpus-isolation
+
+# ADR 0002 corpus isolation guard.
+# Runs on BOTH pull_request and push so that a direct push to main
+# (or any phase*/** branch) cannot bypass the isolation check.
+# Historical context: an earlier hinomoto-model push-to-main incident
+# motivated adding the push trigger here.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'phase*/**'
+
+jobs:
+  corpus-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+      - name: Run corpus isolation guard (ADR 0002)
+        run: |
+          python3 scripts/check_corpus_isolation.py
+      - name: Run corpus isolation unit tests
+        run: |
+          PYTHONPATH=. pytest tests/test_corpus_isolation.py -v

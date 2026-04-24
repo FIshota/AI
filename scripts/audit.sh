@@ -56,19 +56,24 @@ except Exception as e:
 PY
 
   echo "[3/5] gitleaks (secret scan)..."
-  if command -v gitleaks >/dev/null 2>&1; then
+  # launchd minimal PATH に対応して明示的にプロビン候補を探索
+  GITLEAKS_BIN=""
+  for cand in "$(command -v gitleaks 2>/dev/null)" "$HOME/.local/bin/gitleaks" "/usr/local/bin/gitleaks" "/opt/homebrew/bin/gitleaks"; do
+    if [ -n "$cand" ] && [ -x "$cand" ]; then GITLEAKS_BIN="$cand"; break; fi
+  done
+  if [ -n "$GITLEAKS_BIN" ]; then
     GITLEAKS_CFG=""
     [ -f ".gitleaks.toml" ] && GITLEAKS_CFG="--config=.gitleaks.toml"
-    gitleaks detect --no-git -v $GITLEAKS_CFG --report-path="$LOGDIR/gitleaks-$DATE.json" --report-format=json --source=. \
+    "$GITLEAKS_BIN" detect --no-git -v $GITLEAKS_CFG --report-path="$LOGDIR/gitleaks-$DATE.json" --report-format=json --source=. \
       > /dev/null 2>&1 || true
     if [ -s "$LOGDIR/gitleaks-$DATE.json" ]; then
       count=$(python3 -c "import json;print(len(json.load(open('$LOGDIR/gitleaks-$DATE.json'))))" 2>/dev/null || echo "?")
-      echo "    ├ $count potential secrets"
+      echo "    ├ $count potential secrets ($GITLEAKS_BIN)"
     else
-      echo "    ├ no secrets found"
+      echo "    ├ no secrets found ($GITLEAKS_BIN)"
     fi
   else
-    echo "    ├ gitleaks not installed (brew install gitleaks)"
+    echo "    ├ gitleaks not installed (try: go install github.com/gitleaks/gitleaks/v8@latest, or download binary)"
   fi
 
   echo "[4/5] outdated check (PyPI latest vs floor)..."

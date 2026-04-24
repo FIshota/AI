@@ -1,69 +1,48 @@
-# ai-chan Dockerfile (Phase 0.75)
+# ai-chan Dockerfile (再現性保全 / Reproducibility Preservation)
 #
-# 目的: CI / 再現環境 / ポータブル開発環境の提供。
-# 本番デプロイ用ではなく、"どの Mac/Linux でも同じ結果が出る" ための基盤。
+# 目的:
+#   10 年運用を見据えた "凍結された実行環境の証拠保全" 用コンテナ。
+#   普段は Intel Mac のローカル venv (Python 3.9) で動かし、Docker は
+#   「いつでも当時の実行環境を再現できる」ことを保証するための保全 image。
+#
+# 本番デプロイ用ではない。
 #
 # 使い方:
-#   docker build -t ai-chan:0.75 .
-#   docker run --rm -it ai-chan:0.75 python3 main.py --smoke-test
+#   docker build -t aichan:$(git rev-parse --short HEAD) .
+#   docker run --rm aichan:<sha>              # smoke (--help 相当)
 #
 # 注意:
-#   - モデル本体 (models/*.gguf) はイメージに含めない (サイズ・ライセンス)
-#   - data/ logs/ personality/ も含めない (ユーザー固有)
-#   - ボリュームマウントで持ち込む想定
+#   - モデル (models/*.gguf) / ユーザーデータ (data/, logs/, personality/)
+#     はイメージに含めない (.dockerignore 参照)
+#   - hash-pinned な requirements/base.txt を使い、改ざん検知を兼ねる
 
-FROM python:3.13-slim-bookworm AS base
+FROM python:3.9-slim AS base
 
-# セキュリティ: 非 root ユーザー作成
-RUN groupadd -r aichan && useradd -r -g aichan -m -d /home/aichan aichan
+# ---- 環境変数 (再現性・静寂性) ----
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Python パッケージビルドに必要な依存
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    git \
-    curl \
-    ca-certificates \
-    # llama-cpp-python ビルド用
-    libopenblas-dev \
-    && rm -rf /var/lib/apt/lists/*
+# ---- 非 root ユーザー (uid 1000) ----
+RUN groupadd --gid 1000 aichan \
+    && useradd --uid 1000 --gid aichan --create-home --shell /bin/bash aichan
 
 WORKDIR /app
 
-# 依存を先にインストール (layer cache 活用)
-COPY requirements.txt requirements.lock ./
+# ---- 依存を先に入れて layer cache を効かせる ----
+# hash-pinned された requirements/base.txt のみを先にコピーする
+COPY requirements/base.txt /tmp/base.txt
 
-# requirements.lock があればそちらを優先 (hash-pinned)
-RUN pip install --no-cache-dir --upgrade pip && \
-    if [ -f requirements.lock ]; then \
-        pip install --no-cache-dir --require-hashes -r requirements.lock || \
-        pip install --no-cache-dir -r requirements.txt ; \
-    else \
-        pip install --no-cache-dir -r requirements.txt ; \
-    fi
+# 層最小化: pip upgrade + hash 検証インストール + キャッシュ削除を 1 RUN に
+RUN pip install --no-cache-dir --upgrade pip==24.2 \
+    && pip install --no-cache-dir --require-hashes -r /tmp/base.txt \
+    && rm -rf /tmp/base.txt /root/.cache/pip
 
-# アプリ本体
+# ---- アプリ本体 ----
 COPY --chown=aichan:aichan . /app/
 
-# runtime dirs (空)
-RUN mkdir -p data logs output reports backups models && \
-    chown -R aichan:aichan /app
-
 USER aichan
 
-# smoke test をデフォルトに (安全)
-CMD ["python3", "main.py", "--smoke-test"]
-
-
-# ─── Developer stage (追加ツール) ─────────────────────────
-FROM base AS dev
-
-USER root
-RUN pip install --no-cache-dir \
-    pytest pytest-cov \
-    ruff==0.8.4 black==24.10.0 isort==5.13.2 \
-    bandit==1.8.0 pip-audit==2.7.3 \
-    pip-licenses
-
-USER aichan
-CMD ["bash"]
+# smoke: --help 相当を ENTRYPOINT 化 (argparse の存在を保証する生存確認)
+ENTRYPOINT ["python3", "-m", "core.ai_chan", "--help"]

@@ -202,6 +202,35 @@
         }
       }
     },
+    "accessibility": {
+      "type": "object",
+      "description": "アクセシビリティ設定 (色覚多様性 / スクリーンリーダー / キーボード操作)",
+      "properties": {
+        "palette": {
+          "type": "string",
+          "enum": ["normal", "deuteranopia", "protanopia", "tritanopia"],
+          "description": "使用するカラーパレット"
+        },
+        "high_contrast": {
+          "type": "boolean",
+          "description": "ハイコントラストモードを有効にするか"
+        },
+        "font_scale": {
+          "type": "number",
+          "minimum": 0.75,
+          "maximum": 2.5,
+          "description": "フォント倍率 (0.75〜2.5)"
+        },
+        "keyboard_only": {
+          "type": "boolean",
+          "description": "キーボードのみ操作モード"
+        },
+        "announce_events": {
+          "type": "boolean",
+          "description": "状態変化をスクリーンリーダーに通知するか"
+        }
+      }
+    },
     "portability": {
       "type": "object",
       "description": "ポータビリティ設定",
@@ -434,6 +463,36 @@
           "type": "boolean",
           "description": "アイドル時の学習を有効にするか"
         }
+      }
+    },
+    "silence": {
+      "type": "object",
+      "description": "沈黙トークン (Sprint 5.8) の閾値設定",
+      "properties": {
+        "enabled": {"type": "boolean", "default": true},
+        "micro_threshold_s": {"type": "number", "default": 3.0},
+        "short_threshold_s": {"type": "number", "default": 15.0},
+        "medium_threshold_s": {"type": "number", "default": 120.0},
+        "long_threshold_s": {"type": "number", "default": 1800.0},
+        "absent_threshold_s": {"type": "number", "default": 10800.0},
+        "persist_events": {"type": "boolean", "default": false}
+      }
+    },
+    "conversation_search": {
+      "type": "object",
+      "description": "会話履歴検索 (Sprint 5.7) の設定",
+      "properties": {
+        "enabled": {"type": "boolean", "default": true},
+        "db_path": {"type": "string", "default": "memory/conversation_search.db"},
+        "recency_halflife_days": {"type": "number", "default": 365}
+      }
+    },
+    "tenant": {
+      "type": "object",
+      "description": "マルチテナント (Sprint 5.6) 設定",
+      "properties": {
+        "default_tenant_id": {"type": "string", "default": "default"},
+        "isolate_mode": {"type": "boolean", "default": false}
       }
     }
   },

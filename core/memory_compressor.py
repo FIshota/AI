@@ -4,7 +4,13 @@
 - アクセス頻度・最近性に基づき重要度を自動調整
 """
 from datetime import datetime, timedelta
+from typing import Optional, List, Tuple
+
 from core.memory import MemoryManager
+from core.memory_forgetting import (
+    ForgettingPolicy,
+    MemoryEntry,
+)
 
 COMPRESS_THRESHOLD = 50
 KEEP_RECENT = 20
@@ -12,8 +18,26 @@ COMPRESS_BATCH = 15
 
 
 class MemoryCompressor:
-    def __init__(self, memory_manager: MemoryManager):
+    def __init__(
+        self,
+        memory_manager: MemoryManager,
+        forgetting_policy: Optional[ForgettingPolicy] = None,
+    ):
         self.memory = memory_manager
+        # additive-only optional hook. None のときは既存ロジックのみ.
+        self.forgetting_policy = forgetting_policy
+
+    def classify_for_forgetting(
+        self, entries: List[MemoryEntry], now: Optional[datetime] = None
+    ) -> Tuple[List[MemoryEntry], List[MemoryEntry]]:
+        """Forgetting policy が設定されていれば (kept, forgotten) を返す.
+
+        未設定のときは全件 kept として返す (no-op).
+        既存の compress()/adjust_importance() とは独立な追加 API.
+        """
+        if self.forgetting_policy is None:
+            return list(entries), []
+        return self.forgetting_policy.apply(entries, now=now)
 
     def should_compress(self) -> bool:
         stats = self.memory.stats()

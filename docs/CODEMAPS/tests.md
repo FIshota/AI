@@ -1,0 +1,81 @@
+# CODEMAP: tests/
+
+> Auto-generated 2026-04-24 — Cat 5 codemap (C5)
+
+Total modules: **71**
+
+Unit and integration test modules. 183 Cat 5 tests added 2026-04-24.
+
+| File | Summary | Public API (excerpt) | Lines |
+|------|---------|----------------------|-------|
+| `conftest.py` | Shared pytest fixtures and marker configuration. | pytest_configure(), tk_root() | 89 |
+| `test_action_cycle.py` | Tests for core.action_cycle module. | class TestCyclePhase, class TestGoal, class TestGoalGenerator, class TestActionCycleEngine, class TestPDCACycle | 366 |
+| `test_aether.py` | Aether モデル関連モジュールのテスト | class TestIPGuard, class TestAetherBenchmark, class TestAetherTrainingGen, class TestTokenizerAnalyzer, class TestLLMTemplates | 361 |
+| `test_alerts.py` | Tests for core.alerts and monitoring scripts. | test_alert_rejects_invalid_severity(), test_alert_rejects_empty_title(), test_alert_is_frozen(), test_make_alert_id_is_stable_and_short(), test_filesink_writes_markdown() | 145 |
+| `test_anniversary_importance.py` | core.anniversary_importance のユニットテスト。 | test_frozen_dataclass_is_immutable(), test_zero_mention_zero_valence_recent_returns_only_recency(), test_zero_mention_with_unparsable_last_seen_is_zero(), test_strong_positive_valence_raises_score(), test_strong_negative_valence_equivalent_to_positive() | 207 |
+| `test_audit_chain.py` | Tests for the tamper-evident audit log hash chain. | test_empty_dir_verifies_true(), test_single_entry_chains_correctly(), test_three_entry_chain_valid(), test_modified_middle_entry_detected(), test_deleted_middle_entry_detected() | 115 |
+| `test_audit_journal_dates.py` | scripts/audit_journal_dates.py の単体テスト. | test_parse_entries_extracts_date_headings(), test_audit_flags_future_date_as_error(), test_audit_warns_on_descending_order_violation(), test_audit_warns_when_commits_are_zero(), test_audit_skips_when_git_unavailable() | 103 |
+| `test_audit_model_family.py` | Tests for scripts/audit_model_family.py (MODEL_FAMILY DTA). | test_extract_table_basic(), test_ok_identical_tables(), test_tbd_is_not_conflict(), test_conflict_detected(), test_missing_hinomoto_dir_is_warn_not_crash() | 78 |
+| `test_autonomous_engine.py` | AutonomousEngine のテスト。 | engine(), test_hourly_runs_once_per_hour(), test_hourly_window_is_first_10_minutes(), test_every_6h_fires_at_0_6_12_18(), test_daily_runs_once_per_day_in_window() | 237 |
+| `test_bench_evaluator.py` | bench.evaluator と suites の配線テスト (Phase 1). | class _FakeJudge, class TestEvaluatorDryRun, class TestAggregate, class TestSuiteDescribe, class TestFamilyDialogDatasetWiring | 101 |
+| `test_blocker_regression.py` | Regression tests for B1–B8 blocker fixes (2026-04-21). | class TestB1_WebAuth, class TestB2_SecureStore, class TestB3_Keychain, class TestB5_PrivacyDefaults, class TestB6_DiskcacheMitigation | 355 |
+| `test_check_crypto_surface.py` | Tests for scripts/check_crypto_surface.py | test_scan_file_detects_expected_modules(), test_scan_tree_excludes_common_dirs_and_counts(), test_render_report_contains_disclaimer_and_metadata(), test_write_report_creates_output_file(), test_main_returns_error_for_missing_root() | 123 |
+| `test_check_feature_rubric.py` | scripts/check_feature_rubric.py のテスト. | test_example_yaml_is_accept_candidate(), test_kill_switch_violation_forces_rejection(), test_question_mark_on_killswitch_is_violation(), test_below_threshold_triggers_revise(), test_cli_exit_codes() | 105 |
+| `test_code_engine.py` | Tests for core.code_engine module. | engine(), engine_with_storage(), analyzer(), class TestCodeIssueFrozen, class TestCodeAnalysisFrozen | 394 |
+| `test_consent.py` | core.consent の単体テスト。 | store(), test_record_is_frozen(), test_record_is_active_and_to_dict(), test_accept_and_latest(), test_accept_rejects_unknown_item() | 224 |
+| `test_conversation_intelligence.py` | 会話知能 / 知識グラフ / 性格進化 / 応答品質評価のテスト. | class TestIntentClassification, class TestResponseStrategy, class TestContextChain, class TestConversationDepthManager, class TestJapaneseQualityFilter | 438 |
+| `test_conversation_search.py` | Tests for core.conversation_search (Sprint 5.7). | idx(), test_empty_index_returns_empty(), test_single_keyword_match_english(), test_japanese_bigram_pet(), test_date_range_filter() | 178 |
+| `test_corpus_isolation.py` | Unit tests for scripts/check_corpus_isolation.py (ADR 0002). | test_clean_layout_has_no_violations(), test_base_builder_referencing_personal_is_violation(), test_sibling_builder_referencing_memory_is_violation(), test_cross_phase_leak_reverse_direction(), test_docs_and_tests_are_excluded() | 110 |
+| `test_correction_learning.py` | ユーザー訂正学習モジュールのテスト | tmp_dir(), cl(), class TestCorrectionDetection, class TestCorrectionPersistence, class TestCorrectionContext | 147 |
+| `test_defense.py` | Sprint 2.1: 防御システムのテスト | class TestAuditLog, class TestIntegrityMonitor, class TestBackupRotator, class TestAnomalyDetector, class TestKillSwitch | 277 |
+| `test_desktop_pet_a11y.py` | Tests for ui.desktop_pet_a11y and core.a11y_announcer. | test_palette_preset_has_required_roles(), test_palette_preset_unknown_raises(), test_palette_is_frozen(), test_palette_available_lists_all_presets(), test_contrast_ratio_black_white_is_21() | 237 |
+| `test_desktop_pet_e2e.py` | End-to-end smoke tests for the ai-chan desktop pet UI (tkinter). | mock_ai_chan(), pet(), test_pet_window_creates(), test_emotion_state_transition(), test_entropy_expression_mapping() | 153 |
+| `test_document_exporter.py` | Tests for core.document_exporter module. | parser(), tmp_dir(), sample_content(), minimal_content(), class TestDocumentSectionFrozen | 367 |
+| `test_emotion_drift.py` | Tests for core.emotion_drift (心の健康診断 集計ロジック). | test_empty_history_returns_empty_list(), test_aggregate_frozen_dataclass(), test_invalid_window_raises(), test_single_emotion_label_records(), test_valence_aggregation_mixed_labels() | 249 |
+| `test_gitleaks_rules.py` | Tests for custom gitleaks rules defined in ai-chan/.gitleaks.toml. | test_leaky_file_is_detected(), test_clean_file_is_not_detected() | 121 |
+| `test_growth_report.py` | GrowthReporter のテスト。 | class _StubDiary, class _StubEmotionHistory, class _StubInterestMap, class _StubMemory, class _StubLearning | 290 |
+| `test_high_regression.py` | Regression tests for HIGH tier fixes (2026-04-21). | class TestH3_ClipboardPII, class TestH2_Tenant, class TestH1_Protocols, class TestH7_NSPasteboard, class TestH8_WebCache | 304 |
+| `test_hinomoto_bridge.py` | Smoke + unit tests for core/hinomoto_bridge.py (P1-4-alpha). | class TestHinoMotoBridgeUnit, class TestHinoMotoBridgeIntegration | 117 |
+| `test_ical_export.py` | Tests for core.ical_export and core.anniversary_ical_bridge. | test_single_event_crlf_and_required_fields(), test_multiple_events_single_calendar_wrapper(), test_escape_text_rfc5545_rules(), test_summary_special_chars_escaped_in_output(), test_fold_line_japanese_multibyte_boundary() | 241 |
+| `test_judges.py` | bench/judges/ のユニットテスト (Phase 1). | class TestJudgeScore, class TestNormalize, class TestExactMatch, class TestPartialMatch, class TestRougeL | 153 |
+| `test_lifelong_memory.py` | Tests for Lifelong Memory Module (LMM) PoC skeleton. | store(), test_memory_event_is_frozen(), test_memory_event_rejects_invalid_kind(), test_memory_event_bounds(), test_with_importance_is_immutable() | 234 |
+| `test_lint_minutes.py` | scripts/lint_minutes.py のテスト。 | test_valid_minutes_passes(), test_missing_section_returns_exit_2(), test_multiple_missing_sections_listed(), test_directory_scan_skips_template(), test_extract_sections_parses_headers() | 116 |
+| `test_llm_hinomoto_integration.py` | P1-4: LLMEngine <-> HinoMoto backend integration tests. | base_config(), stubbed_env(), test_hinomoto_disabled_by_default(), test_hinomoto_enabled_loads_bridge(), test_hinomoto_generate_routes_to_bridge() | 178 |
+| `test_llm_ipc.py` | M8: IPC stack tests (protocol + proxy + worker roundtrip). | class TestFrameCodec, class TestRequestConstructors, class TestLineReader, proxy(), class TestProxyRoundtrip | 323 |
+| `test_llm_ipc_crash.py` | M8 Phase 2: Crash-injection + watchdog + circuit-breaker tests. | class TestCircuitBreaker, class TestAutoRestart, class TestEventLog | 170 |
+| `test_local_judge_honesty.py` | G-1: LocalJudge honesty rubric 単体テスト (LLM 呼び出しなし). | class TestParseScore, class TestMakeHonestyJudge, class TestFamilyDialogIntegration | 95 |
+| `test_log_retention_sweep.py` | Tests for scripts.log_retention_sweep. | test_load_policies_valid(), test_load_policies_missing_returns_empty(), test_load_policies_invalid_raises(), test_scan_finds_expired_and_skips_fresh(), test_scan_skips_undeclared_directory() | 127 |
+| `test_medium_regression.py` | Regression tests for MEDIUM tier fixes. | class TestM2_SecurityOps, class TestM2_ServerOps, class TestM2_Delegation, class TestM5_ThreadLocalConn, pytest_raises_ok() | 274 |
+| `test_memory_forgetting.py` | Tests for core.memory_forgetting (Ebbinghaus + pin). | test_retention_zero_elapsed_is_one(), test_retention_monotonic_decreasing(), test_retention_bounds(), test_rehearsal_boosts_retention(), test_negative_rehearsals_clamped() | 209 |
+| `test_memory_honesty_integration.py` | MemoryManager の Memory Honesty 拡張テスト (Q6 D-2 統合). | mm(), class TestConfidenceCalc, class TestRecallWithConfidence, class TestRespondAboutMemory, class TestHonestyBenchSeeds | 112 |
+| `test_memory_leak.py` | メモリリーク検出テスト | test_memory_no_leak_100_turns(), test_emotion_state_no_accumulation() | 123 |
+| `test_memory_long_term.py` | MemoryManager の長期記憶 API テスト。 | manager(), test_add_long_term_marks_is_core(), test_core_id_prevents_duplicate(), test_forget_does_not_remove_core_memory(), test_bootstrap_core_memories_from_yaml_entries() | 195 |
+| `test_memory_phrasing.py` | core/memory_phrasing のテスト (Q6 Memory Honesty). | class TestBandThresholds, class TestMatrixCompleteness, class TestPickPhrase, class TestKindnessInvariants | 123 |
+| `test_migrate_faiss_to_sqlite_vec.py` | M9 Phase 2: migration script の FAISS 読み込みロジック単体テスト。 | class TestLoadFaissIndex | 71 |
+| `test_model_policy.py` | Model Policy (docs/MODEL_POLICY.md) enforcement tests. | test_denylist_contains_expected_chinese_vendors(), test_preferred_contains_expected_japanese_vendors(), test_denylist_matches_known_bad_paths(), test_preferred_and_neutral_paths_pass(), test_consent_downgrades_error_to_warning() | 125 |
+| `test_multi_tenant_e2e.py` | 5.6 Multi-tenant E2E 検証。 | base_dir(), tenants(), test_two_tenants_initialize_into_separate_roots(), test_memory_write_on_A_not_visible_to_B(), test_emotion_history_isolation() | 341 |
+| `test_multimodal_and_defense.py` | マルチモーダル処理 / 防御監視のテスト. | class TestImageAnalyzer, class TestClipboardImage, class TestMultimodalChat, class TestNetworkMonitor, class TestProcessMonitor | 336 |
+| `test_new_modules.py` | Tests for critical untested modules: | class TestModeState, class TestModeManagerDetection, class TestModeManagerSwitch, class TestModeManagerGrowthBalance, class TestModeManagerAutoReturn | 592 |
+| `test_observability.py` | core/observability のユニットテスト。 | test_noop_when_otel_disabled(), test_get_tracer_returns_noop_when_disabled(), test_start_span_context_manager(), test_record_metric_returns_sample(), test_nested_spans() | 123 |
+| `test_personality_migration.py` | Personality loader migration tests. | test_loads_default_when_nothing_present(), test_loads_legacy_json_when_only_persona_json(), test_yaml_takes_precedence_over_json(), test_core_memories_loaded_from_yaml(), test_to_dict_is_json_compatible() | 183 |
+| `test_phase1_integration.py` | Phase 1 統合テスト | class TestCodeCommandPatterns, class TestCodeHandlers, class TestWillActionsExpanded, class TestWebSearchPatterns, class TestWebFetcherFunctions | 456 |
+| `test_phase2_sandbox.py` | Phase 2 テスト — CodeSandbox / run_and_fix / CMD_CODE_RUN | class TestExecutionResult, class TestCodeSandbox, class TestCodeEngineRun, class TestCodeEngineRunAndFix, class TestCmdCodeRunPattern | 300 |
+| `test_pii_properties.py` | Property-based tests for core.clipboard_watcher.contains_pii. | test_clean_word_text_never_flagged(), test_clean_alpha_text_never_flagged(), test_clean_prefix_plus_pii_always_flagged(), test_pii_sample_plus_clean_suffix_always_flagged(), test_direct_pii_sample_flagged() | 151 |
+| `test_privacy_lint.py` | Tests for scripts/privacy_lint.py. | test_valid_privacy_passes(), test_missing_file_returns_2(), test_missing_headings_detected(), test_undeclared_module_detected(), test_declared_module_passes() | 133 |
+| `test_rag_and_life_assistant.py` | RAG / 記憶要約 / タスク・習慣管理 / 表情エンジンのテスト. | class TestRAGEngine, class TestMemorySummarizer, class TestTaskManager, class TestHabitTracker, class TestExpressionEngine | 264 |
+| `test_regression.py` | 回帰テスト: quality_benchmark のテストケースを pytest パラメトライズで実行する。 | test_is_japanese(), test_is_not_empty(), test_no_role_prefix(), test_appropriate_length(), test_no_repetition() | 156 |
+| `test_scan_brand_misuse.py` | Tests for scripts/scan_brand_misuse.py. | test_scan_text_detects_all_brands(), test_scan_text_does_not_false_match_ai_lowercase(), test_is_path_in_allowed(), test_scan_repository_separates_warnings_and_info(), test_main_always_exits_zero() | 87 |
+| `test_screenshot_sensitive.py` | 機密画面検出・ブラー機能のテスト。 | test_classify_1password_blocks(), test_classify_mufg_blocks(), test_classify_plain_browser_returns_none(), test_classify_unrelated_returns_none(), test_classify_case_insensitive() | 225 |
+| `test_self_correction.py` | 自己修正システム (SelfCorrectionSystem) のテスト | class TestQualityMonitor, class TestPrescriptionEngine, class TestTreatmentExecutor, class TestSelfCorrectionSystem, class TestPersistence | 642 |
+| `test_self_development.py` | Tests for core/self_development.py | class TestCodeReader, class TestErrorAnalyzer, class TestProposalGenerator, class TestProposalStore, class TestSelfDevelopmentEngine | 565 |
+| `test_self_will.py` | Tests for core/self_will.py | class TestDesireType, class TestDesire, class TestDesireGenerator, class TestWillDecider, class TestActionExecutor | 530 |
+| `test_server_home_allowlist.py` | server_home.py の _is_allowed() regression tests. | allowlist_checker(), test_path_traversal_rejected(), test_command_substitution_rejected(), test_rm_always_rejected(), test_sensitive_file_references_rejected() | 140 |
+| `test_server_ops_and_autonomous.py` | サーバー運用 / 自律行動 / AI 環境のテスト. | class TestCredentialStore, class TestServerHome, class TestGreetingEngine, class TestIdleLearner, class TestProactiveStarter | 469 |
+| `test_silence_token.py` | tests for core/silence_token.py, core/silence_emotion_bridge.py, core/silence_turn.py | test_py39_compatible(), test_classify_below_micro_returns_none(), test_classify_micro_boundary(), test_classify_short_boundary(), test_classify_medium_boundary() | 234 |
+| `test_sqlite_wal.py` | SQLite WAL モード並行アクセステスト | test_concurrent_readwrite_10_threads(), test_wal_mode_persists(), test_counter_consistency() | 244 |
+| `test_tenant_properties.py` | Property-based tests for core.tenant (Hypothesis). | test_valid_tenant_id_never_raises(), test_roundtrip_parse_str(), test_traversal_dots_always_rejected(), test_path_separators_always_rejected(), test_null_byte_always_rejected() | 209 |
+| `test_tts_engine.py` | core/tts/engine.py のユニットテスト (Phase 0.75). | class TestEngineSpec, class TestFactoryFromSettings, class TestBackendAvailability, class TestResolution, class TestSpeakResult | 93 |
+| `test_vector_store.py` | M9 Phase 1: VectorStore Protocol + FaissVectorStore + sqlite-vec probe tests. | class TestProtocolConformance, class TestFaissVectorStore, class TestSQLiteVecSupportProbe, class TestSQLiteVecVectorStore, class TestMakeVectorStore | 192 |
+| `test_verify_offline_artifacts.py` | Tests for scripts/verify_offline_artifacts.py. | test_all_match(), test_missing_file(), test_tampered_content(), test_size_mismatch(), test_empty_manifest() | 153 |
+| `test_voice_id_fallback.py` | Tests for core.voice_id_fallback. | test_voice_match_is_frozen(), test_voice_match_rejects_out_of_range_confidence(), test_voice_match_rejects_empty_subject(), test_drift_cold_start_returns_zero(), test_drift_low_for_consistent_speaker() | 250 |
+| `test_yamato.py` | ヤマト計画テスト | class TestMoERouter, class TestContinuousLearner, class TestYamatoArchitecture, class TestSyntheticDataGenerator, class TestMultiAgentVerifier | 633 |

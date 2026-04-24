@@ -21,15 +21,26 @@ class DiaryManager:
         memory: MemoryManager,
         key: Optional[bytes] = None,
         tenant: TenantId | None = None,
+        tenant_context: "object | None" = None,
     ):
         """B2 fix (2026-04-21): key を渡すと全日記が AES-256-GCM で暗号化される。
         H2 fix (2026-04-21): tenant ごとに `data/tenants/{tenant}/diary/` に書き込む。
+        MT fix (2026-04-24): ``tenant_context`` 指定時は tc.data_dir/diary を使う。
         旧パス `data/diary/` が存在すれば読み込み互換として fallback する。
         """
         self.data_dir = Path(data_dir)
         self._tenant = tenant or SELF_TENANT
-        # 新パス: data/tenants/{tenant}/diary/
-        self.diary_dir = tenant_dir(self.data_dir, self._tenant) / "diary"
+        self._tenant_context = tenant_context
+        if tenant_context is not None:
+            try:
+                self.diary_dir = tenant_context.guard_path(
+                    tenant_context.data_dir / "diary"  # type: ignore[attr-defined]
+                )
+            except AttributeError:  # pragma: no cover
+                self.diary_dir = tenant_dir(self.data_dir, self._tenant) / "diary"
+        else:
+            # 新パス: data/tenants/{tenant}/diary/
+            self.diary_dir = tenant_dir(self.data_dir, self._tenant) / "diary"
         self.diary_dir.mkdir(parents=True, exist_ok=True)
         # 旧パス (後方互換読み込み)
         self._legacy_diary_dir = self.data_dir / "diary"

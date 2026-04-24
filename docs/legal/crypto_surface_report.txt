@@ -1,0 +1,67 @@
+Ai-chan Crypto/Security Surface Report
+============================================================
+generated_at : 2026-04-23T19:38:10.786766+00:00
+scan_root    : /Users/fujihiranoborudai/Downloads/agent/ai-chan
+scanned_files: 295
+findings     : 46
+
+Disclaimer:
+  This report is an operational inventory aid, not a legal
+  export-classification determination. Consult qualified
+  counsel for any actual export decision.
+
+Counts by module:
+  base64           4
+  cryptography     7
+  hashlib          28
+  hmac             4
+  secrets          2
+  ssl              1
+
+Findings:
+  [base64] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/server_home.py:16: import base64
+  [base64] /Users/fujihiranoborudai/Downloads/agent/ai-chan/utils/crypto.py:12: import base64
+  [base64] /Users/fujihiranoborudai/Downloads/agent/ai-chan/utils/keychain.py:49: import base64
+  [base64] /Users/fujihiranoborudai/Downloads/agent/ai-chan/utils/keychain.py:58: import base64
+  [cryptography] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/server_home.py:38: from cryptography.fernet import Fernet
+  [cryptography] /Users/fujihiranoborudai/Downloads/agent/ai-chan/scripts/detach_memory_phase_a.py:51: import cryptography  # noqa: F401
+  [cryptography] /Users/fujihiranoborudai/Downloads/agent/ai-chan/scripts/detach_memory_phase_a.py:81: from cryptography.fernet import Fernet
+  [cryptography] /Users/fujihiranoborudai/Downloads/agent/ai-chan/scripts/restore_memory.py:47: from cryptography.fernet import Fernet
+  [cryptography] /Users/fujihiranoborudai/Downloads/agent/ai-chan/utils/crypto.py:25: from cryptography.hazmat.primitives import hashes as _hashes
+  [cryptography] /Users/fujihiranoborudai/Downloads/agent/ai-chan/utils/crypto.py:26: from cryptography.hazmat.primitives.ciphers.aead import AESGCM as _AESGCM
+  [cryptography] /Users/fujihiranoborudai/Downloads/agent/ai-chan/utils/crypto.py:27: from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC as _PBKDF2HMAC
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/akashic/holographic_memory.py:31: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/akashic/superposition.py:24: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/alerts.py:17: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/audit_chain.py:17: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/audit_log.py:9: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/auto_learner.py:333: import json, hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/backup_rotator.py:11: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/bio_nervous_system.py:50: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/integrity_monitor.py:9: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/ip_guard.py:12: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/ip_guard.py:38: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/llm.py:14: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/llm.py:1093: import hashlib as _h
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/rag_engine.py:10: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/research_agent.py:9: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/server_ai_env.py:13: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/server_home.py:17: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/web_fetcher.py:7: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/web_learner.py:11: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/yamato_shield.py:14: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/scripts/detach_memory_phase_a.py:23: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/scripts/generate_artifact_manifest.py:23: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/scripts/restore_memory.py:15: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/scripts/vendor/llama_cpp/convert_hf_to_gguf.py:16: from hashlib import sha256
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/scripts/verify_offline_artifacts.py:17: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/tests/test_verify_offline_artifacts.py:4: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/utils/crypto.py:13: import hashlib
+  [hashlib] /Users/fujihiranoborudai/Downloads/agent/ai-chan/utils/portable.py:17: import hashlib
+  [hmac] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/ip_guard.py:13: import hmac
+  [hmac] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/yamato_shield.py:15: import hmac
+  [hmac] /Users/fujihiranoborudai/Downloads/agent/ai-chan/utils/crypto.py:14: import hmac
+  [hmac] /Users/fujihiranoborudai/Downloads/agent/ai-chan/web/app.py:16: import hmac
+  [secrets] /Users/fujihiranoborudai/Downloads/agent/ai-chan/core/ip_guard.py:17: import secrets
+  [secrets] /Users/fujihiranoborudai/Downloads/agent/ai-chan/web/app.py:17: import secrets
+  [ssl] /Users/fujihiranoborudai/Downloads/agent/ai-chan/scripts/setup_model.py:70: import ssl

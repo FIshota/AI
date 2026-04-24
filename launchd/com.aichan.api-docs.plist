@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  com.aichan.api-docs
+  毎月 1 日 04:00 JST に pdoc による API リファレンスを再生成する。
+  対象: core / utils / ui (scripts/build_api_docs.sh 経由)
+
+  TODO(ops): 下記コマンドで launchd に登録する
+    cp launchd/com.aichan.api-docs.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.aichan.api-docs.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.aichan.api-docs</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd /Users/fujihiranoborudai/Downloads/agent/ai-chan &amp;&amp; bash scripts/build_api_docs.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Day</key>
+    <integer>1</integer>
+    <key>Hour</key>
+    <integer>4</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/fujihiranoborudai/Downloads/agent/ai-chan/logs/api-docs/launchd.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/fujihiranoborudai/Downloads/agent/ai-chan/logs/api-docs/launchd.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

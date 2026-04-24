@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  com.aichan.flaky-finder
+  毎週土曜 04:00 JST に pytest-flakefinder を実行し、非決定的
+  テストを検出する。
+
+  TODO(ops): 下記コマンドで launchd に登録する
+    launchctl load ~/Library/LaunchAgents/com.aichan.flaky-finder.plist
+  ※ plist は ~/Library/LaunchAgents/ にコピーしてから load する。
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.aichan.flaky-finder</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd /Users/fujihiranoborudai/Downloads/agent/ai-chan &amp;&amp; bash scripts/run_weekly_flaky.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>6</integer>
+    <key>Hour</key>
+    <integer>4</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/fujihiranoborudai/Downloads/agent/ai-chan/logs/flaky/launchd.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/fujihiranoborudai/Downloads/agent/ai-chan/logs/flaky/launchd.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

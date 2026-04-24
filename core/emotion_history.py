@@ -25,13 +25,26 @@ class EmotionHistory:
         data_dir: Path,
         key: Optional[bytes] = None,
         tenant: TenantId | None = None,
+        tenant_context: "object | None" = None,
     ):
         """B2 fix (2026-04-21): key を渡すと履歴が暗号化される。
         H2 fix (2026-04-21): tenant ごとに data/tenants/{tenant}/emotion_history.json に書き込む。
         旧パス `data/emotion_history.json` は後方互換で読み込みのみ対応。
+        MT fix (2026-04-24): ``tenant_context`` (core.tenant_context.TenantContext) を
+        渡すとファイルはその memory_dir 配下に格納される (完全物理分離)。
         """
         self._tenant = tenant or SELF_TENANT
-        self._path = tenant_dir(Path(data_dir), self._tenant) / "emotion_history.json"
+        self._tenant_context = tenant_context
+        if tenant_context is not None:
+            try:
+                tc_mem = tenant_context.memory_dir  # type: ignore[attr-defined]
+                self._path = tenant_context.guard_path(
+                    tc_mem / "emotion_history.json"
+                )
+            except AttributeError:  # pragma: no cover
+                self._path = tenant_dir(Path(data_dir), self._tenant) / "emotion_history.json"
+        else:
+            self._path = tenant_dir(Path(data_dir), self._tenant) / "emotion_history.json"
         self._legacy_path = Path(data_dir) / "emotion_history.json"
         self._key = key
         self._records: list[dict] = []

@@ -1,0 +1,40 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Log Retention Policy
+#
+# scripts/log_retention_sweep.py から読まれる.
+# 各 policies.<path>.max_age_days より古いファイルを削除候補にする.
+#
+# ディレクトリパスはリポジトリルートからの相対パス.
+# 未列挙のディレクトリは削除対象外 (安全側).
+#
+# 詳細: docs/security/LOG_RETENTION.md
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+policies:
+  # ── audit (7年) ──────────────────────────────────────────
+  logs/killswitch_drills:
+    max_age_days: 2555
+  logs/backup_restore_drills:
+    max_age_days: 2555
+  logs/security_audit:
+    max_age_days: 2555
+  logs/security:
+    max_age_days: 2555
+
+  # ── system / diagnostic (1年) ────────────────────────────
+  logs/health:
+    max_age_days: 365
+  logs/benchmarks:
+    max_age_days: 365
+  logs/regression:
+    max_age_days: 365
+  logs/docker_image_hashes:
+    max_age_days: 365
+  logs/flaky:
+    max_age_days: 365
+  logs/archive:
+    max_age_days: 365
+
+  # ── debug (14日) ─────────────────────────────────────────
+  logs/debug:
+    max_age_days: 14

@@ -1,0 +1,31 @@
+# Voice ID fallback challenge registry
+#
+# Per-subject passphrases and confirmation questions used by
+# core.voice_id_fallback.FallbackPolicy when drift or low confidence
+# triggers re-authentication. Keep entries minimal and well-known only
+# to the true subject.
+#
+# SECURITY:
+# - Do NOT commit real passphrases to version control. The values here
+#   are example placeholders for tests and onboarding only.
+# - Rotate passphrases if any family member reports a suspected leak.
+
+subjects:
+  papa:
+    passphrases:
+      - "やまとのたからもの"
+      - "あおいそらのした"
+    questions:
+      - q: "最初に一緒に行った旅行先は？"
+        a: "はこだて"
+      - q: "家族で最初に飼ったペットの名前は？"
+        a: "ぽち"
+
+  mama:
+    passphrases:
+      - "つきのひかり"
+    questions:
+      - q: "結婚記念日の月は？"
+        a: "6月"
+      - q: "家族の合言葉の花は？"
+        a: "すずらん"

@@ -71,6 +71,11 @@ ai-chan/
 └── models/         # LLM 重み (gitignore 対象)
 ```
 
-## ライセンス
+## ライセンス / 法的事項
 
 未確定 (MIT 予定)。ベースモデル・依存のライセンスは [docs/LICENSES.md](docs/LICENSES.md) を参照。
+
+- プライバシー: [PRIVACY.md](PRIVACY.md)
+- セキュリティ: [SECURITY.md](SECURITY.md)
+- 商標ポリシー: [docs/legal/TRADEMARK.md](docs/legal/TRADEMARK.md)
+- 輸出管理 (export control) 注意事項: [docs/legal/EXPORT_CONTROL.md](docs/legal/EXPORT_CONTROL.md) — **法的助言ではなく運用上の注意喚起**

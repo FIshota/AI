@@ -53,3 +53,15 @@ dist/
 tmp/
 *.tmp
 *.log
+
+# 再現性保全 image に不要なもの
+.venv/
+venv/
+env/
+tests/
+artifacts/
+bench/
+docs/
+reports/
+AiChan.app/
+launchd/

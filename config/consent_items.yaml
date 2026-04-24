@@ -1,0 +1,62 @@
+# ai-chan 同意項目定義
+#
+# 家族 AI として「誰が・いつ・どの機能に同意したか」を証跡として残すための
+# マスター定義。外部送信は一切しない。ここに列挙された項目のみが
+# ConsentStore.accept() で受理される。
+#
+# 追加・改訂の際は version を bump し、過去バージョンは消さずに残すこと
+# （10 年後に「2026 年時点で何に同意したか」を再現する必要があるため）。
+#
+# 命名規則:
+#   key は snake_case。機能コード名と 1:1 対応させる。
+
+version: "1.0.0"
+effective_date: "2026-04-23"
+
+items:
+  screenshot_reading:
+    label: "画面の読み取り"
+    description: "画面上のテキストを OCR し、ai-chan が文脈として使う"
+    default: false
+    reversible: true
+  clipboard_watching:
+    label: "クリップボードの監視"
+    description: "コピーしたテキストを一時的に参照する"
+    default: false
+    reversible: true
+  emotion_logging:
+    label: "感情ログの保存"
+    description: "ai-chan が観測した感情推定をローカル DB に保存する"
+    default: true
+    reversible: true
+  diary_generation:
+    label: "日記の自動生成"
+    description: "一日の出来事を要約して日記として保存する"
+    default: true
+    reversible: true
+  web_fetch:
+    label: "Web の取得"
+    description: "ユーザーの依頼に応じて URL を取得する"
+    default: false
+    reversible: true
+  voice_id:
+    label: "声紋識別"
+    description: "話者を識別するために声紋モデルをローカルに作成する"
+    default: false
+    reversible: true
+  memory_long_term:
+    label: "長期記憶の保存"
+    description: "会話内容を長期記憶として SQLite に保存する"
+    default: true
+    reversible: true
+  microphone_listening:
+    label: "マイク入力の使用"
+    description: "ウェイクワード検出・STT のためマイク入力を受ける"
+    default: false
+    reversible: true
+
+# 過去バージョンの履歴（削除禁止）
+history:
+  - version: "1.0.0"
+    effective_date: "2026-04-23"
+    notes: "初版"

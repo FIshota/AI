@@ -1,0 +1,22 @@
+[
+  {
+    "path": "LICENSE",
+    "sha256": "5673854afd002760a896a4ddb671cc5feedbc599c68ff923d82fbd86a73efca9",
+    "size_bytes": 1627
+  },
+  {
+    "path": "NOTICE",
+    "sha256": "78cb41c5e23bad2e942d96eb852c9034b8a35b4b57009093797a51d07b3c97ff",
+    "size_bytes": 2227
+  },
+  {
+    "path": "PRIVACY.md",
+    "sha256": "e6c192184f47a5531a64dbfaaa8b3b55550552e1d7ccee7e49e8947e726e25fb",
+    "size_bytes": 6042
+  },
+  {
+    "path": "SECURITY.md",
+    "sha256": "ab8844ea0a1f69ac0785a8486074df60d67bf2590cf073d1709c8d59f9499f60",
+    "size_bytes": 2530
+  }
+]

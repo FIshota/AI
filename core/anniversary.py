@@ -99,6 +99,39 @@ class AnniversaryManager:
     def list_all(self) -> list[dict]:
         return list(self.items)
 
+    # ── 自動重要度推定 (hook) ─────────────────────────────
+    def attach_auto_importance(
+        self,
+        label_or_id: str,
+        score: float,
+        bucket: Optional[str] = None,
+        persist: bool = True,
+    ) -> Optional[dict]:
+        """指定 anniversary に `auto_importance` フィールドを追加する。
+
+        破壊的変更なし: 既存 key はそのまま、`auto_importance` を append するのみ。
+
+        Args:
+            label_or_id: label もしくは id
+            score: 0.0 - 1.0 の連続スコア
+            bucket: 任意の bucket 名 (low/medium/high/critical)
+            persist: True なら即 _save()
+
+        Returns:
+            更新されたエントリの dict、見つからなければ None
+        """
+        for item in self.items:
+            if item.get("id") == label_or_id or item.get("label") == label_or_id:
+                item["auto_importance"] = {
+                    "score": float(score),
+                    "bucket": bucket,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+                if persist:
+                    self._save()
+                return item
+        return None
+
     def build_prompt(self, items: list[dict]) -> str:
         """記念日用の LLM プロンプトを生成"""
         if not items:

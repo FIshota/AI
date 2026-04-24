@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  com.aichan.log-retention
+
+  毎月 1 日 02:00 JST に logs/ 配下の古いファイルを削除する.
+  ポリシーは config/log_retention.yaml, 詳細は docs/security/LOG_RETENTION.md.
+
+  TODO(ops): 下記コマンドで launchd に登録する
+    cp launchd/com.aichan.log-retention.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.aichan.log-retention.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.aichan.log-retention</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd /Users/fujihiranoborudai/Downloads/agent/ai-chan &amp;&amp; python3 scripts/log_retention_sweep.py --apply</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Day</key>
+    <integer>1</integer>
+    <key>Hour</key>
+    <integer>2</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/fujihiranoborudai/Downloads/agent/ai-chan/logs/archive/log_retention.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/fujihiranoborudai/Downloads/agent/ai-chan/logs/archive/log_retention.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

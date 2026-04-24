@@ -58,6 +58,14 @@
     "ai_icon_image": "",
     "user_icon_image": ""
   },
+  "accessibility": {
+    "_comment": "アクセシビリティ機能。既定 OFF で現行挙動を維持。palette: normal|deuteranopia|protanopia|tritanopia",
+    "palette": "normal",
+    "high_contrast": false,
+    "font_scale": 1.0,
+    "keyboard_only": false,
+    "announce_events": false
+  },
   "portability": {
     "auto_backup": false,
     "backup_interval_hours": 24

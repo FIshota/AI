@@ -1,0 +1,55 @@
+# -----------------------------------------------------------------------------
+# screenshot_sensitive_patterns.yaml (サンプル)
+#
+# ai-chan の 5.10 機密画面検出に追加したいパターンを定義する。
+# このファイルを `screenshot_sensitive_patterns.yaml` にコピーして編集する。
+#
+# フィールド:
+#   name:                 パターン識別名 (ログに出力される、日本語可)
+#   window_title_regex:   Python re 構文の正規表現 (大文字小文字無視で評価)
+#   app_bundle_ids:       macOS LSBundleIdentifier の完全一致リスト (空でも可)
+#   action:               BLOCK | BLUR | REDACT のいずれか
+#
+# action の意味:
+#   BLOCK  … ファイルを空 bytes に上書き。AI 文脈には一切入らない。最も強い。
+#   REDACT … 全面黒塗り。サイズ情報のみ残る。
+#   BLUR   … 強ブラー。形はぼんやり残るが OCR はほぼ通らない。
+#
+# 注意:
+#   - 迷ったら BLOCK を選ぶ (安全側)
+#   - 外部ネット連携は一切しない (全てローカル照合)
+#   - 家族や自分の生活圏に合わせて自由にカスタマイズ
+# -----------------------------------------------------------------------------
+
+patterns:
+  # 例: 勤務先の社内ポータル
+  - name: "社内ポータル"
+    window_title_regex: "社内ポータル|Intranet"
+    app_bundle_ids: []
+    action: "BLOCK"
+
+  # 例: 使っている地方銀行
+  - name: "ローカル銀行"
+    window_title_regex: "○○銀行|Local\\s*Bank"
+    app_bundle_ids: []
+    action: "BLOCK"
+
+  # 例: 家族が使うお薬手帳アプリ
+  - name: "お薬手帳 (カスタム)"
+    window_title_regex: "お薬手帳"
+    app_bundle_ids:
+      - "jp.example.okusuritecho"
+    action: "BLOCK"
+
+  # 例: Slack はメール同様 BLUR 程度で
+  - name: "Slack"
+    window_title_regex: "Slack"
+    app_bundle_ids:
+      - "com.tinyspeck.slackmacgap"
+    action: "BLUR"
+
+  # 例: 確定申告書 PDF が画面に出ている場合
+  - name: "確定申告 PDF"
+    window_title_regex: "確定申告.*\\.pdf|e-Tax"
+    app_bundle_ids: []
+    action: "REDACT"

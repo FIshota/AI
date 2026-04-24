@@ -149,6 +149,7 @@ ai-chan はローカル優先の生活伴走エージェントとして、個人
 
 ## 7. 変更履歴
 
+- 2026-04-24 : 自動監査 HIGH (CVE=0 HIGH=0 Secrets=48)
 - 2026-04-23 : 自動監査 CLEAN (CVE=0 HIGH=0 Secrets=0)
 - 2026-04-22 : 自動監査 CLEAN (CVE=0 HIGH=0 Secrets=0)
 - 2026-04-21 : 自動監査 CLEAN (CVE=0 HIGH=0 Secrets=0)

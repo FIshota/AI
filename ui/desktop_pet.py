@@ -1434,6 +1434,118 @@ class DesktopPet:
         self.context_menu.add_separator()
         self.context_menu.add_command(label="  ✕   終了",              command=self.root.quit)
 
+        # ─── Accessibility: keyboard shortcuts + optional palette/announcer ───
+        # Additive. Defaults preserve the existing mouse-first behaviour.
+        self._init_accessibility()
+
+    def _init_accessibility(self):
+        """Wire up a11y keyboard shortcuts and load settings.
+
+        Defensive: any import/settings failure must not prevent the pet
+        from starting. When accessibility config is absent the bindings
+        are still attached (they only add keyboard parity), but no
+        palette changes or announcements happen.
+        """
+        try:
+            from ui.desktop_pet_a11y import AccessibilitySettings, apply_to_canvas
+            from core.a11y_announcer import A11yAnnouncer
+        except Exception as exc:  # pragma: no cover - defensive import guard
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "a11y modules unavailable: %s", exc,
+            )
+            self._a11y_settings = None
+            self._a11y_announcer = None
+            return
+
+        # Load settings.accessibility if present, otherwise OFF defaults.
+        a11y_cfg = None
+        try:
+            import json as _json
+            from pathlib import Path as _Path
+            cfg_path = _Path("config") / "settings.json"
+            if cfg_path.is_file():
+                with cfg_path.open("r", encoding="utf-8") as fh:
+                    a11y_cfg = (_json.load(fh) or {}).get("accessibility")
+        except Exception as exc:
+            import logging as _logging
+            _logging.getLogger(__name__).debug(
+                "a11y settings load skipped: %s", exc,
+            )
+
+        settings = AccessibilitySettings.from_mapping(a11y_cfg)
+        self._a11y_settings = settings
+        self._a11y_announcer = A11yAnnouncer(enabled=settings.announce_events)
+
+        # Apply palette/font-scale to the pet canvas only when a preset is
+        # explicitly chosen (keeps pixel-perfect default look otherwise).
+        if settings.palette.name != "normal" or settings.high_contrast \
+                or settings.font_scale != 1.0:
+            try:
+                apply_to_canvas(self.canvas, settings)
+            except Exception:  # pragma: no cover
+                pass
+
+        # Keyboard shortcuts — always bound. They add functionality without
+        # changing existing mouse behaviour.
+        try:
+            self.root.bind("<Tab>", self._a11y_on_tab)
+            self.root.bind("<space>", self._a11y_on_space)
+            self.root.bind("<Escape>", self._a11y_on_escape)
+            # Make the window focusable for keyboard users.
+            try:
+                self.root.focus_set()
+            except Exception:  # pragma: no cover
+                pass
+        except Exception as exc:  # pragma: no cover
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "a11y key bind failed: %s", exc,
+            )
+
+        if self._a11y_announcer:
+            self._a11y_announcer.announce("アイちゃん起動しました")
+
+    def _a11y_on_tab(self, _event=None):
+        """Tab: cycle focus among ai-chan's top-level windows."""
+        try:
+            # Simple focus move: if chat window exists, bring it up; else pet.
+            if getattr(self, "chat_window", None) is not None:
+                try:
+                    self.chat_window.deiconify()
+                    self.chat_window.focus_force()
+                    if self._a11y_announcer:
+                        self._a11y_announcer.announce("チャットウィンドウへ移動")
+                    return "break"
+                except Exception:
+                    pass
+            self.root.focus_force()
+            if self._a11y_announcer:
+                self._a11y_announcer.announce("ペットへフォーカス")
+        except Exception:  # pragma: no cover
+            pass
+        return "break"
+
+    def _a11y_on_space(self, _event=None):
+        """Space: start/open chat (keyboard equivalent of click-to-speak)."""
+        try:
+            if self._a11y_announcer:
+                self._a11y_announcer.announce("チャットを開きます")
+            self._open_chat()
+        except Exception:  # pragma: no cover
+            pass
+        return "break"
+
+    def _a11y_on_escape(self, _event=None):
+        """Escape: hide the pet window (keyboard equivalent of hide)."""
+        try:
+            if self._a11y_announcer:
+                self._a11y_announcer.announce("ペットを非表示にします")
+            self.root.withdraw()
+        except Exception:  # pragma: no cover
+            pass
+        return "break"
+
     def _on_press(self, event):
         """マウス押下：ドラッグ起点を記録。長押し (600ms) で右クリックメニュー。"""
         self._press_x = event.x_root

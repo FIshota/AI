@@ -5,6 +5,17 @@ All notable changes to ai-chan are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Dates use ISO 8601 (YYYY-MM-DD).
 
+## [pre-migration-20260424] — Workstation migration checkpoint (2026-04-24)
+
+### Migration
+- Tagged `pre-migration-20260424` on both `ai-chan` and `hinomoto-model` before M2 Pro → new Mac migration
+- Env snapshot captured: `docs/migration/env_20260424/` (Python 3.13.2 / arm64 / macOS 15.5 / MLX 0.31.2)
+- Backups: `docs/migration/backups_20260424/` (logs, config, data tarballs)
+- Security: `chmod 600` on `config/persona.json`, `access_control.json`, `voice_auth_challenges.yaml`
+- Dependencies: `cryptography` 46.0.5→46.0.7, `pillow` 12.1.1→12.2.0 (security updates)
+- CVE-2025-69872 (diskcache pickle RCE): mitigated in `core/llm.py` (cache dir hardening, not exploitable)
+- pip cache purged: 1,518 MB / 2,958 files freed
+
 ## [Unreleased] — Cat 5: Family-oriented UX & Safety (2026-04-24)
 
 ### Added
@@ -21,7 +32,7 @@ Dates use ISO 8601 (YYYY-MM-DD).
 
 ### Tests
 - 183 new tests added across Cat 5
-- All passing on Python 3.9 / Intel Mac / stdlib-only
+- All passing on Python 3.13.2 / Apple Silicon M2 Pro (arm64) / stdlib-only
 
 ### Docs
 - docs/quality/EMOTION_DRIFT.md, docs/design/MEMORY_FORGETTING.md, docs/design/ANNIVERSARY_IMPORTANCE.md

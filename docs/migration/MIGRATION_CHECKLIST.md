@@ -11,6 +11,31 @@
 
 ---
 
+## 📋 実行済みサマリ (2026-04-24 時点)
+
+| 項目 | ステータス | 出力先 |
+|---|---|---|
+| Git checkpoint commit + tag | ✅ 完了 | tag `pre-migration-20260424` (両 repo, push 済) |
+| Python env snapshot | ✅ 完了 | `docs/migration/env_20260424/` |
+| Logs/config/data tarball | ✅ 完了 | `docs/migration/backups_20260424/` |
+| Sensitive config 0600 化 | ✅ 完了 | persona/access_control/voice_auth_challenges |
+| pip cache purge (1.5GB) | ✅ 完了 | — |
+| Security audit (pip-audit/bandit) | ✅ 完了 WARN | `logs/security_audit/pre-migration-20260424_*` |
+| cryptography / pillow 更新 | ✅ 完了 | 46.0.7 / 12.2.0 |
+| pytest baseline 取得 | ✅ 完了 | ai-chan 1437 pass / hinomoto 276 pass |
+| MLX Metal 稼働確認 | ✅ 完了 | `mx.metal.is_available() = True` |
+| RUNBOOK_NEW_MAC.md 作成 | ✅ 完了 | 同ディレクトリ |
+| KNOWN_ISSUES.md 作成 | ✅ 完了 | `docs/KNOWN_ISSUES.md` |
+| CHANGELOG 更新 | ✅ 完了 | `docs/CHANGELOG.md` |
+| FileVault 有効化 | ⚠️ **未実施** | ユーザー操作必要 (System Settings) |
+| Time Machine バックアップ | ⚠️ **マウント失敗** | 外付け再接続必要 |
+| 外部ディスク rsync (artifacts 8.2GB) | ⏳ 未実施 | ユーザー操作必要 |
+| plist PII Option A/B 選択 | ⏳ 保留 | ユーザー判断必要 |
+| `.zshrc` anaconda3 ブロック削除 | ⏳ 保留 | ユーザー承認必要 |
+| 3 件 deprecated scheduled tasks 削除 | ⏳ 保留 | claude.ai/code/scheduled |
+
+---
+
 ## Phase A: 旧 PC での事前作業 (移管前日まで)
 
 ### A-1. git commit + tag

@@ -1,0 +1,29 @@
+ai-chan pytest baseline — 2026-04-24 (pre-migration)
+====================================================
+
+Command: python3 -m pytest -q --tb=no
+Python: 3.13.2
+Host: MacBook Pro M2 Pro 16GB / macOS 15.5 / arm64
+
+Result: 1437 passed, 10 skipped, 3 warnings in 61.87s (0:01:01)
+
+Warnings (informational):
+- SwigPyObject / swigvarlink: C-extension DeprecationWarning from transitive dep
+- Pillow 14 roadmap: Image.Image.getdata deprecation
+  (test/test_screenshot_sensitive.py:159 — migrate to get_flattened_data pre-Pillow 14)
+
+Post-migration expectation: identical pass count, duration within ±30% of 62s.
+
+-----
+
+hinomoto-model pytest baseline — 2026-04-24
+===========================================
+
+Command: python3 -m pytest -q --tb=no
+Python: 3.13.2
+
+Result: 276 passed in 7.20s
+
+Warnings: 48 PytestUnknownMarkWarning (@pytest.mark.unit not registered — harmless)
+
+Post-migration expectation: identical pass count, duration within ±30% of 7s.

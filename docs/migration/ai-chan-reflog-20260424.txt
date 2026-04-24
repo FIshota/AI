@@ -1,0 +1,30 @@
+878962b HEAD@{0}: commit: chore: pre-migration checkpoint 2026-04-24
+5b9f76f HEAD@{1}: commit: fix(hinomoto): default repetition_penalty=1.3 in greedy mode
+54fbb6b HEAD@{2}: commit: chore(vision): gitignore docs/VISION_INTERNAL.md
+b062328 HEAD@{3}: commit: feat(llm): P1-4 integrate HinoMoto backend into LLMEngine
+26a2144 HEAD@{4}: reset: moving to HEAD
+26a2144 HEAD@{5}: commit: test(bridge): P1-4-alpha unit tests for HinoMotoBridge
+968de9e HEAD@{6}: commit: feat: HinoMoto bridge PoC for ai-chan backend integration
+31e2513 HEAD@{7}: commit: chore: M8/M9 周辺調整 + テスト再編 + 依存更新
+add462d HEAD@{8}: commit: feat(M9): ベクタストア FAISS→sqlite-vec 移行基盤
+d85615c HEAD@{9}: commit: feat(M8): LLM プロセス分離 (IPC + proxy + worker)
+e03c42d HEAD@{10}: commit: security: bandit B310 漸減 (urllib→requests) + Model Policy + 監査トリアージ
+fe9cd08 HEAD@{11}: commit: feat(tooling): M4 — ruff strict zone + mypy strict zone infrastructure
+880dadf HEAD@{12}: commit: refactor(arch): M3 — delete 3 stub modules (yamato_dna / federated_stub / plugin_loader)
+cb85afc HEAD@{13}: commit: refactor(arch): M2 — extract security_ops / server_ops from AiChan god object
+417b4d0 HEAD@{14}: commit: docs+tools: M1 terminology + action matrix + live_translator/minutes_viewer
+fcde573 HEAD@{15}: commit: test: BLOCKER + HIGH regression suite (44 tests, all green)
+a104b81 HEAD@{16}: commit: feat(security+arch): BLOCKER + HIGH tier hardening batch
+3f860e6 HEAD@{17}: commit: ci: J-1 make memory-honesty test trio blocking
+f43ad7c HEAD@{18}: commit: bench: H-2 semantic saturation fix + per-axis honesty preservation
+b98686f HEAD@{19}: commit: feat(bench): H-1 — per-item JSONL dump + aspect breakdown script
+1caccec HEAD@{20}: commit: feat(bench): G-1 — Memory Honesty LocalJudge (4-axis kindness rubric)
+dadbb69 HEAD@{21}: commit: fix(ci)+feat(bench): ci.yml YAML parse fix + G-3 honesty seeds 4→16
+84eaf0d HEAD@{22}: commit: docs: F-3 — migrate README/bench/README Phase-N → IP-N
+8064f33 HEAD@{23}: commit: feat(ai-chan)+bench+docs: E-1/E-2/E-3/E-4 — honesty chat path + qid filter + vision + pre-commit
+1a93adf HEAD@{24}: commit: feat(memory)+ci: D-2/D-3/D-4 — honest recall + bench seeds + taxonomy CI
+c98a4ef HEAD@{25}: commit: docs+feat(taxonomy): Q16/Q6/Q26 — TAXONOMY / Memory Honesty / Threat Model + CI
+a91ff84 HEAD@{26}: commit: docs(mindmap): Phase 0.75/1 進捗ブロック追加 + 日付更新
+9e0ad00 HEAD@{27}: commit: docs(stt): document faster-whisper as local zero-cost STT choice
+236fab6 HEAD@{28}: commit: fix(bench): rename datasets.py → dataset_loaders.py, switch JGLUE to raw GitHub
+069d652 HEAD@{29}: commit: feat(bench): Phase 1 batch 1 — dataset loaders + evaluator + live suites

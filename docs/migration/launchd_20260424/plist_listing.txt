@@ -1,0 +1,2 @@
+-rw-r--r--@ 1 fujihiranoborudai  staff  2703 Apr 20 02:41 /Users/fujihiranoborudai/Library/LaunchAgents/com.aichan.security-audit.plist
+-rw-r--r--@ 1 fujihiranoborudai  staff  1715 Apr 20 03:16 /Users/fujihiranoborudai/Library/LaunchAgents/com.aichan.security-weekly.plist

@@ -1,0 +1,7 @@
+--- ~/.ssh ---
+total 24
+drwx------   5 fujihiranoborudai  staff   160 Feb 28 10:31 .
+drwxr-xr-x+ 88 fujihiranoborudai  staff  2816 Apr 24 19:01 ..
+-rw-r--r--@  1 fujihiranoborudai  staff   210 Feb 27 12:38 config
+-rw-------   1 fujihiranoborudai  staff  1020 Feb 28 10:31 known_hosts
+-rw-r--r--@  1 fujihiranoborudai  staff   280 Feb 28 10:13 known_hosts.old

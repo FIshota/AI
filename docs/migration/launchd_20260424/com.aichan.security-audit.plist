@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ai-chan 毎日セキュリティ監査 LaunchAgent
+  毎朝 09:00 (ローカル時刻 = JST) に scripts/daily_security_audit.sh を実行
+
+  インストール:
+    scripts/install_security_launchd.sh
+
+  手動操作:
+    launchctl load   ~/Library/LaunchAgents/com.aichan.security-audit.plist
+    launchctl unload ~/Library/LaunchAgents/com.aichan.security-audit.plist
+    launchctl start  com.aichan.security-audit   # 今すぐ実行
+
+  確認:
+    launchctl list | grep aichan
+    tail -n 50 /Users/fujihiranoborudai/Downloads/agent/ai-chan/logs/security/launchd.out
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.aichan.security-audit</string>
+
+    <!-- 実行コマンド -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/fujihiranoborudai/Downloads/agent/ai-chan/scripts/daily_security_audit.sh</string>
+    </array>
+
+    <!-- 作業ディレクトリ -->
+    <key>WorkingDirectory</key>
+    <string>/Users/fujihiranoborudai/Downloads/agent/ai-chan</string>
+
+    <!-- 毎朝 09:00 (ローカル時刻 = JST 相当、macOS設定に従う) -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- スリープ中に予定時刻を逃した場合、次回起動時に1回実行 -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <!-- 起動失敗時の自動再試行: しない (毎日定時のみ) -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- 同時起動防止 -->
+    <key>AbandonProcessGroup</key>
+    <false/>
+
+    <!-- 環境変数 -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>LANG</key>
+        <string>ja_JP.UTF-8</string>
+        <key>AICHAN_ADMIN_EMAIL</key>
+        <string>honnsipittu@gmail.com</string>
+    </dict>
+
+    <!-- 標準出力・エラーログ -->
+    <key>StandardOutPath</key>
+    <string>/Users/fujihiranoborudai/Downloads/agent/ai-chan/logs/security/launchd.out</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/fujihiranoborudai/Downloads/agent/ai-chan/logs/security/launchd.err</string>
+
+    <!-- low priority で実行 (他の作業を邪魔しない) -->
+    <key>LowPriorityIO</key>
+    <true/>
+    <key>Nice</key>
+    <integer>10</integer>
+
+    <!-- プロセスタイプ: Background -->
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

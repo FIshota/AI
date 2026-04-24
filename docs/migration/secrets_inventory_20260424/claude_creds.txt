@@ -1,0 +1,3 @@
+--- ~/.claude/settings.json size ---
+-rw-------@ 1 fujihiranoborudai  staff  29600 Apr 24 19:01 /Users/fujihiranoborudai/.claude.json
+-rw-r--r--@ 1 fujihiranoborudai  staff  29674 Apr  5 11:06 /Users/fujihiranoborudai/.claude/settings.json

@@ -1,0 +1,6 @@
+--- Keychain ai-chan / hinomoto entries (names only) ---
+    "svce"<blob>="gh:github.com"
+    "type"<uint32>=<NULL>
+--
+    "svce"<blob>="gh:github.com"
+    "type"<uint32>=<NULL>

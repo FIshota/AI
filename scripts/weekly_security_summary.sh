@@ -11,7 +11,13 @@ DATE=$(date +%Y-%m-%d)
 WEEK_START=$(date -v-6d +%Y-%m-%d 2>/dev/null || date -d "6 days ago" +%Y-%m-%d)
 LOGDIR="logs/security"
 SUMMARY="$LOGDIR/weekly-$DATE.md"
-NOTIFY_EMAIL="${AICHAN_ADMIN_EMAIL:-honnsipittu@gmail.com}"
+# PII externalized 2026-04-25: source admin.env if present
+ADMIN_ENV="$HOME/.config/ai-chan/admin.env"
+[ -f "$ADMIN_ENV" ] && set -a && . "$ADMIN_ENV" && set +a
+NOTIFY_EMAIL="${AICHAN_ADMIN_EMAIL:-}"
+if [ -z "$NOTIFY_EMAIL" ]; then
+  echo "[warn] AICHAN_ADMIN_EMAIL not set (expected in $ADMIN_ENV)." >&2
+fi
 
 mkdir -p "$LOGDIR"
 

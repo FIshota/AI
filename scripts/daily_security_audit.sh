@@ -23,7 +23,13 @@ JST_NOW=$(TZ=Asia/Tokyo date +"%Y-%m-%d %H:%M:%S JST")
 LOGDIR="logs/security"
 SUMMARY="$LOGDIR/$DATE.md"
 EXECLOG="$LOGDIR/exec-$DATE.log"
-NOTIFY_EMAIL="${AICHAN_ADMIN_EMAIL:-honnsipittu@gmail.com}"
+# PII externalized 2026-04-25: source admin.env if present (plist no longer sets it)
+ADMIN_ENV="$HOME/.config/ai-chan/admin.env"
+[ -f "$ADMIN_ENV" ] && set -a && . "$ADMIN_ENV" && set +a
+NOTIFY_EMAIL="${AICHAN_ADMIN_EMAIL:-}"
+if [ -z "$NOTIFY_EMAIL" ]; then
+  echo "[warn] AICHAN_ADMIN_EMAIL not set (expected in $ADMIN_ENV). Notifications will be skipped." >&2
+fi
 
 mkdir -p "$LOGDIR"
 

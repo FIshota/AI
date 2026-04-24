@@ -1,0 +1,8 @@
+total 40
+drwxr-xr-x@   7 fujihiranoborudai  staff   224 Apr 24 09:56 .
+drwx------@ 134 fujihiranoborudai  staff  4288 Mar 20 17:05 ..
+-rw-r--r--@   1 fujihiranoborudai  staff  2703 Apr 20 02:41 com.aichan.security-audit.plist
+-rw-r--r--@   1 fujihiranoborudai  staff  1715 Apr 20 03:16 com.aichan.security-weekly.plist
+-rw-r--r--    1 fujihiranoborudai  staff   884 May 27  2025 com.google.GoogleUpdater.wake.plist
+-rw-r--r--    1 fujihiranoborudai  staff   181 Dec  7  2023 com.google.keystone.agent.plist
+-rw-r--r--    1 fujihiranoborudai  staff   181 Dec  7  2023 com.google.keystone.xpcservice.plist

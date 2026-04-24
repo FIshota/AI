@@ -1,0 +1,20 @@
+total 11912
+drwx------   40 fujihiranoborudai  staff     1280 Apr 24 07:42 .
+drwxr-xr-x+  88 fujihiranoborudai  staff     2816 Apr 24 15:16 ..
+drwxr-xr-x@   4 fujihiranoborudai  staff      128 Apr  5 11:06 .agents
+drwxr-xr-x@   5 fujihiranoborudai  staff      160 Apr  5 11:06 .codex
+drwxr-xr-x@   6 fujihiranoborudai  staff      192 Apr  5 11:06 .cursor
+drwxr-xr-x@   3 fujihiranoborudai  staff       96 Apr  5 11:06 .gemini
+drwxr-xr-x@  14 fujihiranoborudai  staff      448 Apr  5 11:06 .opencode
+-rw-r--r--@   1 fujihiranoborudai  staff     8075 Apr  5 11:06 AGENTS.md
+-rw-r--r--@   1 fujihiranoborudai  staff     5302 Apr  5 11:06 PLUGIN_SCHEMA_NOTES.md
+-rw-r--r--@   1 fujihiranoborudai  staff     1257 Apr  5 11:06 README.md
+drwxr-xr-x@  40 fujihiranoborudai  staff     1280 Apr  5 11:06 agents
+drwxr-xr-x@   7 fujihiranoborudai  staff      224 Apr 24 15:16 backups
+-rw-r--r--@   1 fujihiranoborudai  staff  1954757 Apr 24 18:50 bash-commands.log
+drwxr-xr-x@   3 fujihiranoborudai  staff       96 Apr  8 07:56 cache
+drwxr-xr-x@  74 fujihiranoborudai  staff     2368 Apr  5 11:06 commands
+-rw-r--r--@   1 fujihiranoborudai  staff  2053235 Apr 24 18:50 cost-tracker.log
+drwxr-xr-x@   3 fujihiranoborudai  staff       96 Apr 14 15:27 debug
+drwxr-xr-x@   3 fujihiranoborudai  staff       96 Apr  5 11:06 ecc
+drwxr-xr-x@   4 fujihiranoborudai  staff      128 Apr  5 11:06 hooks

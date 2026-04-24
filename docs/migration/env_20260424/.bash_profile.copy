@@ -1,0 +1,44 @@
+
+# Setting PATH for Python 3.9
+# The original version is saved in .bash_profile.pysave
+PATH="/Library/Frameworks/Python.framework/Versions/3.9/bin:${PATH}"
+export PATH
+
+# >>> conda initialize (miniforge3 arm64) >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/Users/fujihiranoborudai/miniforge3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/Users/fujihiranoborudai/miniforge3/etc/profile.d/conda.sh" ]; then
+        . "/Users/fujihiranoborudai/miniforge3/etc/profile.d/conda.sh"
+    else
+        export PATH="/Users/fujihiranoborudai/miniforge3/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize (miniforge3 arm64) <<<
+
+# Old x86 Anaconda (disabled — kept for reference)
+# __conda_setup="$('/Users/fujihiranoborudai/opt/anaconda3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+
+
+# Setting PATH for Python 3.11
+# The original version is saved in .bash_profile.pysave
+PATH="/Library/Frameworks/Python.framework/Versions/3.11/bin:${PATH}"
+export PATH
+
+# Setting PATH for Python 3.13
+# The original version is saved in .bash_profile.pysave
+PATH="/Library/Frameworks/Python.framework/Versions/3.13/bin:${PATH}"
+export PATH
+
+# Added by OrbStack: command-line tools and integration
+# This won't be added again if you remove it.
+source ~/.orbstack/shell/init.bash 2>/dev/null || :
+
+. "$HOME/.local/bin/env"
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion

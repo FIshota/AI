@@ -1,0 +1,5 @@
+=== SIZE BEFORE ===
+4.2G	.
+      18
+=== AI-CHAN AFTER ===
+4.2G	.

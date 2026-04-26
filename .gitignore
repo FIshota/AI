@@ -56,7 +56,9 @@ data/
 output/
 backups/
 reports/
-logs/
+logs/*
+!logs/security/
+!logs/security/*.md
 *.log
 *.db
 *.db-journal
@@ -76,7 +78,8 @@ AiChan.app/
 *.app/
 
 # ── セキュリティ成果物（漏洩防止のため除外） ─────────
-logs/security/
+logs/security/*
+!logs/security/*.md
 *.sbom.json
 bandit-report.json
 gitleaks-report.json
@@ -98,7 +101,9 @@ data/llm_cache/
 
 # Phase 0 記憶切り離し対策 (2026-04-20)
 data/
-logs/
+logs/*
+!logs/security/
+!logs/security/*.md
 backups/
 output/
 reports/

@@ -116,3 +116,8 @@ bench/data_cache/
 
 # INTERNAL: Ai の存在を公開リポジトリに出さない
 docs/VISION_INTERNAL.md
+
+# ── セキュリティ監査レポートは追跡対象（監査証跡として保存） ─
+!logs/
+!logs/security/
+!logs/security/*.md

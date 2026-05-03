@@ -56,7 +56,10 @@ data/
 output/
 backups/
 reports/
-logs/
+logs/**
+# 日次セキュリティ監査レポート（Markdown）は証跡として追跡対象に含める
+!logs/security/
+!logs/security/*.md
 *.log
 *.db
 *.db-journal
@@ -77,6 +80,8 @@ AiChan.app/
 
 # ── セキュリティ成果物（漏洩防止のため除外） ─────────
 logs/security/
+# 日次監査レポート（Markdown）は証跡として追跡対象に含める
+!logs/security/*.md
 *.sbom.json
 bandit-report.json
 gitleaks-report.json
@@ -98,7 +103,9 @@ data/llm_cache/
 
 # Phase 0 記憶切り離し対策 (2026-04-20)
 data/
-logs/
+logs/**
+!logs/security/
+!logs/security/*.md
 backups/
 output/
 reports/

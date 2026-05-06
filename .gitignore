@@ -77,6 +77,8 @@ AiChan.app/
 
 # ── セキュリティ成果物（漏洩防止のため除外） ─────────
 logs/security/
+# 監査 Markdown レポートは証跡として追跡対象に含める
+!logs/security/*.md
 *.sbom.json
 bandit-report.json
 gitleaks-report.json

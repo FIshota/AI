@@ -77,6 +77,10 @@ AiChan.app/
 
 # ── セキュリティ成果物（漏洩防止のため除外） ─────────
 logs/security/
+# 日次監査レポート (Markdown サマリのみ) は追跡対象
+!logs/
+!logs/security/
+!logs/security/*.md
 *.sbom.json
 bandit-report.json
 gitleaks-report.json
@@ -116,3 +120,9 @@ bench/data_cache/
 
 # INTERNAL: Ai の存在を公開リポジトリに出さない
 docs/VISION_INTERNAL.md
+
+# ── 日次セキュリティ監査レポート (Markdown サマリのみ追跡) ──
+# 上位の logs/ ルールを上書きするため末尾に配置
+!logs/
+!logs/security/
+!logs/security/*.md

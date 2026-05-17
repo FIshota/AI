@@ -76,7 +76,7 @@ AiChan.app/
 *.app/
 
 # ── セキュリティ成果物（漏洩防止のため除外） ─────────
-logs/security/
+# logs/security/*.md は監査証跡として git add -f で明示追跡
 *.sbom.json
 bandit-report.json
 gitleaks-report.json

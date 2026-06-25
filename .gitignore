@@ -57,6 +57,10 @@ output/
 backups/
 reports/
 logs/
+# 監査証跡レポートのみ追跡（生スキャン JSON 等は除外のまま）
+!logs/
+!logs/security/
+!logs/security/*.md
 *.log
 *.db
 *.db-journal
@@ -77,6 +81,8 @@ AiChan.app/
 
 # ── セキュリティ成果物（漏洩防止のため除外） ─────────
 logs/security/
+# 監査証跡 Markdown は追跡対象（生スキャン JSON は除外のまま）
+!logs/security/*.md
 *.sbom.json
 bandit-report.json
 gitleaks-report.json
